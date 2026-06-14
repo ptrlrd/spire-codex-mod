@@ -1,0 +1,17 @@
+bin/
+obj/
+.godot/
+.idea/
+.vs/
+*.user
+*.suo
+*.DotSettings.user
+local.props
+
+# Packaging output — keep the .gdignore so Godot never packs this dir
+/dist/*
+!/dist/.gdignore
+
+# Local machine config (your Godot path / optional StS2 override).
+# Copy Directory.Build.props.example -> Directory.Build.props and set your paths.
+Directory.Build.props

@@ -1,0 +1,19 @@
+{
+  "SPIRECODEX.mod_title": "Spire Codex",
+
+  "SPIRECODEX-RUN_TRACKING.title": "Run Tracking",
+  "SPIRECODEX-UPLOAD_RUNS.title": "Upload your finished runs to spire-codex.com",
+  "SPIRECODEX-BACKFILL_HISTORY.title": "Also upload your existing past runs (one time)",
+  "SPIRECODEX-SHARE_LIVE_STATUS.title": "Show your live run on the website while you play",
+
+  "SPIRECODEX-OVERLAY.title": "Overlay & In-Game UI",
+  "SPIRECODEX-SHOW_DECK_VIEW.title": "Show the companion overlay panel",
+  "SPIRECODEX-SHOW_CARD_REWARD_HINTS.title": "Show win-rate plates on card rewards and shops",
+  "SPIRECODEX-SHOW_HOVER_TIPS.title": "Show community stats inside the game's tooltips",
+  "SPIRECODEX-SHOW_MAP_DANGER.title": "Show the recommended route and danger on the map",
+  "SPIRECODEX-SHOW_UPCOMING_EVENTS.title": "Show the upcoming events list on the map",
+  "SPIRECODEX-SHOW_POST_RUN_CARD.title": "Show the shareable card when a run finishes",
+
+  "SPIRECODEX-HOTKEYS.title": "Hotkeys",
+  "SPIRECODEX-OVERLAY_KEY.title": "Open the overlay panel"
+}

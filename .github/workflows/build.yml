@@ -1,0 +1,74 @@
+name: build
+
+# Builds the mod (dll + .pck) and packages the distributable zip on a SELF-HOSTED runner.
+#
+# Why self-hosted: the build references the proprietary sts2.dll and needs Godot 4.5.1 to
+# export the .pck, so it can't run on a stock GitHub runner. Works on a Windows OR Linux runner
+# (the steps are bash + `dotnet`). The runner must have:
+#   - .NET 9 SDK
+#   - Godot 4.5.1 .NET (mono) executable (matching-OS build)
+#   - Slay the Spire 2's managed DLLs (sts2.dll, 0Harmony.dll, Steamworks.NET.dll). These are
+#     platform-agnostic MSIL, so you don't need a runnable game: either install StS2 via Steam,
+#     or copy those 3 DLLs into <Sts2Path>/data_sts2_<os>_x86_64/ and set the STS2_PATH variable
+#     (data_sts2_linuxbsd_x86_64 on Linux, data_sts2_windows_x86_64 on Windows).
+#
+# SECURITY: this is a public repo. Never run untrusted fork PRs on a self-hosted runner
+# (arbitrary code execution on your machine). That's why this triggers only on pushes you
+# control + manual dispatch — not on pull_request.
+#
+# One-time setup (repo Settings):
+#   - Give your runner a label and put it in `runs-on` below (default: sts2).
+#   - Variables -> New repository variable:
+#       GODOT_PATH  = full path to the Godot 4.5.1 .NET (mono) exe on the runner
+#       STS2_MODS   = path to the StS2 mods folder on the runner (= <Sts2Path>/mods)
+#       STS2_PATH   = (optional) StS2 install dir, if not at the default Steam path or using copied DLLs
+# Tag a release with `git tag v0.1.1 && git push --tags` to build + publish a GitHub Release.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: [self-hosted, sts2]
+    permissions:
+      contents: write   # for creating the Release on a tag
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write local build config (Godot + optional StS2 path)
+        shell: bash
+        env:
+          STS2_PATH: ${{ vars.STS2_PATH }}
+        run: |
+          # GodotPath (and an optional Sts2Path override) are machine-specific and gitignored;
+          # inject from repo variables. Leave STS2_PATH unset to auto-discover a Steam install.
+          {
+            echo '<Project><PropertyGroup>'
+            echo "  <GodotPath>${{ vars.GODOT_PATH }}</GodotPath>"
+            [ -n "$STS2_PATH" ] && echo "  <Sts2Path>$STS2_PATH</Sts2Path>"
+            echo '</PropertyGroup></Project>'
+          } > Directory.Build.props
+
+      - name: Build, export .pck, and package the zip
+        shell: bash
+        env:
+          DOTNET: dotnet
+          STS2_MODS: ${{ vars.STS2_MODS }}
+        run: bash tools/package.sh
+
+      - name: Upload zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpireCodex-${{ github.sha }}
+          path: dist/SpireCodex-*.zip
+          if-no-files-found: error
+
+      - name: Publish GitHub Release (on version tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/SpireCodex-*.zip
+          generate_release_notes: true

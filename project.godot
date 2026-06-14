@@ -1,0 +1,26 @@
+; Godot project file for the SpireCodex mod. Used to generate the mod's .pck on
+; `dotnet publish` (the loc table under SpireCodex/localization/ ships inside the .pck so
+; BaseLib can render readable settings labels). The mod's actual logic is the C# assembly;
+; there are no scenes. Regenerate/extend via the Godot editor if visual assets are added.
+
+config_version=5
+
+[application]
+
+config/name="SpireCodex"
+config/features=PackedStringArray("4.5", "C#", "Mobile")
+
+[dotnet]
+
+project/assembly_name="SpireCodex"
+
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[rendering]
+
+renderer/rendering_method="mobile"

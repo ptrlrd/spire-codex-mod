@@ -1,0 +1,12 @@
+<Project>
+    <PropertyGroup>
+        <!-- Godot 4.5.1 .NET (mono) executable, used by `dotnet publish` to export the .pck
+             (the loc table -> readable settings labels). MUST be 4.5.1 (the game won't load a
+             .pck exported by a newer Godot) and the .NET/mono build. Only needed for `publish`,
+             not a plain `build`. Copy this file to Directory.Build.props and set your path. -->
+        <GodotPath>C:/path/to/Godot_v4.5.1-stable_mono_win64.exe</GodotPath>
+
+        <!-- Uncomment and set if Slay the Spire 2 isn't auto-discovered. -->
+        <!-- <Sts2Path>C:/Program Files (x86)/Steam/steamapps/common/Slay the Spire 2</Sts2Path> -->
+    </PropertyGroup>
+</Project>
