@@ -9,41 +9,26 @@ on:
 jobs:
   build:
     runs-on: [self-hosted, Linux, X64]
+    container:
+      image: ptrlrd/spire-codex-mod-image:latest
+      credentials:
+        username: ${{ secrets.DOCKERHUB_USER }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '9.0.x'
-
-      - name: Install Godot
-        shell: bash
-        run: |
-          GODOT_DIR="$RUNNER_TEMP/godot-4.5.1"
-          if [ ! -d "$GODOT_DIR/extracted" ]; then
-            mkdir -p "$GODOT_DIR"
-            curl -fsSL -o "$RUNNER_TEMP/godot.zip" https://github.com/godotengine/godot/releases/download/4.5.1-stable/Godot_v4.5.1-stable_mono_linux_x86_64.zip
-            unzip -q -o "$RUNNER_TEMP/godot.zip" -d "$GODOT_DIR"
-            touch "$GODOT_DIR/extracted"
-          fi
-          BIN=$(find "$GODOT_DIR" -type f -name 'Godot_v4.5.1-stable_mono_linux*' | head -1)
-          chmod +x "$BIN"
-          echo "GODOT_BIN=$BIN" >> "$GITHUB_ENV"
-
       - name: Configure paths
         shell: bash
-        env:
-          STS2_PATH: ${{ vars.STS2_PATH }}
         run: |
           {
             echo '<Project><PropertyGroup>'
-            echo "  <GodotPath>$GODOT_BIN</GodotPath>"
-            [ -n "$STS2_PATH" ] && echo "  <Sts2Path>$STS2_PATH</Sts2Path>"
+            echo "  <GodotPath>$GODOT_PATH</GodotPath>"
+            echo "  <Sts2Path>$STS2_PATH</Sts2Path>"
             echo '</PropertyGroup></Project>'
           } > Directory.Build.props
-          [ -n "$STS2_PATH" ] && echo "STS2_MODS=$STS2_PATH/mods" >> "$GITHUB_ENV"
+          echo "STS2_MODS=$STS2_PATH/mods" >> "$GITHUB_ENV"
 
       - name: Build and package
         shell: bash
