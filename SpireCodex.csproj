@@ -19,10 +19,11 @@
 
     <ItemGroup>
         <!-- StS2 + Harmony reference assemblies, so the mod compiles with no local game install
-             and no proprietary DLLs in the repo. ExcludeAssets=all + explicit References means the
-             package's bundled GodotSharp is ignored (the Godot SDK provides GodotSharp). The game
-             supplies the real assemblies at runtime; nothing here is bundled into the mod. -->
-        <PackageReference Include="Book.StS2.RefLib" Version="[0.103.3]" GeneratePathProperty="true">
+             and no proprietary DLLs in the repo. "*" tracks the latest STABLE game build (use
+             "*-*" to also match beta builds). ExcludeAssets=all + explicit References means the
+             package's bundled GodotSharp is ignored (the Godot SDK provides GodotSharp); the game
+             supplies the real assemblies at runtime, nothing here is bundled into the mod. -->
+        <PackageReference Include="Book.StS2.RefLib" Version="*" GeneratePathProperty="true">
             <ExcludeAssets>all</ExcludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
