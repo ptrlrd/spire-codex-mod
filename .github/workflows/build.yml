@@ -9,29 +9,19 @@ on:
 jobs:
   build:
     runs-on: [self-hosted, Linux, X64]
-    container:
-      image: ptrlrd/spire-codex-mod-image:latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure paths
-        shell: bash
-        run: |
-          {
-            echo '<Project><PropertyGroup>'
-            echo "  <GodotPath>$GODOT_PATH</GodotPath>"
-            echo "  <Sts2Path>$STS2_PATH</Sts2Path>"
-            echo '</PropertyGroup></Project>'
-          } > Directory.Build.props
-          echo "STS2_MODS=$STS2_PATH/mods" >> "$GITHUB_ENV"
-
       - name: Build and package
         shell: bash
-        env:
-          DOTNET: dotnet
-        run: bash tools/package.sh
+        run: |
+          docker run --rm -v "$PWD:/work" -w /work ptrlrd/spire-codex-mod-image:latest bash -euc '
+            printf "<Project><PropertyGroup><GodotPath>%s</GodotPath><Sts2Path>%s</Sts2Path></PropertyGroup></Project>\n" "$GODOT_PATH" "$STS2_PATH" > Directory.Build.props
+            export DOTNET=dotnet STS2_MODS="$STS2_PATH/mods"
+            bash tools/package.sh
+          '
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
