@@ -9,6 +9,7 @@ on:
 jobs:
   build:
     runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 25
     permissions:
       contents: write
     steps:
@@ -18,7 +19,7 @@ jobs:
         shell: bash
         run: |
           docker pull ptrlrd/spire-codex-mod-image:latest
-          cid=$(docker create -w /work ptrlrd/spire-codex-mod-image:latest bash -euc '
+          cid=$(docker create --network host -w /work ptrlrd/spire-codex-mod-image:latest bash -euc '
             printf "<Project><PropertyGroup><GodotPath>%s</GodotPath><Sts2Path>%s</Sts2Path></PropertyGroup></Project>\n" "$GODOT_PATH" "$STS2_PATH" > Directory.Build.props
             export DOTNET=dotnet STS2_MODS="$STS2_PATH/mods"
             bash tools/package.sh
