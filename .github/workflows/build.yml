@@ -17,11 +17,16 @@ jobs:
       - name: Build and package
         shell: bash
         run: |
-          docker run --rm -v "$PWD:/work" -w /work ptrlrd/spire-codex-mod-image:latest bash -euc '
+          cid=$(docker create -w /work ptrlrd/spire-codex-mod-image:latest bash -euc '
             printf "<Project><PropertyGroup><GodotPath>%s</GodotPath><Sts2Path>%s</Sts2Path></PropertyGroup></Project>\n" "$GODOT_PATH" "$STS2_PATH" > Directory.Build.props
             export DOTNET=dotnet STS2_MODS="$STS2_PATH/mods"
             bash tools/package.sh
-          '
+          ')
+          docker cp . "$cid:/work"
+          docker start -a "$cid" && ok=1 || ok=0
+          docker cp "$cid:/work/dist/." dist/ || true
+          docker rm "$cid" >/dev/null || true
+          [ "$ok" = 1 ]
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
