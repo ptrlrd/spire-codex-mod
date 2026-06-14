@@ -5,6 +5,10 @@ on:
     branches: [main]
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 0.1.1). Leave blank to just build."
+        required: false
 
 jobs:
   build:
@@ -14,6 +18,34 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ -n "$INPUT_VERSION" ]; then
+            v="v${INPUT_VERSION#v}"
+          elif [[ "$REF" == refs/tags/v* ]]; then
+            v="$REF_NAME"
+          else
+            v=""
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Stamp release version into the manifest
+        if: steps.ver.outputs.version != ''
+        shell: bash
+        env:
+          V: ${{ steps.ver.outputs.version }}
+        run: |
+          tmp=$(mktemp)
+          sed -E "s/(\"version\"[[:space:]]*:[[:space:]]*\")[^\"]*(\")/\1$V\2/" SpireCodex.json > "$tmp"
+          mv "$tmp" SpireCodex.json
+          grep version SpireCodex.json
 
       - name: Build and package
         shell: bash
@@ -38,8 +70,9 @@ jobs:
           if-no-files-found: error
 
       - name: Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: steps.ver.outputs.version != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.ver.outputs.version }}
           files: dist/SpireCodex-*.zip
           generate_release_notes: true
