@@ -43,12 +43,12 @@ jobs:
             [ -n "$STS2_PATH" ] && echo "  <Sts2Path>$STS2_PATH</Sts2Path>"
             echo '</PropertyGroup></Project>'
           } > Directory.Build.props
+          [ -n "$STS2_PATH" ] && echo "STS2_MODS=$STS2_PATH/mods" >> "$GITHUB_ENV"
 
       - name: Build and package
         shell: bash
         env:
           DOTNET: dotnet
-          STS2_MODS: ${{ vars.STS2_MODS }}
         run: bash tools/package.sh
 
       - name: Upload artifact
