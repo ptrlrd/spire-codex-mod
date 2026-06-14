@@ -29,6 +29,9 @@ public partial class MainFile : Node
         // published mod build (both surfaced in the F9 overlay header).
         Api.ModVersion.Start(Core.Sts2Version.Current);
 
+        // Anonymous daily-active-user ping (random install id, no Steam id / PII).
+        Api.Telemetry.Start(Core.Sts2Version.Current);
+
         // Restore any saved Steam JWT so authenticated uploads work from launch, then start
         // the silent Steamworks-ticket sign-in (the only auth path; re-auths on expiry).
         Api.SteamAuth.LoadStored();

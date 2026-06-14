@@ -11,9 +11,6 @@ jobs:
     runs-on: [self-hosted, Linux, X64]
     container:
       image: ptrlrd/spire-codex-mod-image:latest
-      credentials:
-        username: ${{ secrets.DOCKERHUB_USER }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
     permissions:
       contents: write
     steps:
