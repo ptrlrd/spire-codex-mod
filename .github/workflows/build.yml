@@ -17,6 +17,7 @@ jobs:
       - name: Build and package
         shell: bash
         run: |
+          docker pull ptrlrd/spire-codex-mod-image:latest
           cid=$(docker create -w /work ptrlrd/spire-codex-mod-image:latest bash -euc '
             printf "<Project><PropertyGroup><GodotPath>%s</GodotPath><Sts2Path>%s</Sts2Path></PropertyGroup></Project>\n" "$GODOT_PATH" "$STS2_PATH" > Directory.Build.props
             export DOTNET=dotnet STS2_MODS="$STS2_PATH/mods"
