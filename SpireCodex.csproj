@@ -1,4 +1,4 @@
-<Project Sdk="Godot.NET.Sdk/4.5.1" InitialTargets="CheckDependencyPaths">
+<Project Sdk="Godot.NET.Sdk/4.5.1">
     <Import Project=".\Sts2PathDiscovery.props"/>
     <PropertyGroup>
         <TargetFramework>net9.0</TargetFramework>
@@ -12,32 +12,35 @@
     </PropertyGroup>
 
     <PropertyGroup>
-        <!-- MSB3270: mods are built MSIL (all platforms); the local game is platform-specific.
-             STS002: ModAnalyzers wants localization additional files; this is a code-only mod. -->
+        <!-- MSB3270: mods are built MSIL (all platforms). STS002: ModAnalyzers wants loc
+             additional files; provided below. -->
         <NoWarn>$(NoWarn);MSB3270;STS002</NoWarn>
     </PropertyGroup>
 
-    <!-- References to the local Slay the Spire 2 install. Harmony ships with the game. -->
-    <ItemGroup Condition="Exists('$(Sts2DataDir)')">
-        <Reference Include="0Harmony">
-            <HintPath>$(Sts2DataDir)/0Harmony.dll</HintPath>
-            <Private>false</Private>
-        </Reference>
+    <ItemGroup>
+        <!-- StS2 + Harmony reference assemblies, so the mod compiles with no local game install
+             and no proprietary DLLs in the repo. ExcludeAssets=all + explicit References means the
+             package's bundled GodotSharp is ignored (the Godot SDK provides GodotSharp). The game
+             supplies the real assemblies at runtime; nothing here is bundled into the mod. -->
+        <PackageReference Include="Book.StS2.RefLib" Version="[0.103.3]" GeneratePathProperty="true">
+            <ExcludeAssets>all</ExcludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
         <Reference Include="sts2">
-            <HintPath>$(Sts2DataDir)/sts2.dll</HintPath>
+            <HintPath>$(PkgBook_StS2_RefLib)/ref/net9.0/sts2.dll</HintPath>
             <Private>false</Private>
         </Reference>
-        <!-- The game's own Steamworks wrapper; used for silent auth tickets (no browser). -->
-        <Reference Include="Steamworks.NET">
-            <HintPath>$(Sts2DataDir)/Steamworks.NET.dll</HintPath>
+        <Reference Include="0Harmony">
+            <HintPath>$(PkgBook_StS2_RefLib)/ref/net9.0/0Harmony.dll</HintPath>
             <Private>false</Private>
         </Reference>
+        <!-- Steamworks.NET (MIT) for the silent auth ticket; the game provides it at runtime. -->
+        <PackageReference Include="Steamworks.NET" Version="2024.8.0" ExcludeAssets="runtime" PrivateAssets="all" />
     </ItemGroup>
 
     <ItemGroup>
-        <!-- Pinned, NOT floating: .NET refuses to load a BaseLib older than the one we
-             compiled against, so compile against the LOWEST BaseLib we support. A floating
-             "*" silently broke mod load when NuGet pulled 3.2.1 while installs had 3.2.0. -->
+        <!-- Pinned, NOT floating: .NET refuses to load a BaseLib older than the one compiled
+             against, so compile against the LOWEST BaseLib we support. -->
         <PackageReference Include="Alchyr.Sts2.BaseLib" Version="[3.2.0]" PrivateAssets="All"/>
         <PackageReference Include="Alchyr.Sts2.ModAnalyzers" Version="*" />
     </ItemGroup>
@@ -53,32 +56,31 @@
         <AdditionalFiles Include="SpireCodex/localization/**/*.json" />
     </ItemGroup>
 
-    <Target Name="CheckDependencyPaths">
-        <Error Text=" Slay the Spire 2 data not found at '$(Sts2DataDir)'. Set Sts2Path in Directory.Build.props."
-               Condition="'$(Sts2DataDir)' == '' or !Exists('$(Sts2DataDir)')" />
-    </Target>
-
-    <!-- Fast dev loop: copy dll/pdb/manifest into the game's mods folder on build. This does NOT
-         build the .pck, so readable settings labels only appear after `dotnet publish` (below). -->
-    <Target Name="CopyToModsFolderOnBuild" AfterTargets="PostBuildEvent">
+    <!-- Local dev only: install dll/pdb/manifest into the game's mods folder when one exists.
+         Skipped on CI (no game), where the build only produces the dll/.pck for packaging. -->
+    <Target Name="CopyToModsFolderOnBuild" AfterTargets="PostBuildEvent" Condition="Exists('$(ModsPath)')">
         <Message Text="Copying SpireCodex .dll .pdb .json to mods folder." Importance="high" />
         <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ModsPath)$(MSBuildProjectName)/" />
         <Copy SourceFiles="$(AssemblyName).json" DestinationFolder="$(ModsPath)$(MSBuildProjectName)/" />
         <Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFolder="$(ModsPath)$(MSBuildProjectName)/" />
     </Target>
 
-    <!-- Publish (`dotnet publish`) additionally builds the .pck via Godot so the loc table ships.
-         Requires GodotPath in Directory.Build.props (a Godot/MegaDot 4.5.1 mono exe). -->
+    <!-- Publish (`dotnet publish`) also builds the .pck via Godot so the loc table ships.
+         Requires GodotPath in Directory.Build.props (a Godot 4.5.1 .NET exe). -->
     <Target Name="NeedGodotForPublish" BeforeTargets="Publish">
         <Error Text=" Godot path must be set up before publishing; Godot not found at '$(GodotPath)'. Set GodotPath in Directory.Build.props."
                Condition="'$(GodotPath)' == '' or !Exists('$(GodotPath)')" />
     </Target>
 
+    <!-- Export the .pck next to the dll (build output), then copy it into the mods folder too
+         when one exists (so local testing gets the readable labels). -->
     <Target Name="GodotPublish" AfterTargets="Publish"
             Condition="'$(GodotPath)' != '' and Exists('$(GodotPath)') and '$(IsInnerGodotExport)' != 'true'">
-        <Message Text="Exporting SpireCodex.pck to mods folder via Godot" Importance="high" />
-        <Exec Command="&quot;$(GodotPath)&quot; --headless --export-pack &quot;BasicExport&quot; &quot;$(ModsPath)$(MSBuildProjectName)/$(MSBuildProjectName).pck&quot;"
+        <Message Text="Exporting $(MSBuildProjectName).pck via Godot" Importance="high" />
+        <Exec Command="&quot;$(GodotPath)&quot; --headless --export-pack &quot;BasicExport&quot; &quot;$(TargetDir)$(MSBuildProjectName).pck&quot;"
               EnvironmentVariables="IsInnerGodotExport=true;MSBUILDDISABLENODEREUSE=1"
               ContinueOnError="WarnAndContinue" />
+        <Copy SourceFiles="$(TargetDir)$(MSBuildProjectName).pck" DestinationFolder="$(ModsPath)$(MSBuildProjectName)/"
+              Condition="Exists('$(ModsPath)') and Exists('$(TargetDir)$(MSBuildProjectName).pck')" />
     </Target>
 </Project>

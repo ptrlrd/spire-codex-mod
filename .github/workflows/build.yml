@@ -12,12 +12,26 @@ on:
 
 jobs:
   build:
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Install Godot 4.5.1 .NET
+        shell: bash
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends libfontconfig1
+          curl -fsSL -o /tmp/godot.zip https://github.com/godotengine/godot/releases/download/4.5.1-stable/Godot_v4.5.1-stable_mono_linux_x86_64.zip
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          BIN=$(find /tmp/godot -type f -name 'Godot_v4.5.1-stable_mono_linux*' | head -1)
+          chmod +x "$BIN"
+          echo "GODOT_PATH=$BIN" >> "$GITHUB_ENV"
 
       - name: Resolve version
         id: ver
@@ -50,17 +64,8 @@ jobs:
       - name: Build and package
         shell: bash
         run: |
-          docker pull ptrlrd/spire-codex-mod-image:latest
-          cid=$(docker create --network host -w /work ptrlrd/spire-codex-mod-image:latest bash -euc '
-            printf "<Project><PropertyGroup><GodotPath>%s</GodotPath><Sts2Path>%s</Sts2Path></PropertyGroup></Project>\n" "$GODOT_PATH" "$STS2_PATH" > Directory.Build.props
-            export DOTNET=dotnet STS2_MODS="$STS2_PATH/mods"
-            bash tools/package.sh
-          ')
-          docker cp . "$cid:/work"
-          docker start -a "$cid" && ok=1 || ok=0
-          docker cp "$cid:/work/dist/." dist/ || true
-          docker rm "$cid" >/dev/null || true
-          [ "$ok" = 1 ]
+          printf '<Project><PropertyGroup><GodotPath>%s</GodotPath></PropertyGroup></Project>\n' "$GODOT_PATH" > Directory.Build.props
+          DOTNET=dotnet bash tools/package.sh
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

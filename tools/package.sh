@@ -16,23 +16,21 @@ echo "Packaging SpireCodex $VERSION"
 # Keep Godot from scanning the build/staging dir when it exports the .pck.
 mkdir -p dist && : > dist/.gdignore
 
-# Build the dll and export the .pck into the live mods folder.
+# Build the dll and export the .pck (both land in the build output dir).
 "$DOTNET" publish SpireCodex.csproj -c ExportRelease
 
-# The Godot export writes the .pck next to the installed dll.
-MODS="${STS2_MODS:-/mnt/c/Program Files (x86)/Steam/steamapps/common/Slay the Spire 2/mods}"
-PCK="$MODS/SpireCodex/SpireCodex.pck"
-if [ ! -f "$PCK" ]; then
-    echo "ERROR: $PCK not found. Did the Godot export run? Check GodotPath in Directory.Build.props." >&2
+OUT=.godot/mono/temp/bin/ExportRelease
+if [ ! -f "$OUT/SpireCodex.pck" ]; then
+    echo "ERROR: $OUT/SpireCodex.pck not found. Did the Godot export run? Check GodotPath in Directory.Build.props." >&2
     exit 1
 fi
 
 STAGE=dist/SpireCodex
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
-cp .godot/mono/temp/bin/ExportRelease/SpireCodex.dll "$STAGE/"
+cp "$OUT/SpireCodex.dll" "$STAGE/"
 cp SpireCodex.json "$STAGE/"
-cp "$PCK" "$STAGE/"
+cp "$OUT/SpireCodex.pck" "$STAGE/"
 
 OUT="dist/SpireCodex-$VERSION.zip"
 rm -f "$OUT"
