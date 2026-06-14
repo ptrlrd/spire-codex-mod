@@ -23,14 +23,26 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
-      - name: Install Godot 4.5.1 .NET
+      - name: Cache MegaDot
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/megadot
+          key: megadot-4.5.1-m.13-linux
+
+      - name: Install MegaDot
         shell: bash
         run: |
           sudo apt-get update && sudo apt-get install -y --no-install-recommends libfontconfig1
-          curl -fsSL -o /tmp/godot.zip https://github.com/godotengine/godot/releases/download/4.5.1-stable/Godot_v4.5.1-stable_mono_linux_x86_64.zip
-          unzip -q /tmp/godot.zip -d /tmp/godot
-          BIN=$(find /tmp/godot -type f -name 'Godot_v4.5.1-stable_mono_linux*' | head -1)
-          chmod +x "$BIN"
+          V=4.5.1-m.13
+          DIR="$RUNNER_TEMP/megadot"
+          BIN="$DIR/MegaDot_v4.5.1-stable_mono_linux.x86_64"
+          if [ ! -x "$BIN" ]; then
+            mkdir -p "$DIR"
+            curl -fsSL -o "$RUNNER_TEMP/megadot.zip" "https://megadot.megacrit.com/$V/megadot-$V-linux-x86_64-editor-csharp.zip"
+            unzip -q "$RUNNER_TEMP/megadot.zip" -x '*.debugsymbols' -d "$DIR"
+            chmod +x "$BIN"
+            rm -f "$RUNNER_TEMP/megadot.zip"
+          fi
           echo "GODOT_PATH=$BIN" >> "$GITHUB_ENV"
 
       - name: Resolve version
