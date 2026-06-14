@@ -1,28 +1,24 @@
 name: build
 
-# Builds the mod (dll + .pck) and packages the distributable zip on a SELF-HOSTED runner.
+# Builds the mod (dll + .pck) and packages the distributable zip on a SELF-HOSTED Linux runner.
 #
-# Why self-hosted: the build references the proprietary sts2.dll and needs Godot 4.5.1 to
-# export the .pck, so it can't run on a stock GitHub runner. Works on a Windows OR Linux runner
-# (the steps are bash + `dotnet`). The runner must have:
-#   - .NET 9 SDK
-#   - Godot 4.5.1 .NET (mono) executable (matching-OS build)
-#   - Slay the Spire 2's managed DLLs (sts2.dll, 0Harmony.dll, Steamworks.NET.dll). These are
-#     platform-agnostic MSIL, so you don't need a runnable game: either install StS2 via Steam,
-#     or copy those 3 DLLs into <Sts2Path>/data_sts2_<os>_x86_64/ and set the STS2_PATH variable
-#     (data_sts2_linuxbsd_x86_64 on Linux, data_sts2_windows_x86_64 on Windows).
+# .NET 9 and Godot 4.5.1 are provisioned by this workflow, so a clean/Docker runner is fine. The
+# ONE thing it can't fetch is Slay the Spire 2's proprietary managed DLLs (sts2.dll, 0Harmony.dll,
+# Steamworks.NET.dll) - you must put those on the runner yourself (see below).
 #
-# SECURITY: this is a public repo. Never run untrusted fork PRs on a self-hosted runner
-# (arbitrary code execution on your machine). That's why this triggers only on pushes you
-# control + manual dispatch — not on pull_request.
+# SECURITY: public repo -> never run untrusted fork PRs on a self-hosted runner. Triggers only on
+# pushes you control + manual dispatch.
 #
-# One-time setup (repo Settings):
-#   - Give your runner a label and put it in `runs-on` below (default: sts2).
-#   - Variables -> New repository variable:
-#       GODOT_PATH  = full path to the Godot 4.5.1 .NET (mono) exe on the runner
-#       STS2_MODS   = path to the StS2 mods folder on the runner (= <Sts2Path>/mods)
-#       STS2_PATH   = (optional) StS2 install dir, if not at the default Steam path or using copied DLLs
-# Tag a release with `git tag v0.1.1 && git push --tags` to build + publish a GitHub Release.
+# Runner setup (one time):
+#   1. Copy StS2's 3 managed DLLs onto the runner. They're platform-agnostic MSIL, so copy them
+#      from your Windows install (…/Slay the Spire 2/data_sts2_windows_x86_64/) into:
+#          <dir>/data_sts2_linuxbsd_x86_64/{sts2.dll,0Harmony.dll,Steamworks.NET.dll}
+#      and create <dir>/mods/ . On an ephemeral/Docker runner, bake these into the runner image.
+#   2. Repo Settings -> Secrets and variables -> Actions -> Variables:
+#          STS2_PATH = <dir>          (e.g. /opt/sts2)
+#          STS2_MODS = <dir>/mods     (e.g. /opt/sts2/mods)
+#
+# Tag a release: `git tag v0.1.1 && git push --tags` -> builds + publishes a GitHub Release.
 
 on:
   push:
@@ -32,22 +28,38 @@ on:
 
 jobs:
   build:
-    runs-on: [self-hosted, sts2]
+    runs-on: [self-hosted, Linux, X64]
     permissions:
-      contents: write   # for creating the Release on a tag
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Write local build config (Godot + optional StS2 path)
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Install Godot 4.5.1 .NET (for the .pck export)
+        shell: bash
+        run: |
+          GODOT_DIR="$RUNNER_TEMP/godot-4.5.1"
+          BIN="$GODOT_DIR/Godot_v4.5.1-stable_mono_linux_x86_64/Godot_v4.5.1-stable_mono_linux_x86_64"
+          if [ ! -x "$BIN" ]; then
+            mkdir -p "$GODOT_DIR"
+            curl -fsSL -o "$RUNNER_TEMP/godot.zip" \
+              https://github.com/godotengine/godot/releases/download/4.5.1-stable/Godot_v4.5.1-stable_mono_linux_x86_64.zip
+            unzip -q -o "$RUNNER_TEMP/godot.zip" -d "$GODOT_DIR"
+            chmod +x "$BIN"
+          fi
+          echo "GODOT_BIN=$BIN" >> "$GITHUB_ENV"
+
+      - name: Write local build config (Godot + StS2 path)
         shell: bash
         env:
           STS2_PATH: ${{ vars.STS2_PATH }}
         run: |
-          # GodotPath (and an optional Sts2Path override) are machine-specific and gitignored;
-          # inject from repo variables. Leave STS2_PATH unset to auto-discover a Steam install.
           {
             echo '<Project><PropertyGroup>'
-            echo "  <GodotPath>${{ vars.GODOT_PATH }}</GodotPath>"
+            echo "  <GodotPath>$GODOT_BIN</GodotPath>"
             [ -n "$STS2_PATH" ] && echo "  <Sts2Path>$STS2_PATH</Sts2Path>"
             echo '</PropertyGroup></Project>'
           } > Directory.Build.props
