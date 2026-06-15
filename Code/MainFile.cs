@@ -78,6 +78,7 @@ public partial class MainFile : Node
         Api.CodexScores.EnsureLoaded();
         Api.CommunityStats.EnsureLoaded();
         Api.LocalStats.EnsureLoaded();
+        Api.PersonalStats.EnsureLoaded(); // the signed-in player's own pick rates (no-op until a token lands)
 
         // Run uploader: watches the save tree for completed .run files and posts them
         // to the API (opt-in via Config.UploadRuns).

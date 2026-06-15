@@ -200,6 +200,46 @@ public sealed class SpireCodexClient
         [JsonPropertyName("pct")] public double Pct { get; set; }
     }
 
+    // GET /api/runs/me/picks (authed) -> { "cards": {...}, "ancients": {...} }, each a map of
+    // "ENTITY_ID" -> {picked, offered}. The server scopes the result to the JWT's verified
+    // steam_id, so there's no id param. Returns null on any non-2xx (signed out, or the endpoint
+    // isn't deployed yet) so the caller retries; empty maps mean "signed in, nothing recorded yet".
+    public async Task<PersonalStatsData?> GetUserPicksAsync()
+    {
+        if (string.IsNullOrEmpty(SteamAuth.Token)) return null;
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, $"{Config.ApiBase}/runs/me/picks");
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", SteamAuth.Token);
+            using var resp = await Http.SendAsync(req).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode) return null;
+            var stream = await resp.Content.ReadAsStreamAsync().ConfigureAwait(false);
+            var dto = await JsonSerializer.DeserializeAsync<UserPicksDto>(stream).ConfigureAwait(false);
+            return new PersonalStatsData(Picks(dto?.Cards), Picks(dto?.Ancients));
+        }
+        catch { return null; }
+    }
+
+    private static Dictionary<string, UserPick> Picks(Dictionary<string, UserPickDto>? raw)
+    {
+        var result = new Dictionary<string, UserPick>();
+        foreach (var (id, p) in raw ?? new())
+            result[id.ToUpperInvariant()] = new UserPick(p.Picked, p.Offered);
+        return result;
+    }
+
+    private sealed class UserPicksDto
+    {
+        [JsonPropertyName("cards")] public Dictionary<string, UserPickDto>? Cards { get; set; }
+        [JsonPropertyName("ancients")] public Dictionary<string, UserPickDto>? Ancients { get; set; }
+    }
+
+    private sealed class UserPickDto
+    {
+        [JsonPropertyName("picked")] public int Picked { get; set; }
+        [JsonPropertyName("offered")] public int Offered { get; set; }
+    }
+
     public Task<CardStats> GetCardStatsAsync(string id) => GetStatsAsync("cards", id);
 
     // GET /api/runs/stats/{entityType}/{id} -> full per-entity stats (for the hover tooltip).

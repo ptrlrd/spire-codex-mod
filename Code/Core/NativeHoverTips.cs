@@ -273,12 +273,17 @@ internal static class NativeHoverTips
     // card-removal service, or the top-bar character portrait. Null -> add nothing.
     private static string? BuildTipText(object owner)
     {
+        PersonalStats.EnsureLoaded(); // warm the player's own pick rates once a token lands
+
         var model = ResolveCardModel(owner);
         if (model != null)
         {
             var id = Bare(Reflect.GetString(model, "Id"));
             if (id == null || CodexScores.Card(id) is not { Picks: > 0 } sc) return null;
-            return BuildStats(sc, CardStatsCache.Get(id), id == RewardContext.BestCardId, showElo: true);
+            var text = BuildStats(sc, CardStatsCache.Get(id), id == RewardContext.BestCardId, showElo: true);
+            if (PersonalStats.Card(id) is { Offered: > 0 } you)
+                text += $"\nYou kept it [b]{Pct(you)}%[/b] of the time ({you.Picked}/{you.Offered})";
+            return text;
         }
 
         model = ResolveRelicModel(owner);
@@ -288,9 +293,12 @@ internal static class NativeHoverTips
             if (id == null || CodexScores.Relic(id) is not { Picks: > 0 } sc) return null;
             var text = BuildStats(sc, RelicStatsCache.Get(id), isBest: false, showElo: false);
             // How coveted this relic is at Ancient 3-relic offers (the informed-decision
-            // line for the ancient screen; harmless context elsewhere).
+            // line for the ancient screen; harmless context elsewhere), plus the player's own
+            // take rate when signed in.
             if (CommunityStats.Ancient(id) is { } anc)
                 text += $"\nAncient offers: taken [b]{anc.TakeRate:0}%[/b]  [color=#9aa3ab]({anc.Offered:N0} offers)[/color]";
+            if (PersonalStats.Ancient(id) is { Offered: > 0 } youAnc)
+                text += $"\nYou took it [b]{Pct(youAnc)}%[/b] ({youAnc.Picked} of {youAnc.Offered})";
             return text;
         }
 
@@ -374,6 +382,11 @@ internal static class NativeHoverTips
             EventDiag(evId ?? "(no-event-id)", $"missing identifiers (key={key ?? "null"})");
             return null;
         }
+
+        // At an ancient (Neow, Nonupeipe, ...) the offered relics are event options keyed by
+        // relic id, so the relic-hover path never fires — surface the relic's ancient stats here.
+        if (BuildAncientOptionText(key) is { } ancientTip) return ancientTip;
+
         var ev = CommunityStats.Event(evId);
         if (ev == null || ev.Total <= 0)
         {
@@ -402,6 +415,27 @@ internal static class NativeHoverTips
         sb.Append($"[b]{pct:0}%[/b] of players pick this  [color=#9aa3ab]({count:N0} of {ev.Total:N0})[/color]");
         return sb.ToString();
     }
+
+    // Relic offered at an ancient (Neow, Nonupeipe, ...). The ancient screen exposes each relic
+    // as an event option keyed by the relic id, so this renders the relic's Codex stats plus its
+    // community take rate and the player's own pick. Returns null for non-relic options (the
+    // normal event-option path handles those).
+    private static string? BuildAncientOptionText(string relicId)
+    {
+        var anc = CommunityStats.Ancient(relicId);
+        if (anc == null) return null; // only ancient-pool relics; ordinary options fall through
+
+        // No Codex tier/score here: ancient-pool relics are situational and read as low tiers on
+        // the reward-based score, which is misleading when picking at an ancient. The community
+        // take rate is the signal that actually applies, so show just that (plus the player's own).
+        var text = $"{Logo}\nAncient offers: taken [b]{anc.TakeRate:0}%[/b]  [color=#9aa3ab]({anc.Offered:N0} offers)[/color]";
+        if (PersonalStats.Ancient(relicId) is { Offered: > 0 } you)
+            text += $"\nYou took it [b]{Pct(you)}%[/b] ({you.Picked} of {you.Offered})";
+        return text;
+    }
+
+    // Whole-percent personal take rate (Picked of Offered); callers gate on Offered > 0.
+    private static int Pct(UserPick u) => (int)System.Math.Round(u.Picked * 100.0 / u.Offered);
 
     // One line per distinct event-tip miss, so a missing percentage is never silent.
     private static void EventDiag(string evId, string why)

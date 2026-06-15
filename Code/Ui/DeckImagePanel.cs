@@ -81,7 +81,10 @@ public partial class DeckImagePanel : CanvasLayer
 
     public override void _Ready()
     {
-        Layer = 129;
+        // Top of every mod overlay so the open F5 panel is never clipped by the card-score
+        // plates (200), map hints (199), run card (150), or consent prompt (210). Harmless when
+        // closed: the layer is hidden (Visible=false), so the plates render normally then.
+        Layer = 220;
 
         // Floating panel (not docked) so the player can drag it anywhere. Fixed size; the
         // ScrollContainer inside handles overflow. Height tracks the screen with a sane cap.
@@ -461,6 +464,7 @@ public partial class DeckImagePanel : CanvasLayer
 
     private void BuildRewardHelper(List<string> offered)
     {
+        PersonalStats.EnsureLoaded(); // the player's own pick history, when signed in
         _content.AddChild(SectionHeader("Card reward", offered.Count));
         // Match the in-world plates' best pick when known, else the highest Codex Score on offer.
         var best = RewardContext.BestCardId;
@@ -477,9 +481,10 @@ public partial class DeckImagePanel : CanvasLayer
             var tier = ScoreTier(sc);
             var flag = id == best ? " [color=#ffd34d][b]Best pick[/b][/color]" : "";
             var stat = sc is { Picks: > 0 } ? $"  [color=#9aa3b2]Score {sc.Score:0} · {sc.WinRate:0.0}% win[/color]" : "";
+            var you = PersonalStats.Card(id) is { Offered: > 0 } u ? $"  [color=#7fb0ff]you {(int)System.Math.Round(u.Picked * 100.0 / u.Offered)}%[/color]" : "";
             var row = InfoLabel();
             row.Text = (tier != null ? $"[color=#{TierHex(tier)}][b]{tier}[/b][/color]  " : "") +
-                       $"[color=#e6e6e6]{Pretty(id)}[/color]{flag}{stat}";
+                       $"[color=#e6e6e6]{Pretty(id)}[/color]{flag}{stat}{you}";
             _content.AddChild(row);
         }
     }
