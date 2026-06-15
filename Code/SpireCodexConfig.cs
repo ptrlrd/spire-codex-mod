@@ -47,6 +47,12 @@ public sealed class SpireCodexConfig : SimpleModConfig
     // The single overlay hotkey (the companion panel; was two keys before consolidation).
     public static HotKey OverlayKey { get; set; } = HotKey.F5;
 
+    // Controller binding for the same overlay toggle. STS2 feeds the controller through Steam
+    // Input as synthetic game ACTIONS (not raw joypad buttons), so the binding is the game's
+    // stick-click ("peek") action, which fires whether or not Steam Input is active. Off
+    // disables the controller toggle.
+    public static ControllerToggle OverlayPad { get; set; } = ControllerToggle.StickClick;
+
     // No Account section: Steam sign-in is fully silent (SteamTicketAuth exchanges a
     // Steamworks ticket for the API JWT at launch and re-auths when it expires). Privacy
     // is controlled by the UploadRuns / ShareLiveStatus toggles, not by auth state.
@@ -70,3 +76,7 @@ public sealed class SpireCodexConfig : SimpleModConfig
 
 // A small, dropdown-friendly set of bindable keys (vs. the full Godot.Key enum).
 public enum HotKey { None, F5, F6, F7, F8, F9, F10, F11, F12 }
+
+// Controller binding for the overlay toggle. StickClick fires on the game's stick-click /
+// "peek" action (the only pad input STS2 reliably surfaces to a mod through Steam Input).
+public enum ControllerToggle { Off, StickClick }

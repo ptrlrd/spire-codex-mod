@@ -14,12 +14,16 @@ public partial class MainFile : Node
 {
     public const string ModId = "SpireCodex";
 
+    // Game logger; prefixes every line with the mod id, so no manual "[SpireCodex]" tag.
+    public static MegaCrit.Sts2.Core.Logging.Logger Logger { get; } =
+        new(ModId, MegaCrit.Sts2.Core.Logging.LogType.Generic);
+
     // Held so it is not garbage-collected; it owns the run-file watcher.
     private static RunUploader? _uploader;
 
     public static void Initialize()
     {
-        GD.Print($"[{ModId}] initializing (sts2 {Core.Sts2Version.Current})");
+        Logger.Info($"initializing (sts2 {Core.Sts2Version.Current})");
 
         // Load + register the in-game settings first so every later step reads the saved
         // values (constructing the config loads SpireCodex.cfg into the static properties).

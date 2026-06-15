@@ -133,11 +133,11 @@ internal static class Introspect
         {
             var path = Path.Combine(Path.GetTempPath(), fileName);
             File.WriteAllText(path, sb.ToString());
-            GD.Print($"[SpireCodex] introspection written to {path}");
+            MainFile.Logger.Info($"introspection written to {path}");
         }
         catch (Exception e)
         {
-            GD.Print($"[SpireCodex] introspect write failed: {e.Message}");
+            MainFile.Logger.Info($"introspect write failed: {e.Message}");
         }
     }
 

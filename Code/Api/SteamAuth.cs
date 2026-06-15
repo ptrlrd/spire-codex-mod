@@ -94,6 +94,6 @@ public static class SteamAuth
     {
         try { File.AppendAllText(Path.Combine(Path.GetTempPath(), "spire-codex-auth.log"), $"{DateTimeOffset.UtcNow:o}  {msg}\n"); }
         catch { /* ignore */ }
-        GD.Print($"[SpireCodex] auth: {msg}");
+        MainFile.Logger.Info($"auth: {msg}");
     }
 }

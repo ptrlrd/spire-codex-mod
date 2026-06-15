@@ -48,12 +48,12 @@ public partial class MapDangerHints : Node
     {
         if (Engine.GetMainLoop() is not SceneTree tree)
         {
-            GD.Print("[SpireCodex] no SceneTree; map danger hints not started");
+            MainFile.Logger.Info("no SceneTree; map danger hints not started");
             return;
         }
         var n = new MapDangerHints { Name = "SpireCodexMapDanger" };
         tree.Root.CallDeferred(Node.MethodName.AddChild, n);
-        GD.Print("[SpireCodex] map danger hints started");
+        MainFile.Logger.Info("map danger hints started");
     }
 
     public override void _Ready()

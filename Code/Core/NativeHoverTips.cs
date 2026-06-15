@@ -633,6 +633,6 @@ internal static class NativeHoverTips
                 $"{DateTimeOffset.UtcNow:o}  [native-tip] {msg}\n");
         }
         catch { /* ignore */ }
-        Godot.GD.Print($"[SpireCodex] native-tip: {msg}");
+        MainFile.Logger.Info($"native-tip: {msg}");
     }
 }

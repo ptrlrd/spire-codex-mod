@@ -17,13 +17,27 @@ overlay.
   runs, and an About tab. Plus on-map guidance: the recommended route with community danger,
   upcoming events, win-rate plates on card rewards and shops, and community stats inside the
   game's own tooltips.
+- **Overwolf Overlay** — pairs perfectly with the Overwolf overlay. If you haven't downloaded it yet, get it at [spire-codex.com/overlay](https://www.overwolf.com/app/ptrlrd-spire_codex)
 
 ## Install
 
 1. Install [BaseLib](https://www.nexusmods.com/slaythespire2/mods/103) (the required dependency)
-   into your `Slay the Spire 2/mods/` folder.
-2. Download the latest release and extract it into the same `mods/` folder.
-3. Launch the game and press **F5**.
+   into the game's `mods/` folder (paths below).
+2. Download the latest release and extract it into the same `mods/` folder, so you end up with
+   `mods/SpireCodex/` next to `mods/BaseLib/`.
+3. Launch the game and press **F5** or **L3/R3** on your controller.
+
+The `mods/` folder lives inside your Slay the Spire 2 install:
+
+| OS | `mods/` folder |
+|----|----------------|
+| Windows | `C:\Program Files (x86)\Steam\steamapps\common\Slay the Spire 2\mods\` |
+| Linux | `~/.steam/steam/steamapps/common/Slay the Spire 2/mods/` |
+| macOS | `~/Library/"Application Support"/Steam/steamapps/common/"Slay the Spire 2"/SlayTheSpire2.app/Contents/MacOS/mods/`|
+
+If the `mods/` folder isn't there, create it. On macOS the game is an app bundle, so right-click
+`SlayTheSpire2.app` and choose Show Package Contents to get inside. Not sure where Steam put the
+game? Right-click it in your Steam library, choose Manage, then Browse local files.
 
 ## Links
 

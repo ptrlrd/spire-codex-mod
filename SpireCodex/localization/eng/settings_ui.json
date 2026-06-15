@@ -15,5 +15,6 @@
   "SPIRECODEX-SHOW_POST_RUN_CARD.title": "Show the shareable card when a run finishes",
 
   "SPIRECODEX-HOTKEYS.title": "Hotkeys",
-  "SPIRECODEX-OVERLAY_KEY.title": "Open the overlay panel"
+  "SPIRECODEX-OVERLAY_KEY.title": "Open the overlay panel",
+  "SPIRECODEX-OVERLAY_PAD.title": "Open the overlay panel (controller)"
 }

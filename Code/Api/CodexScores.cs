@@ -176,6 +176,6 @@ public static class CodexScores
                 $"{DateTimeOffset.UtcNow:o}  {msg}\n");
         }
         catch { /* ignore */ }
-        GD.Print($"[SpireCodex] scores: {msg}");
+        MainFile.Logger.Info($"scores: {msg}");
     }
 }

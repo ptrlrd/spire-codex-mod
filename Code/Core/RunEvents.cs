@@ -28,7 +28,7 @@ public static class RunEvents
         var hook = FindType("MegaCrit.Sts2.Core.Hooks.Hook");
         if (hook == null)
         {
-            GD.Print("[SpireCodex] run-events: Hook type not found; ticker disabled");
+            MainFile.Logger.Info("run-events: Hook type not found; ticker disabled");
             return;
         }
 
@@ -42,7 +42,7 @@ public static class RunEvents
         patched += Patch(harmony, hook, "AfterActEntered", nameof(ActPrefix));
         patched += Patch(harmony, hook, "AfterRoomEntered", nameof(RoomEnteredPrefix));
         patched += Patch(harmony, hook, "BeforeCardRemoved", nameof(CardRemovedPrefix));
-        GD.Print($"[SpireCodex] run-events: {patched}/9 hooks patched");
+        MainFile.Logger.Info($"run-events: {patched}/9 hooks patched");
     }
 
     // --- buffer access (PresencePublisher) -------------------------------------------
@@ -192,7 +192,7 @@ public static class RunEvents
             var target = hook.GetMethod(method, BindingFlags.Public | BindingFlags.Static);
             if (target == null)
             {
-                GD.Print($"[SpireCodex] run-events: Hook.{method} not found");
+                MainFile.Logger.Info($"run-events: Hook.{method} not found");
                 return 0;
             }
             var prefix = typeof(RunEvents).GetMethod(prefixName, BindingFlags.NonPublic | BindingFlags.Static);
@@ -201,7 +201,7 @@ public static class RunEvents
         }
         catch (Exception e)
         {
-            GD.Print($"[SpireCodex] run-events: patching {method} failed: {e.Message}");
+            MainFile.Logger.Info($"run-events: patching {method} failed: {e.Message}");
             return 0;
         }
     }

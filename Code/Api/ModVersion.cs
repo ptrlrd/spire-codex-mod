@@ -30,7 +30,7 @@ public static class ModVersion
     {
         Sts2Untested = Compare(sts2Version, FallbackTestedSts2) > 0;
         if (Sts2Untested)
-            Godot.GD.Print($"[SpireCodex] game {sts2Version} is newer than tested {FallbackTestedSts2}");
+            MainFile.Logger.Info($"game {sts2Version} is newer than tested {FallbackTestedSts2}");
         _ = CheckAsync(sts2Version);
     }
 
@@ -48,7 +48,7 @@ public static class ModVersion
             {
                 UpdateAvailable = latest;
                 UpdateUrl = root.TryGetProperty("url", out var u) ? u.GetString() : null;
-                Godot.GD.Print($"[SpireCodex] update available: {latest} (running {Current})");
+                MainFile.Logger.Info($"update available: {latest} (running {Current})");
             }
 
             if (root.TryGetProperty("sts2_tested", out var t) && t.GetString() is { Length: > 0 } tested)

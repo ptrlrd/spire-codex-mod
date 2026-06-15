@@ -19,7 +19,7 @@ public partial class ConsentPrompt : CanvasLayer
     {
         if (Engine.GetMainLoop() is not SceneTree tree)
         {
-            GD.Print("[SpireCodex] no SceneTree; consent prompt not started");
+            MainFile.Logger.Info("no SceneTree; consent prompt not started");
             return;
         }
         var c = new ConsentPrompt { Name = "SpireCodexConsentPrompt" };
@@ -67,9 +67,13 @@ public partial class ConsentPrompt : CanvasLayer
             "[color=#ffd34d][b]Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color] " +
             "[color=#ffd966][b]run tracking[/b][/color]\n" +
             "Turn on run tracking to get a live, ranked, shareable page for every run, and to " +
-            "power the community stats you see in-game. Off by default - your call:\n\n" +
+            "power the community stats you see in-game. This is set to off by default, contributing is great but not required.:\n\n" +
             "- Completed runs (character, deck, relics, score, seed, result) are sent to " +
             "[color=#8fd0ff]spire-codex.com[/color]\n" +
+            "- Live Viewing of your run is viewable at " +
+            "[color=#8fd0ff]spire-codex.com/live[/color]\n" +
+            "- Card scoring info is community based and does not guarantee that you will win a run if you pick purely high tier cards every run is situational " +
+            "[color=#8fd0ff]https://spire-codex.com/leaderboards/scoring[/color]\n" +
             "- Runs are attributed to your Steam id and shown on public run pages and leaderboards\n" +
             "- Backfill history uploads your existing local runs once; Share live status shows " +
             "your in-progress run (character, floor, HP) on the site while you play\n\n" +
@@ -88,7 +92,7 @@ public partial class ConsentPrompt : CanvasLayer
             SpireCodexConfig.UploadRuns = true;
             BaseLib.Config.ModConfigRegistry.Get<SpireCodexConfig>()?.Save();
             Consent.Grant();
-            GD.Print("[SpireCodex] run tracking turned on");
+            MainFile.Logger.Info("run tracking turned on");
         };
         row.AddChild(turnOn);
 
@@ -99,7 +103,7 @@ public partial class ConsentPrompt : CanvasLayer
             SpireCodexConfig.UploadRuns = false;
             BaseLib.Config.ModConfigRegistry.Get<SpireCodexConfig>()?.Save();
             Consent.Decline();
-            GD.Print("[SpireCodex] run tracking kept off");
+            MainFile.Logger.Info("run tracking kept off");
         };
         row.AddChild(keepOff);
 

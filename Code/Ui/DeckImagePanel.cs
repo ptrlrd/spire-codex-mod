@@ -42,6 +42,17 @@ public partial class DeckImagePanel : CanvasLayer
     private bool _dragging;
     private Vector2 _dragOffset;
 
+    // The game's stick-click ("peek") action. STS2 routes the controller through Steam Input
+    // and emits this as a synthetic action; it's also the native left-stick-click binding when
+    // Steam Input is off. Listening for the action (not a raw joypad button) is the only thing
+    // that reaches the mod while Steam Input is active, which is the default.
+    private static readonly StringName StickClickAction = "controller_joystick_press";
+
+    // L1 / R1 bumpers (also synthetic actions under Steam Input) cycle the panel's tabs while
+    // it's open — the controller mirror of the Tab key.
+    private static readonly StringName BumperLeft = "controller_left_bumper";
+    private static readonly StringName BumperRight = "controller_right_bumper";
+
     private VBoxContainer _content = null!;
     private Label _hint = null!;
     private readonly List<Button> _tabButtons = new();
@@ -60,12 +71,12 @@ public partial class DeckImagePanel : CanvasLayer
     {
         if (Engine.GetMainLoop() is not SceneTree tree)
         {
-            GD.Print("[SpireCodex] no SceneTree; deck image panel not started");
+            MainFile.Logger.Info("no SceneTree; deck image panel not started");
             return;
         }
         var p = new DeckImagePanel { Name = "SpireCodexDeckImages" };
         tree.Root.CallDeferred(Node.MethodName.AddChild, p);
-        GD.Print("[SpireCodex] deck image panel started");
+        MainFile.Logger.Info("deck image panel started");
     }
 
     public override void _Ready()
@@ -215,6 +226,32 @@ public partial class DeckImagePanel : CanvasLayer
             }
         }
 
+        // Controller toggle. STS2 routes the pad through Steam Input and emits synthetic input
+        // ACTIONS (never InputEventJoypadButton), so we listen for the game's stick-click
+        // action; this also matches the native joypad binding when Steam Input is off.
+        if (SpireCodexConfig.OverlayPad == ControllerToggle.StickClick
+            && SpireCodexConfig.ShowDeckView
+            && @event.IsActionPressed(StickClickAction))
+        {
+            ToggleOverlay();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        // While the panel is open, the bumpers cycle tabs (controller mirror of Tab).
+        if (Visible && @event.IsActionPressed(BumperRight))
+        {
+            SetTab((_tab + 1) % Tabs.Length);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        if (Visible && @event.IsActionPressed(BumperLeft))
+        {
+            SetTab((_tab - 1 + Tabs.Length) % Tabs.Length);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         if (@event is not InputEventKey { Pressed: true, Echo: false } key) return;
 
         // Cycle tabs with Tab while the panel is open.
@@ -236,14 +273,21 @@ public partial class DeckImagePanel : CanvasLayer
         var toggle = SpireCodexConfig.OverlayKeycode;
         if (SpireCodexConfig.ShowDeckView && toggle != Key.None && key.Keycode == toggle)
         {
-            Visible = !Visible;
-            if (Visible)
-            {
-                UpdateHint(); // reflect the current configured hotkey (it may have been rebound)
-                _a10 = null; _daily = null; _wins = null; _runs = null; // refresh each open
-                SetTab(_tab);
-            }
+            ToggleOverlay();
             GetViewport().SetInputAsHandled();
+        }
+    }
+
+    // Flip the panel's visibility and, when opening, refresh the hint and drop cached feeds so
+    // each open shows fresh data. Shared by the keyboard hotkey and the controller binding.
+    private void ToggleOverlay()
+    {
+        Visible = !Visible;
+        if (Visible)
+        {
+            UpdateHint(); // reflect the current configured hotkey (it may have been rebound)
+            _a10 = null; _daily = null; _wins = null; _runs = null; // refresh each open
+            SetTab(_tab);
         }
     }
 
@@ -251,9 +295,22 @@ public partial class DeckImagePanel : CanvasLayer
     // key, so it stays correct if they rebind it in the mod settings.
     private void UpdateHint()
     {
-        var key = SpireCodexConfig.OverlayKey;
-        _hint.Text = $"Drag to move  ·  Tab to switch  ·  {(key == HotKey.None ? "hotkey" : key.ToString())} to close";
+        var keyLabel = SpireCodexConfig.OverlayKey is var k and not HotKey.None ? k.ToString() : null;
+        var padLabel = PadLabel(SpireCodexConfig.OverlayPad); // e.g. "R3/L3"
+        string close;
+        if (!string.IsNullOrEmpty(keyLabel) && !string.IsNullOrEmpty(padLabel))
+            close = $"{keyLabel} or ({padLabel})";
+        else
+            close = keyLabel ?? padLabel ?? "hotkey";
+        _hint.Text = $"Drag to move  ·  Tab / L1·R1 to switch  ·  {close} to close";
     }
+
+    // Short controller-binding label for the close hint (null when the pad toggle is off).
+    private static string? PadLabel(ControllerToggle t) => t switch
+    {
+        ControllerToggle.StickClick => "R3/L3",
+        _ => null,
+    };
 
     // Move the panel to pos, keeping it fully on-screen (uses the live viewport size so it
     // still clamps correctly after a window resize).

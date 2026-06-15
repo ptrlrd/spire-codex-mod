@@ -162,7 +162,7 @@ public static class PresencePublisher
         else if (!_diagged)
         {
             _diagged = true;
-            Godot.GD.Print("[SpireCodex] presence heartbeat not accepted " +
+            MainFile.Logger.Info("presence heartbeat not accepted " +
                            "(not signed in, or endpoint not deployed); retrying quietly");
         }
     }

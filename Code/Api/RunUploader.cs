@@ -36,7 +36,7 @@ public sealed class RunUploader : IDisposable
         var root = FindSaveRoot();
         if (root == null)
         {
-            GD.Print("[SpireCodex] no save root found; run upload disabled");
+            MainFile.Logger.Info("no save root found; run upload disabled");
             return;
         }
 
@@ -52,7 +52,7 @@ public sealed class RunUploader : IDisposable
         _watcher.Created += (_, e) => _ = Upload(e.FullPath);
         _watcher.Renamed += (_, e) => _ = Upload(e.FullPath);
 
-        GD.Print($"[SpireCodex] watching for completed runs under {root} " +
+        MainFile.Logger.Info($"watching for completed runs under {root} " +
                  $"(steam_id={Config.SteamId}, upload={Config.UploadRuns})");
 
         // When the player grants upload consent mid-session, flush any runs that finished
@@ -113,7 +113,7 @@ public sealed class RunUploader : IDisposable
                 .UploadRunAsync(json, Config.SteamId, Config.Username, _sts2Version)
                 .ConfigureAwait(false);
 
-            GD.Print($"[SpireCodex] upload {Path.GetFileName(path)}: " +
+            MainFile.Logger.Info($"upload {Path.GetFileName(path)}: " +
                      $"{(result.Success ? "ok" : "FAILED")} ({result.StatusCode}) " +
                      $"{Truncate(result.Body, 200)}");
 
@@ -123,7 +123,7 @@ public sealed class RunUploader : IDisposable
         }
         catch (Exception e)
         {
-            GD.Print($"[SpireCodex] upload error for {path}: {e.Message}");
+            MainFile.Logger.Info($"upload error for {path}: {e.Message}");
         }
     }
 
@@ -168,7 +168,7 @@ public sealed class RunUploader : IDisposable
             if (marker != null && File.Exists(marker)) return; // already backfilled
 
             var files = Directory.GetFiles(root, "*.run", SearchOption.AllDirectories);
-            GD.Print($"[SpireCodex] backfill: scanning {files.Length} run files...");
+            MainFile.Logger.Info($"backfill: scanning {files.Length} run files...");
 
             int added = 0, duplicate = 0, skipped = 0, errored = 0;
             using var gate = new SemaphoreSlim(6); // limit concurrency, be polite to the API
@@ -205,7 +205,7 @@ public sealed class RunUploader : IDisposable
             }
 
             await Task.WhenAll(tasks).ConfigureAwait(false);
-            GD.Print($"[SpireCodex] backfill done: new={added} duplicate={duplicate} " +
+            MainFile.Logger.Info($"backfill done: new={added} duplicate={duplicate} " +
                      $"skipped={skipped} error={errored}");
 
             if (marker != null)
@@ -216,7 +216,7 @@ public sealed class RunUploader : IDisposable
         }
         catch (Exception e)
         {
-            GD.Print($"[SpireCodex] backfill error: {e.Message}");
+            MainFile.Logger.Info($"backfill error: {e.Message}");
         }
     }
 

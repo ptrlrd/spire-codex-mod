@@ -121,6 +121,6 @@ public partial class SteamTicketAuth : Node
     {
         try { File.AppendAllText(Path.Combine(Path.GetTempPath(), "spire-codex-auth.log"), $"{DateTimeOffset.UtcNow:o}  [ticket] {msg}\n"); }
         catch { /* ignore */ }
-        GD.Print($"[SpireCodex] ticket-auth: {msg}");
+        MainFile.Logger.Info($"ticket-auth: {msg}");
     }
 }

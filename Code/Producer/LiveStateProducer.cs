@@ -20,14 +20,14 @@ public partial class LiveStateProducer : Node
         if (_instance != null) return;
         if (Engine.GetMainLoop() is not SceneTree tree)
         {
-            GD.Print("[SpireCodex] no SceneTree; producer not started");
+            MainFile.Logger.Info("no SceneTree; producer not started");
             return;
         }
 
         _instance = new LiveStateProducer { Name = "SpireCodexProducer" };
         // Defer: we may be mid-initialization, where adding children directly is unsafe.
         tree.Root.CallDeferred(Node.MethodName.AddChild, _instance);
-        GD.Print($"[SpireCodex] live-state producer started; writing {Config.LiveStatePath}");
+        MainFile.Logger.Info($"live-state producer started; writing {Config.LiveStatePath}");
     }
 
     public override void _Process(double delta)

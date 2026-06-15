@@ -33,7 +33,7 @@ internal static class ImageLoader
         }
         catch (Exception e)
         {
-            GD.Print($"[SpireCodex] image load failed {url}: {e.Message}");
+            MainFile.Logger.Info($"image load failed {url}: {e.Message}");
         }
     }
 

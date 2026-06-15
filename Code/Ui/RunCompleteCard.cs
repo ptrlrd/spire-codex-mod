@@ -21,7 +21,7 @@ public partial class RunCompleteCard : CanvasLayer
     {
         if (Engine.GetMainLoop() is not SceneTree tree)
         {
-            GD.Print("[SpireCodex] no SceneTree; run card not started");
+            MainFile.Logger.Info("no SceneTree; run card not started");
             return;
         }
         var c = new RunCompleteCard { Name = "SpireCodexRunCard" };

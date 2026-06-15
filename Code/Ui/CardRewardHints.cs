@@ -31,12 +31,12 @@ public partial class CardRewardHints : Node
     {
         if (Engine.GetMainLoop() is not SceneTree tree)
         {
-            GD.Print("[SpireCodex] no SceneTree; card-reward hints not started");
+            MainFile.Logger.Info("no SceneTree; card-reward hints not started");
             return;
         }
         var n = new CardRewardHints { Name = "SpireCodexCardHints" };
         tree.Root.CallDeferred(Node.MethodName.AddChild, n);
-        GD.Print("[SpireCodex] card-reward hints started");
+        MainFile.Logger.Info("card-reward hints started");
     }
 
     public override void _Ready()
