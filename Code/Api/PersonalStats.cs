@@ -29,10 +29,16 @@ public static class PersonalStats
     private static UserPick? Lookup(IReadOnlyDictionary<string, UserPick>? map, string? id) =>
         map == null || string.IsNullOrEmpty(id) ? null : map.GetValueOrDefault(id.ToUpperInvariant());
 
+    // After a failed fetch, wait before trying again instead of re-firing on every hover. A tight
+    // retry loop (signed in, but the request kept failing) showed up as continuous failing API
+    // calls in the wild.
+    private static System.DateTime _nextAttemptUtc = System.DateTime.MinValue;
+
     public static void EnsureLoaded()
     {
         if (_data != null || _loading) return;
         if (string.IsNullOrEmpty(SteamAuth.Token)) return; // needs sign-in; retried once a token lands
+        if (System.DateTime.UtcNow < _nextAttemptUtc) return; // backing off after a recent failure
         _loading = true;
         _ = LoadAsync();
     }
@@ -42,9 +48,10 @@ public static class PersonalStats
         try
         {
             // Non-null is a success (even when empty): cache it so we don't refetch every hover.
-            // Null is a failed/unauthorized request: leave _data null so EnsureLoaded retries.
+            // Null is a failed/unauthorized request: back off a minute before the next attempt.
             var d = await new SpireCodexClient().GetUserPicksAsync().ConfigureAwait(false);
             if (d != null) _data = d;
+            else _nextAttemptUtc = System.DateTime.UtcNow.AddSeconds(60);
         }
         finally { _loading = false; }
     }

@@ -26,6 +26,12 @@ public sealed class Snapshot
     public bool IsGameOver { get; set; }
     public int PlayerCount { get; set; }
 
+    // Whether THIS mod is uploading completed runs (Config.UploadRuns). The
+    // companion overlay reads this to avoid double-submitting the same .run:
+    // when true it stands down and lets the mod own uploads. Serialized as
+    // `uploads_runs`.
+    public bool UploadsRuns { get; set; }
+
     // First player flattened to the top level (single-player focus).
     public string? Character { get; set; } // bare id, e.g. "IRONCLAD"
     public int CurrentHp { get; set; }

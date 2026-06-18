@@ -37,6 +37,10 @@ public partial class LiveStateProducer : Node
         _accum = 0;
 
         var snapshot = Sts2Access.ReadSnapshot();
+        // Tell the companion overlay whether we're the one uploading runs,
+        // so it doesn't also submit the same .run (overlay reads
+        // `uploads_runs` from the live feed).
+        snapshot.UploadsRuns = Config.UploadRuns;
         Latest = snapshot;
         RewardContext.Character = snapshot.InRun ? snapshot.Character : null;
         RewardContext.HpPct = snapshot.InRun && snapshot.MaxHp > 0

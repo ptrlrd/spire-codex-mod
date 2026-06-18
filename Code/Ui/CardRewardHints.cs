@@ -279,6 +279,7 @@ public partial class CardRewardHints : Node
     // Log a summary at most once per second, and immediately whenever it changes.
     private void DiagThrottled(string msg)
     {
+        if (!Config.DumpIntrospection) return; // dev-only; off in release (was 10+ temp-file writes/sec)
         var changed = msg != _lastDiag;
         if (!changed && _diagAccum < 1.0) return;
         _diagAccum = 0;
