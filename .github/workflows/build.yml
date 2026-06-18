@@ -102,9 +102,9 @@ jobs:
 
       - name: Upload to NexusMods
         if: steps.ver.outputs.version != ''
-        uses: Nexus-Mods/upload-action@v1
+        uses: Nexus-Mods/upload-action@v1.0.0-beta.8
         with:
           api_key: ${{ secrets.NEXUSMODS_API_KEY }}
-          file_group_id: ${{ secrets.NEXUSMODS_FILE_GROUP_ID }}
+          file_id: ${{ secrets.NEXUSMODS_FILE_ID }}
           filename: ${{ steps.pkg.outputs.file }}
           version: ${{ steps.ver.outputs.version }}
