@@ -93,3 +93,18 @@ jobs:
           tag_name: ${{ steps.ver.outputs.version }}
           files: dist/SpireCodex-*.zip
           generate_release_notes: true
+
+      - name: Locate package
+        if: steps.ver.outputs.version != ''
+        id: pkg
+        shell: bash
+        run: echo "file=$(ls dist/SpireCodex-*.zip | head -n1)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to NexusMods
+        if: steps.ver.outputs.version != ''
+        uses: Nexus-Mods/upload-action@v1
+        with:
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
+          file_group_id: ${{ secrets.NEXUSMODS_FILE_GROUP_ID }}
+          filename: ${{ steps.pkg.outputs.file }}
+          version: ${{ steps.ver.outputs.version }}
