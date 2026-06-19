@@ -1,0 +1,8 @@
+{
+  "title": "Spire Codex",
+  "description": "The in-game companion for spire-codex.com.\n\nCommunity win rates and Codex tiers shown inside the game's own tooltips on cards, relics, potions, events, and campfire options, plus your personal pick rates, map route danger, reward and event decision help, and automatic run tracking to the leaderboards.\n\nOpen the overlay with F5 or a controller stick click. Switch tabs with Tab or L1/R1.\n\nRequires BaseLib.",
+  "visibility": "private",
+  "changeNote": "Performance fix: removed the per-action frame hitches (the live-run snapshot now writes off the main thread).",
+  "tags": ["tool"],
+  "dependencies": []
+}
