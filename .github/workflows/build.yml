@@ -100,6 +100,18 @@ jobs:
         shell: bash
         run: echo "file=$(ls dist/SpireCodex-*.zip | head -n1)" >> "$GITHUB_OUTPUT"
 
+      - name: Read changelog
+        if: steps.ver.outputs.version != ''
+        id: notes
+        shell: bash
+        run: |
+          note=$(jq -r '.changeNote // ""' workshop/workshop.json)
+          {
+            echo "changelog<<__EOF__"
+            echo "$note"
+            echo "__EOF__"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Upload to NexusMods
         if: steps.ver.outputs.version != ''
         uses: Nexus-Mods/upload-action@v1.0.0-beta.8
@@ -108,3 +120,4 @@ jobs:
           file_id: ${{ secrets.NEXUSMODS_FILE_ID }}
           filename: ${{ steps.pkg.outputs.file }}
           version: ${{ steps.ver.outputs.version }}
+          description: ${{ steps.notes.outputs.changelog }}
