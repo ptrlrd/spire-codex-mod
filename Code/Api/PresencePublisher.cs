@@ -103,6 +103,11 @@ public static class PresencePublisher
             sts2_version = s.Sts2Version,
             username = Config.Username,
             turn = s.Combat?.Turn,
+            // Live damage for the spectator combat view (null when not fighting).
+            damage_dealt = s.Combat?.DamageDealt,
+            damage_dealt_this_turn = s.Combat?.DamageDealtThisTurn,
+            damage_taken = s.Combat?.DamageTaken,
+            biggest_hit = s.Combat?.BiggestHit,
             fighting = s.Combat?.Enemies.Where(e => e.IsAlive).Select(e => e.Id).Take(8).ToArray(),
             // Rich enemy detail for the spectator combat view: HP, block, and the upcoming
             // intent(s) so viewers see what's coming ("16 x2 incoming"). Excluded from the

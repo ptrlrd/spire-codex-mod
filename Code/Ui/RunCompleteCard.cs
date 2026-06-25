@@ -29,8 +29,8 @@ public partial class RunCompleteCard : CanvasLayer
     }
 
     // Safe to call from a background thread (the uploader runs off the main loop).
-    public static void ShowRunDeferred(string url, string? rankLine = null)
-        => Callable.From(() => _instance?.ShowRun(url, rankLine)).CallDeferred();
+    public static void ShowRunDeferred(string url, string? rankLine = null, string? damageLine = null)
+        => Callable.From(() => _instance?.ShowRun(url, rankLine, damageLine)).CallDeferred();
 
     public override void _Ready()
     {
@@ -89,17 +89,20 @@ public partial class RunCompleteCard : CanvasLayer
         Visible = false;
     }
 
-    public void ShowRun(string url, string? rankLine = null)
+    public void ShowRun(string url, string? rankLine = null, string? damageLine = null)
     {
         if (!SpireCodexConfig.ShowPostRunCard) return;
         _url = url;
         var rank = string.IsNullOrEmpty(rankLine)
             ? ""
             : $"\n[color=#ffd966][b]{rankLine}[/b][/color]";
+        var damage = string.IsNullOrEmpty(damageLine)
+            ? ""
+            : $"\n[color=#ff9a7a]{damageLine}[/color]";
         _text.Text =
             "[color=#ffd34d][b]Run tracked[/b][/color]\n" +
             "Live on Spire Codex:\n" +
-            $"[color=#8fd0ff]{url}[/color]" + rank;
+            $"[color=#8fd0ff]{url}[/color]" + rank + damage;
         Visible = true;
         _showing = true;
         _elapsed = 0;

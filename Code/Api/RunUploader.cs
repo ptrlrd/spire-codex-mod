@@ -109,17 +109,24 @@ public sealed class RunUploader : IDisposable
             var json = await File.ReadAllTextAsync(path).ConfigureAwait(false);
             if (!HasMapHistory(json)) return; // empty insta-abandon, nothing to record
 
+            // Attach this run's damage summary (per-hit totals tracked during the run). Live
+            // completions only: backfilled history has no in-memory damage and rides through
+            // unchanged. No-op when nothing was tracked.
+            var payload = Core.DamageTracker.AttachTo(json);
+
             var result = await _client
-                .UploadRunAsync(json, Config.SteamId, Config.Username, _sts2Version)
+                .UploadRunAsync(payload, Config.SteamId, Config.Username, _sts2Version)
                 .ConfigureAwait(false);
 
             MainFile.Logger.Info($"upload {Path.GetFileName(path)}: " +
                      $"{(result.Success ? "ok" : "FAILED")} ({result.StatusCode}) " +
                      $"{Truncate(result.Body, 200)}");
 
-            // Pop the post-run shareable card for live completions (not backfill).
+            // Pop the post-run shareable card for live completions (not backfill), with this
+            // run's damage summary line when we tracked any.
             if (result.Success && ParseUploadResponse(result.Body) is { Hash: not null } up)
-                Ui.RunCompleteCard.ShowRunDeferred(up.Url ?? Config.RunUrl(up.Hash!), up.RankLine);
+                Ui.RunCompleteCard.ShowRunDeferred(
+                    up.Url ?? Config.RunUrl(up.Hash!), up.RankLine, Core.DamageTracker.RunCardLine());
         }
         catch (Exception e)
         {

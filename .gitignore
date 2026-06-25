@@ -19,3 +19,9 @@ Directory.Build.props
 # Steam Workshop staging — built mod files are copied here by tools/workshop-pack.sh
 /workshop/content/*
 !/workshop/content/.gitkeep
+
+# ModUploader run log
+mod-uploader.log
+
+# Godot re-imports the Workshop thumbnail; the .import sidecar isn't game content
+/workshop/*.import

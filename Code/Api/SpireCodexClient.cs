@@ -45,10 +45,16 @@ public sealed class SpireCodexClient
     // picks, wins[, scope]}, ... }. With `character`, entries carry that character's slice
     // when its sample is big enough (scope="character"), else global (scope="global").
     // Older backends ignore the param and return global numbers with no scope.
-    public async Task<Dictionary<string, EntityScore>> GetScoresAsync(string entityType, string? character = null)
+    public async Task<Dictionary<string, EntityScore>> GetScoresAsync(
+        string entityType, string? character = null, string? statFilter = null)
     {
         var url = $"{Config.ApiBase}/runs/scores/{entityType}";
-        if (!string.IsNullOrEmpty(character)) url += $"?character={Uri.EscapeDataString(character)}";
+        var query = new List<string>();
+        if (!string.IsNullOrEmpty(character)) query.Add($"character={Uri.EscapeDataString(character)}");
+        // "all" is the server default, so only the narrowed filters need the param.
+        if (!string.IsNullOrEmpty(statFilter) && statFilter != StatFilter.DefaultKey)
+            query.Add($"stat_filter={Uri.EscapeDataString(statFilter)}");
+        if (query.Count > 0) url += "?" + string.Join("&", query);
         using var resp = await Http.GetAsync(url).ConfigureAwait(false);
         resp.EnsureSuccessStatusCode();
         var stream = await resp.Content.ReadAsStreamAsync().ConfigureAwait(false);

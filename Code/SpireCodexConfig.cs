@@ -35,8 +35,15 @@ public sealed class SpireCodexConfig : SimpleModConfig
     // Community stats appended into the game's own hover tooltips (cards, relics, potions,
     // events, shop, campfire options, your character portrait).
     public static bool ShowHoverTips { get; set; } = true;
+    // Which slice of the community the shown stats (plates + hover tips) are drawn from: all
+    // runs, or a more competitive bracket (Ascension 10, optionally only higher-win-rate
+    // players), so you can follow what strong players pick. Mirrors the website's stat toggles
+    // and applies immediately. A small corner tag shows when it's narrowed past all runs.
+    public static StatBracket Stats { get; set; } = StatBracket.All;
     // Map guidance: the recommended-route rings + fight-name labels + danger marks.
     public static bool ShowMapDanger { get; set; } = true;
+    // Live damage readout in the corner during combat (damage this turn / total / biggest hit).
+    public static bool ShowDamageMeter { get; set; } = true;
     // The "Upcoming events" readout in the corner of the act map.
     public static bool ShowUpcomingEvents { get; set; } = true;
     // The shareable "Run tracked" card that pops when a completed run uploads.
@@ -60,6 +67,16 @@ public sealed class SpireCodexConfig : SimpleModConfig
     // Resolved Godot keycode (read-only, so BaseLib ignores it as a config entry).
     public static Key OverlayKeycode => KeyOf(OverlayKey);
 
+    // The API stat-filter key for the selected bracket (read-only, so BaseLib ignores it).
+    public static string StatsFilterKey => Stats switch
+    {
+        StatBracket.A10 => "a10",
+        StatBracket.A10_WR30 => "a10_wr30",
+        StatBracket.A10_WR50 => "a10_wr50",
+        StatBracket.A10_WR75 => "a10_wr75",
+        _ => "all",
+    };
+
     private static Key KeyOf(HotKey k) => k switch
     {
         HotKey.F5 => Key.F5,
@@ -76,6 +93,11 @@ public sealed class SpireCodexConfig : SimpleModConfig
 
 // A small, dropdown-friendly set of bindable keys (vs. the full Godot.Key enum).
 public enum HotKey { None, F5, F6, F7, F8, F9, F10, F11, F12 }
+
+// The community stat bracket: which runs the shown win-rates/picks are computed over. Maps to
+// the API's stat-filter keys (StatsFilterKey) and mirrors the website's toggles. WR = the runs'
+// players' win rate; StS2 ascension caps at 10.
+public enum StatBracket { All, A10, A10_WR30, A10_WR50, A10_WR75 }
 
 // Controller binding for the overlay toggle. StickClick fires on the game's stick-click /
 // "peek" action (the only pad input STS2 reliably surfaces to a mod through Steam Input).

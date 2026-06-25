@@ -52,6 +52,10 @@ public partial class MainFile : Node
         // ticker that PresencePublisher ships with each heartbeat.
         Core.RunEvents.Apply(harmony);
 
+        // Per-hit damage tracking off the game's damage hooks; feeds the combat damage meter,
+        // the live snapshot's combat block, and the run-upload damage summary.
+        Core.DamageTracker.Apply(harmony);
+
         // Live-state producer: a Node on the scene tree that polls RunState ~10x/second
         // and writes the snapshot file.
         LiveStateProducer.Start();
@@ -64,6 +68,12 @@ public partial class MainFile : Node
 
         // Community danger tags on the act-map nodes.
         Ui.MapDangerHints.Start();
+
+        // Live combat damage meter (corner readout fed by DamageTracker via the snapshot).
+        Ui.DamageMeter.Start();
+
+        // Corner indicator for the active stat filter (All runs / Ascension 5+ / Ascension 10).
+        Ui.StatFilterIndicator.Start();
 
         // Post-run shareable card (pops when a completed run uploads).
         Ui.RunCompleteCard.Start();

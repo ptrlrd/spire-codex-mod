@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Godot;
 
 namespace SpireCodex.Api;
 
@@ -13,46 +12,54 @@ namespace SpireCodex.Api;
 public sealed record EntityScore(
     double Score, double WinRate, int Picks, string? Scope = null, double? Elo = null);
 
-// In-memory cache of community scores. Two layers:
-//  - global sets, fetched once at startup (EnsureLoaded);
-//  - a character-scoped set for the current run's character (EnsureCharacter, called from the
-//    producer tick), so plates/best-pick rank by "win rate AS this character" when the sample
-//    is big enough. Server falls back per-entry to global, so the char set is complete.
-// Lookups return char-scoped entries while a run's character is known, else global.
+// In-memory cache of community scores across two dimensions:
+//  - character: the current run's character (numbers AS this character when the sample is big
+//    enough; the server falls back per-entry to global so the set stays complete);
+//  - stat filter: which slice of the run population the numbers come from (all runs / Ascension
+//    10 / higher-win-rate brackets), chosen via the Stats setting and applied by SetFilter
+//    (polled each producer tick). See StatFilter / SpireCodexConfig.StatBracket.
+// Both ride the score fetch as query params and key the cache. Lookups serve the active
+// (character, filter) set and fall back to the all-runs global baseline for any missing entry.
 public static class CodexScores
 {
-    private static Dictionary<string, EntityScore> _cards = new();
-    private static Dictionary<string, EntityScore> _relics = new();
-    private static Dictionary<string, EntityScore> _potions = new();
-    private static bool _loading;
+    private sealed record Sets(
+        Dictionary<string, EntityScore> Cards,
+        Dictionary<string, EntityScore> Relics,
+        Dictionary<string, EntityScore> Potions)
+    {
+        public static readonly Sets Empty = new(new(), new(), new());
+    }
 
-    // Character layer: current character id + its score sets, memoized per character so
-    // re-runs with the same character don't refetch.
-    private static string? _charId;
-    private static Dictionary<string, EntityScore>? _charCards;
-    private static Dictionary<string, EntityScore>? _charRelics;
-    private static Dictionary<string, EntityScore>? _charPotions;
-    private static string? _charLoading;
-    private static readonly Dictionary<string, (Dictionary<string, EntityScore> Cards, Dictionary<string, EntityScore> Relics, Dictionary<string, EntityScore> Potions)> _byChar = new();
+    private static Sets _global = Sets.Empty; // (no character, all runs): startup baseline + fallback
+    private static Sets _active = Sets.Empty; // the current (character, filter) set lookups serve
+    private static double[] _eloSorted = Array.Empty<double>();
+
+    private static string? _charId;                        // current run character (null outside a run)
+    private static string _filter = StatFilter.DefaultKey; // active stat-filter key
+    private static readonly Dictionary<string, Sets> _cache = new(); // key: Key(char, filter)
+    private static string? _loadingKey;
+    private static bool _loading;
 
     public static bool Loaded { get; private set; }
 
+    // The active stat filter (for the on-screen indicator).
+    public static string CurrentFilter => _filter;
+    public static string CurrentFilterLabel => StatFilter.ByKey(_filter).Label;
+
+    private static string Key(string? charId, string filter) => $"{charId ?? "_"}|{filter}";
+
     public static EntityScore? Card(string id) =>
-        (_charId != null ? _charCards?.GetValueOrDefault(id) : null) ?? _cards.GetValueOrDefault(id);
+        _active.Cards.GetValueOrDefault(id) ?? _global.Cards.GetValueOrDefault(id);
 
     public static EntityScore? Relic(string id) =>
-        (_charId != null ? _charRelics?.GetValueOrDefault(id) : null) ?? _relics.GetValueOrDefault(id);
+        _active.Relics.GetValueOrDefault(id) ?? _global.Relics.GetValueOrDefault(id);
 
     public static EntityScore? Potion(string id) =>
-        (_charId != null ? _charPotions?.GetValueOrDefault(id) : null) ?? _potions.GetValueOrDefault(id);
+        _active.Potions.GetValueOrDefault(id) ?? _global.Potions.GetValueOrDefault(id);
 
-    // Sorted Codex Elo values across all rated cards, for percentile-based Elo tiers.
-    // Elo is global (the character slice doesn't change it), so one distribution suffices.
-    private static double[] _eloSorted = Array.Empty<double>();
-
-    // Elo percentile -> tier letter (S = top 5%, A = 20%, B = 40%, C = 65%, D = 85%, F = rest).
-    // Null when the entity has no Elo or the distribution isn't loaded; callers fall back to
-    // the Score tier.
+    // Sorted Codex Elo values across all rated cards, for percentile-based Elo tiers. Elo is
+    // global (neither the character slice nor the stat filter changes it), so the global
+    // distribution suffices.
     public static string? EloTier(double? elo)
     {
         if (elo is not { } e || _eloSorted.Length < 20) return null;
@@ -71,59 +78,80 @@ public static class CodexScores
         if (Loaded || _loading) return;
         _loading = true;
         Diag("EnsureLoaded called");
-        _ = LoadAsync();
+        _ = LoadGlobalAsync();
     }
 
-    // Called every producer tick with the live character (null outside a run). Cheap no-op
-    // unless the character actually changed; fetches the scoped sets in the background and
-    // swaps them in when ready (lookups keep serving global until then).
+    // Called every producer tick with the live character (null outside a run). No-op unless it
+    // changed; activates the (character, current filter) set.
     public static void EnsureCharacter(string? charId)
     {
         if (charId == _charId) return;
-        if (charId == null)
-        {
-            _charId = null; _charCards = null; _charRelics = null; _charPotions = null;
-            return;
-        }
-        if (_byChar.TryGetValue(charId, out var cached))
-        {
-            _charId = charId;
-            _charCards = cached.Cards; _charRelics = cached.Relics; _charPotions = cached.Potions;
-            return;
-        }
-        if (_charLoading == charId) return;
-        _charLoading = charId;
-        Diag($"fetching character scores: {charId}");
-        _ = LoadCharacterAsync(charId);
+        _charId = charId;
+        Activate();
     }
 
-    private static async Task LoadCharacterAsync(string charId)
+    // Set the active stat filter (driven by the Stats setting, polled each producer tick).
+    // Re-activates scores for it; lookups keep serving the old set until the new one lands.
+    public static void SetFilter(string key)
+    {
+        if (key == _filter) return;
+        _filter = key;
+        Diag($"stat filter -> {_filter}");
+        Activate();
+    }
+
+    // A stat-filter bracket grades across ALL characters: the backend ignores ?character= when a
+    // bracket is set, so brackets fetch + cache character-agnostically (once per bracket) and only
+    // "all" is per-character. Keeps the cache honest and avoids refetching the same bracket for
+    // every character.
+    private static string? EffectiveChar() => _filter == StatFilter.DefaultKey ? _charId : null;
+
+    // Make the (effective character, current filter) set the active one, fetching + caching it if
+    // needed. A cached set swaps in instantly; an un-cached one loads in the background and
+    // swaps in when ready, staying on the previous set meanwhile (so plates never blank).
+    private static void Activate()
+    {
+        var charId = EffectiveChar();
+        var key = Key(charId, _filter);
+        if (_cache.TryGetValue(key, out var sets)) { _active = sets; return; }
+        if (_loadingKey == key) return;
+        _loadingKey = key;
+        _ = LoadSetAsync(charId, _filter, key);
+    }
+
+    private static async Task LoadSetAsync(string? charId, string filter, string key)
     {
         try
         {
-            var client = new SpireCodexClient();
-            var cards = await client.GetScoresAsync("cards", charId).ConfigureAwait(false);
-            var relics = await client.GetScoresAsync("relics", charId).ConfigureAwait(false);
-            var potions = await client.GetScoresAsync("potions", charId).ConfigureAwait(false);
-            _byChar[charId] = (cards, relics, potions);
-            _charId = charId; _charCards = cards; _charRelics = relics; _charPotions = potions;
-            Diag($"character scores loaded: {charId} ({cards.Count} cards, {relics.Count} relics, {potions.Count} potions)");
+            var sets = await FetchAsync(charId, filter).ConfigureAwait(false);
+            _cache[key] = sets;
+            if (Key(EffectiveChar(), _filter) == key) _active = sets; // still what the player's looking at
+            Diag($"set loaded [{key}]: {sets.Cards.Count} cards, {sets.Relics.Count} relics, {sets.Potions.Count} potions");
         }
         catch (Exception e)
         {
-            Diag($"character scores FAILED ({charId}): {e.GetType().Name}: {e.Message}");
+            Diag($"set load FAILED [{key}]: {e.GetType().Name}: {e.Message}");
         }
         finally
         {
-            if (_charLoading == charId) _charLoading = null;
+            if (_loadingKey == key) _loadingKey = null;
         }
     }
 
-    private static async Task LoadAsync()
+    private static async Task<Sets> FetchAsync(string? charId, string filter)
+    {
+        var client = new SpireCodexClient();
+        var cards = await client.GetScoresAsync("cards", charId, filter).ConfigureAwait(false);
+        var relics = await client.GetScoresAsync("relics", charId, filter).ConfigureAwait(false);
+        var potions = await client.GetScoresAsync("potions", charId, filter).ConfigureAwait(false);
+        return new Sets(cards, relics, potions);
+    }
+
+    private static async Task LoadGlobalAsync()
     {
         // Retry with backoff: a reachable API can still serve an EMPTY score set while the
-        // server's stats snapshot is rebuilding (seen in prod), and caching that for the
-        // whole session would leave every plate/tip blank until relaunch.
+        // server's stats snapshot is rebuilding (seen in prod), and caching that for the whole
+        // session would leave every plate/tip blank until relaunch.
         var delays = new[] { 0, 30, 60, 120, 300, 600 };
         try
         {
@@ -133,24 +161,21 @@ public static class CodexScores
                     await Task.Delay(TimeSpan.FromSeconds(delays[attempt])).ConfigureAwait(false);
                 try
                 {
-                    Diag($"LoadAsync attempt {attempt + 1}");
-                    var client = new SpireCodexClient();
-                    var cards = await client.GetScoresAsync("cards").ConfigureAwait(false);
-                    var relics = await client.GetScoresAsync("relics").ConfigureAwait(false);
-                    var potions = await client.GetScoresAsync("potions").ConfigureAwait(false);
-                    if (cards.Count == 0 && relics.Count == 0)
+                    Diag($"LoadGlobal attempt {attempt + 1}");
+                    var sets = await FetchAsync(null, StatFilter.DefaultKey).ConfigureAwait(false);
+                    if (sets.Cards.Count == 0 && sets.Relics.Count == 0)
                     {
                         Diag("server returned empty score sets (stats snapshot cold?); will retry");
                         continue;
                     }
-                    _cards = cards;
-                    _relics = relics;
-                    _potions = potions;
-                    _eloSorted = cards.Values
+                    _global = sets;
+                    _cache[Key(null, StatFilter.DefaultKey)] = sets;
+                    _eloSorted = sets.Cards.Values
                         .Where(e => e.Elo != null).Select(e => e.Elo!.Value)
                         .OrderBy(x => x).ToArray();
                     Loaded = true;
-                    Diag($"loaded OK: {cards.Count} cards, {relics.Count} relics, {potions.Count} potions");
+                    Activate(); // point _active at the right (char, filter) now that we have data
+                    Diag($"global loaded OK: {sets.Cards.Count} cards, {sets.Relics.Count} relics, {sets.Potions.Count} potions");
                     return;
                 }
                 catch (Exception e)

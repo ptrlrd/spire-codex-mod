@@ -28,7 +28,17 @@ public partial class DeckImagePanel : CanvasLayer
     private static readonly Color Good = Hex("4ec977");
     private static readonly Color Danger = Hex("c74b4b");
 
-    private static readonly string[] Tabs = { "Current Run", "Leaderboard", "Runs", "About" };
+    private static readonly string[] Tabs = { "Current Run", "Leaderboard", "Runs", "Settings", "About" };
+
+    // The community stat bracket choices shown in the Settings tab selector (label + tooltip).
+    private static readonly (StatBracket Bracket, string Label, string Tip)[] BracketChoices =
+    {
+        (StatBracket.All, "All", "All runs"),
+        (StatBracket.A10, "A10", "Ascension 10"),
+        (StatBracket.A10_WR30, "A10 >30%", "Ascension 10, players above 30% win rate"),
+        (StatBracket.A10_WR50, "A10 >50%", "Ascension 10, players above 50% win rate"),
+        (StatBracket.A10_WR75, "A10 >75%", "Ascension 10, players above 75% win rate"),
+    };
 
     // Links (ripped from the Overwolf about page).
     private const string SiteUrl = "https://spire-codex.com";
@@ -56,6 +66,7 @@ public partial class DeckImagePanel : CanvasLayer
     private VBoxContainer _content = null!;
     private Label _hint = null!;
     private readonly List<Button> _tabButtons = new();
+    private readonly List<Button> _bracketButtons = new(); // Settings tab stat-bracket selector
     private int _tab;
     private int _loadToken; // guards against a stale async fetch populating the wrong tab
 
@@ -339,7 +350,8 @@ public partial class DeckImagePanel : CanvasLayer
             case 0: BuildCurrentRun(); break;
             case 1: BuildLeaderboard(); break;
             case 2: BuildRuns(); break;
-            case 3: BuildAbout(); break;
+            case 3: BuildSettings(); break;
+            case 4: BuildAbout(); break;
         }
     }
 
@@ -917,6 +929,93 @@ public partial class DeckImagePanel : CanvasLayer
             _content.AddChild(rowPanel);
         }
     }
+
+    // ---- Settings tab ---------------------------------------------------------------
+
+    // In-overlay mirror of the mod settings: pick the community stat bracket and toggle the
+    // on-screen surfaces. Writes the same SpireCodexConfig the BaseLib menu does, and persists
+    // it the same way (the auto-property setters don't save on their own).
+    private void BuildSettings()
+    {
+        AboutHead("Community stats");
+        AboutText("Which players the shown win-rates and pick-rates are drawn from. Higher brackets follow more competitive players. Applies to plates and hover tips.");
+        _content.AddChild(BuildBracketRow());
+
+        AboutHead("On-screen");
+        _content.AddChild(SettingToggle("Damage meter", () => SpireCodexConfig.ShowDamageMeter, v => SpireCodexConfig.ShowDamageMeter = v));
+        _content.AddChild(SettingToggle("Card reward hints", () => SpireCodexConfig.ShowCardRewardHints, v => SpireCodexConfig.ShowCardRewardHints = v));
+        _content.AddChild(SettingToggle("Hover tips", () => SpireCodexConfig.ShowHoverTips, v => SpireCodexConfig.ShowHoverTips = v));
+        _content.AddChild(SettingToggle("Map guidance", () => SpireCodexConfig.ShowMapDanger, v => SpireCodexConfig.ShowMapDanger = v));
+        _content.AddChild(SettingToggle("Upcoming events", () => SpireCodexConfig.ShowUpcomingEvents, v => SpireCodexConfig.ShowUpcomingEvents = v));
+        _content.AddChild(SettingToggle("Post-run card", () => SpireCodexConfig.ShowPostRunCard, v => SpireCodexConfig.ShowPostRunCard = v));
+
+        AboutText("These also live in the game's mod settings menu; changes here save the same way. Drag the damage meter to reposition it.");
+    }
+
+    // A row of selectable bracket buttons; the active one is gold. Clicking sets the config and
+    // persists; the producer applies it to the score cache on its next tick.
+    private Control BuildBracketRow()
+    {
+        _bracketButtons.Clear();
+        var flow = new HFlowContainer();
+        flow.AddThemeConstantOverride("h_separation", 6);
+        flow.AddThemeConstantOverride("v_separation", 6);
+        foreach (var (bracket, label, tip) in BracketChoices)
+        {
+            var pick = bracket;
+            var b = new Button { Text = label, TooltipText = tip };
+            b.AddThemeFontSizeOverride("font_size", 13);
+            b.AddThemeStyleboxOverride("normal", ButtonBox(BgSofter, Border));
+            b.AddThemeStyleboxOverride("hover", ButtonBox(Border, Accent));
+            b.AddThemeStyleboxOverride("pressed", ButtonBox(Border, Accent));
+            b.Pressed += () => { SpireCodexConfig.Stats = pick; PersistConfig(); RefreshBracketRow(); };
+            _bracketButtons.Add(b);
+            flow.AddChild(b);
+        }
+        RefreshBracketRow();
+        return flow;
+    }
+
+    private void RefreshBracketRow()
+    {
+        for (var i = 0; i < _bracketButtons.Count && i < BracketChoices.Length; i++)
+            _bracketButtons[i].AddThemeColorOverride(
+                "font_color", BracketChoices[i].Bracket == SpireCodexConfig.Stats ? Accent : TextMuted);
+    }
+
+    // A label + On/Off button bound to a bool config field. Clicking flips and persists it.
+    private Control SettingToggle(string label, Func<bool> get, Action<bool> set)
+    {
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 8);
+
+        var name = new Label { Text = label, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        name.AddThemeColorOverride("font_color", Text);
+        name.AddThemeFontSizeOverride("font_size", 13);
+        name.VerticalAlignment = VerticalAlignment.Center;
+        row.AddChild(name);
+
+        var b = new Button { CustomMinimumSize = new Vector2(54, 0) };
+        b.AddThemeFontSizeOverride("font_size", 13);
+        b.AddThemeStyleboxOverride("normal", ButtonBox(BgSofter, Border));
+        b.AddThemeStyleboxOverride("hover", ButtonBox(Border, Accent));
+        b.AddThemeStyleboxOverride("pressed", ButtonBox(Border, Accent));
+        void Paint()
+        {
+            var on = get();
+            b.Text = on ? "On" : "Off";
+            b.AddThemeColorOverride("font_color", on ? Good : TextMuted);
+        }
+        b.Pressed += () => { set(!get()); PersistConfig(); Paint(); };
+        Paint();
+        row.AddChild(b);
+        return row;
+    }
+
+    // BaseLib's config auto-properties don't save on set, so persist after a UI change. Same call
+    // ConsentPrompt uses (the registered instance's immediate Save) — deliberately not the
+    // debounced variant, since mixing Save() and SaveDebounced() on one config can deadlock.
+    private static void PersistConfig() => BaseLib.Config.ModConfigRegistry.Get<SpireCodexConfig>()?.Save();
 
     // ---- About tab ------------------------------------------------------------------
 

@@ -43,12 +43,22 @@ public partial class LiveStateProducer : Node
         snapshot.UploadsRuns = Config.UploadRuns;
         Latest = snapshot;
         RewardContext.Character = snapshot.InRun ? snapshot.Character : null;
-        RewardContext.HpPct = snapshot.InRun && snapshot.MaxHp > 0
+        // HpPct feeds the campfire "At your HP" tip. A rest heal writes Creature.CurrentHp
+        // instantly (synchronously on confirm) while the HP bar animates over ~2s, so a raw read
+        // briefly runs ahead of the visible bar (e.g. 27/75 shows as 54/75 = 72% mid-heal). Don't
+        // let HpPct rise while on the rest screen — hold the decision-relevant arrival HP that
+        // matches the bar. It resumes tracking live HP the moment you leave the rest site.
+        var hpPct = snapshot.InRun && snapshot.MaxHp > 0
             ? snapshot.CurrentHp * 100.0 / snapshot.MaxHp
-            : null;
+            : (double?)null;
+        if (snapshot.Screen == "rest" && hpPct is { } now && RewardContext.HpPct is { } prev && now > prev)
+            hpPct = prev;
+        RewardContext.HpPct = hpPct;
         // Keep the score cache on the run's character so plates/best-pick use the
         // character-adjusted numbers (no-op unless the character changed).
         Api.CodexScores.EnsureCharacter(snapshot.InRun ? snapshot.Character : null);
+        // Apply the stat bracket chosen in settings (no-op unless it changed).
+        Api.CodexScores.SetFilter(SpireCodexConfig.StatsFilterKey);
         SnapshotWriter.Write(snapshot);
     }
 }

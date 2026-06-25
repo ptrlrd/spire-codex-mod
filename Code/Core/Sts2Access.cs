@@ -162,6 +162,7 @@ public static class Sts2Access
         snap.GameMode = Reflect.GetString(state, "GameMode");
         snap.MapCoord = Reflect.GetMember(state, "CurrentMapCoord")?.ToString();
         snap.Seed = Reflect.GetMember(Reflect.GetMember(state, "Rng"), "Seed")?.ToString();
+        DamageTracker.NoteRun(snap.Seed); // resets the run's damage aggregate on a new seed
 
         object? firstPlayer = null;
         if (Reflect.GetMember(state, "Players") is IEnumerable players)
@@ -234,6 +235,7 @@ public static class Sts2Access
             }
         }
 
+        DamageTracker.FillCombat(combat); // live damage counters for this fight
         return combat;
     }
 

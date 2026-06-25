@@ -110,6 +110,15 @@ public sealed class CombatSnapshot
     public int Energy { get; set; }
     public int? Turn { get; set; } // CombatState.RoundNumber
     public List<EnemySnapshot> Enemies { get; set; } = new();
+
+    // Live damage counters for this fight, from DamageTracker (off the game's damage hooks).
+    // Dealt/Taken are unblocked HP damage (to enemies / to the player); BiggestHit is the
+    // largest single unblocked hit we dealt this fight. Serialized as damage_dealt,
+    // damage_dealt_this_turn, damage_taken, biggest_hit.
+    public int DamageDealt { get; set; }
+    public int DamageDealtThisTurn { get; set; }
+    public int DamageTaken { get; set; }
+    public int BiggestHit { get; set; }
 }
 
 public sealed class EnemySnapshot
