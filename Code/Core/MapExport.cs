@@ -17,6 +17,12 @@ public sealed class MapGraphData
     public List<int[]> Edges = new();    // [col, row, childCol, childRow]
     public List<int[]> Path = new();     // visited coords, in travel order
     public int[]? Pos;                   // current coord, null between nodes
+
+    // Per-visited-node reveal: [col, row, room_type, encounter_id]. The actual room type +
+    // encounter/event id the game recorded when each node was entered, so the spectator map
+    // can light up each circle with what was really there (and resolve "?" nodes). Grows as
+    // the player walks; encounter_id is null for shop/rest/treasure. Rides every beat.
+    public List<object?[]> Reveals = new();
 }
 
 public static class MapExport
@@ -58,6 +64,7 @@ public static class MapExport
                 foreach (var c in visited)
                     if (CoordOf(c) is { } v) g.Path.Add(v);
             g.Pos = CoordOf(Reflect.GetMember(state, "CurrentMapCoord"));
+            BuildReveals(state, g);
 
             _latest = g;
         }
@@ -89,6 +96,37 @@ public static class MapExport
         AddPoint(Reflect.GetMember(map, "StartingMapPoint"));
         AddPoint(Reflect.GetMember(map, "BossMapPoint"));
         AddPoint(Reflect.GetMember(map, "SecondBossMapPoint"));
+    }
+
+    // What each visited node actually was. RunState.MapPointHistory is a per-act list of
+    // entries indexed by row (the game's own GetHistoryEntryFor does MapPointHistory[act][row]),
+    // and each entry's Rooms[0] holds the resolved RoomType + the encounter/event ModelId
+    // recorded on entry. Join that against the visited coords (Path, which carry the column) by
+    // row to emit [col, row, room_type, encounter_id] per visited circle. The resolved RoomType
+    // is what a "?" node became, which the unpositioned route pool can't tell you.
+    private static void BuildReveals(object state, MapGraphData g)
+    {
+        try
+        {
+            var actIndex = Reflect.GetInt(state, "CurrentActIndex");
+            if (Reflect.GetMember(state, "MapPointHistory") is not IList acts
+                || actIndex < 0 || actIndex >= acts.Count || acts[actIndex] is not IList rows)
+                return;
+
+            foreach (var coord in g.Path)
+            {
+                var row = coord[1];
+                if (row < 0 || row >= rows.Count) continue;
+                var entry = rows[row];
+                var room0 = Reflect.GetMember(entry, "Rooms") is IList rl && rl.Count > 0 ? rl[0] : null;
+                var type = Reflect.GetString(room0, "RoomType")?.ToLowerInvariant()
+                           ?? Reflect.GetString(entry, "MapPointType")?.ToLowerInvariant()
+                           ?? "unknown";
+                var encId = Ids.Bare(Reflect.GetString(room0, "ModelId"));
+                g.Reveals.Add(new object?[] { coord[0], row, type, encId });
+            }
+        }
+        catch { /* reveals are best-effort; the rest of the map still ships */ }
     }
 
     // MapCoord (struct with col/row fields), possibly boxed from MapCoord?.

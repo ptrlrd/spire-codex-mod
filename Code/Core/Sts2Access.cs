@@ -47,9 +47,12 @@ public static class Sts2Access
 
             snap.Screen = DetectScreen(run);
             ReadRunState(state, snap);
-            snap.CardReward = ReadCardRewardOptions(game);
+            snap.Loot = ReadRewardsScreen(game);
+            snap.CardReward = snap.Loot?.Cards ?? new();
+            if (snap.Screen == "treasure") MergeTreasureRelics(state, snap); // chest relics aren't on the rewards screen
+            MergeCardSelect(game, snap); // choose-a-card / Share-Knowledge grids live on a separate screen
             MapExport.Update(state, snap); // act map for the live spectator view (throttled)
-            (snap.Event, snap.Shop) = RoomExport.Read(state); // live event / shop detail
+            (snap.Event, snap.Shop, snap.Rest) = RoomExport.Read(state); // live event / shop / rest detail
             snap.Route = EncounterRoute.Read(state); // the act's specific upcoming fights/events
             snap.InRun = !snap.IsGameOver;
             snap.Status = "ok";
@@ -160,25 +163,41 @@ public static class Sts2Access
         snap.TotalFloor = Reflect.GetInt(state, "TotalFloor");
         snap.IsGameOver = Reflect.GetBool(state, "IsGameOver");
         snap.GameMode = Reflect.GetString(state, "GameMode");
+        snap.Modifiers = ReadBareIds(Reflect.GetMember(state, "Modifiers")); // daily/custom run mutators
+        snap.RunTime = ReadRunTimeSeconds(state); // elapsed seconds, from the RunManager singleton
         snap.MapCoord = Reflect.GetMember(state, "CurrentMapCoord")?.ToString();
         snap.Seed = Reflect.GetMember(Reflect.GetMember(state, "Rng"), "Seed")?.ToString();
         DamageTracker.NoteRun(snap.Seed); // resets the run's damage aggregate on a new seed
+        DeathCapture.NoteRun(snap.Seed);  // clears any prior run's captured death on a new seed
+        snap.Death = DeathCapture.Latest; // set once the player dies (RunEvents.DeathPrefix captures it)
 
+        // Flatten the LOCAL player to the top level (vitals/hand/deck/combat), not just player 0,
+        // so a co-op spectator sees your own run. In single-player the one player is local.
         object? firstPlayer = null;
+        object? localPlayer = null;
+        var localIndex = 0;
         if (Reflect.GetMember(state, "Players") is IEnumerable players)
         {
             foreach (var player in players)
             {
                 if (player == null) continue;
+                var idx = snap.Players.Count;
                 firstPlayer ??= player;
                 snap.Players.Add(ReadPlayer(player));
+                if (localPlayer == null && LocalPlayer.IsLocalPlayer(player))
+                {
+                    localPlayer = player;
+                    localIndex = idx;
+                }
             }
         }
+        localPlayer ??= firstPlayer; // fallback if the local net id wasn't matched (e.g. pre-lobby)
 
         snap.PlayerCount = snap.Players.Count;
-        if (firstPlayer != null && snap.Players.Count > 0)
+        if (localPlayer != null && localIndex < snap.Players.Count)
         {
-            var p = snap.Players[0];
+            var p = snap.Players[localIndex];
+            p.IsLocal = true; // tag the local player so the co-op live view can mark "you"
             snap.Character = p.Character;
             snap.CurrentHp = p.CurrentHp;
             snap.MaxHp = p.MaxHp;
@@ -191,15 +210,15 @@ public static class Sts2Access
             snap.PotionCount = p.PotionCount;
 
             // Dev-only: dump live type surfaces to learn member names after a patch.
-            if (Config.DumpIntrospection) Introspect.DumpOnce(state, firstPlayer);
+            if (Config.DumpIntrospection) Introspect.DumpOnce(state, localPlayer);
 
-            // Full live contents (player 0). MP per-player lists can come later.
-            snap.Deck = ReadDeck(firstPlayer);
-            snap.Relics = ReadRelics(firstPlayer);
-            snap.Potions = ReadPotions(firstPlayer);
+            // Full live contents for the local player.
+            snap.Deck = ReadDeck(localPlayer);
+            snap.Relics = ReadRelics(localPlayer);
+            snap.Potions = ReadPotions(localPlayer);
 
             // Combat state (present only during a fight).
-            snap.Combat = ReadCombat(state, firstPlayer);
+            snap.Combat = ReadCombat(state, localPlayer);
             snap.Energy = snap.Combat?.Energy ?? 0;
         }
     }
@@ -212,7 +231,9 @@ public static class Sts2Access
         var combat = new CombatSnapshot { Energy = Reflect.GetInt(pcs, "Energy") };
 
         var room = Reflect.GetMember(state, "CurrentRoom");
-        combat.Turn = GetNullableInt(Reflect.GetMember(room, "CombatState"), "RoundNumber");
+        var cs = Reflect.GetMember(room, "CombatState");
+        combat.Turn = GetNullableInt(cs, "RoundNumber");
+        combat.TurnSide = Reflect.GetString(cs, "CurrentSide")?.ToLowerInvariant(); // player / enemy
 
         if (Reflect.GetMember(room, "Enemies") is IEnumerable enemies)
         {
@@ -229,12 +250,23 @@ public static class Sts2Access
                     Block = Reflect.GetInt(e, "Block"),
                     IsAlive = Reflect.GetBool(e, "IsAlive", true),
                     IntendsToAttack = Reflect.GetBool(monster, "IntendsToAttack"),
-                    Powers = ReadPowerIds(e),
+                    Powers = ReadPowers(e),
                     Intents = ReadIntents(monster),
                 });
             }
         }
 
+        combat.Hand = ReadCardList(Reflect.GetMember(pcs, "Hand")); // cards in hand this turn
+        combat.DrawPile = ReadCardList(Reflect.GetMember(pcs, "DrawPile"));
+        combat.DiscardPile = ReadCardList(Reflect.GetMember(pcs, "DiscardPile"));
+        combat.ExhaustPile = ReadCardList(Reflect.GetMember(pcs, "ExhaustPile"));
+        combat.DrawCount = combat.DrawPile.Count; // counts derived from the lists above
+        combat.DiscardCount = combat.DiscardPile.Count;
+        combat.ExhaustCount = combat.ExhaustPile.Count;
+        combat.PlayerPowers = ReadPowers(Reflect.GetMember(player, "Creature")); // your own buffs/debuffs
+        var orbQueue = Reflect.GetMember(pcs, "OrbQueue");
+        combat.Orbs = ReadOrbs(orbQueue);                          // channeled orbs (Regent)
+        combat.OrbSlots = Reflect.GetInt(orbQueue, "Capacity");    // current orb slot count
         DamageTracker.FillCombat(combat); // live damage counters for this fight
         return combat;
     }
@@ -280,19 +312,69 @@ public static class Sts2Access
         catch { return null; }
     }
 
-    private static List<string> ReadPowerIds(object creature)
+    // The full power list on a creature (id + stack amount), used for both the local player's
+    // buffs/debuffs and each enemy's, so a viewer sees "Strength 3", not just "Strength".
+    private static List<PowerEntry> ReadPowers(object? creature)
     {
-        var ids = new List<string>();
+        var list = new List<PowerEntry>();
         if (Reflect.GetMember(creature, "Powers") is IEnumerable powers)
         {
             foreach (var p in powers)
             {
                 if (p == null) continue;
                 var id = BareId(Reflect.GetString(p, "Id"));
-                if (!string.IsNullOrEmpty(id)) ids.Add(id!);
+                if (!string.IsNullOrEmpty(id)) list.Add(new PowerEntry(id!, Reflect.GetInt(p, "Amount")));
             }
         }
-        return ids;
+        return list;
+    }
+
+    // The player's channeled orbs (Regent), in slot order: id + passive (per-turn) / evoke values.
+    private static List<OrbEntry> ReadOrbs(object? orbQueue)
+    {
+        var list = new List<OrbEntry>();
+        if (Reflect.GetMember(orbQueue, "Orbs") is IEnumerable orbs)
+        {
+            foreach (var o in orbs)
+            {
+                if (o == null) continue;
+                var id = BareId(Reflect.GetString(o, "Id"));
+                if (!string.IsNullOrEmpty(id))
+                    list.Add(new OrbEntry(id!, Reflect.GetInt(o, "PassiveVal"), Reflect.GetInt(o, "EvokeVal")));
+            }
+        }
+        return list;
+    }
+
+    // Read a collection of game models (run modifiers, etc.) into a list of bare ids.
+    private static List<string> ReadBareIds(object? container)
+    {
+        var list = new List<string>();
+        if (container is IEnumerable items)
+        {
+            foreach (var item in items)
+            {
+                if (item == null) continue;
+                var id = BareId(Reflect.GetString(item, "Id"));
+                if (!string.IsNullOrEmpty(id)) list.Add(id!);
+            }
+        }
+        return list;
+    }
+
+    // Elapsed run time in seconds, from the RunManager singleton (RunManager.Instance.RunTime;
+    // freezes at the win time once the run is won). Read via reflection off RunState's own
+    // assembly so the mod keeps no hard type reference; 0 if the singleton can't be resolved.
+    private static long ReadRunTimeSeconds(object state)
+    {
+        try
+        {
+            var rm = Reflect.GetStatic(
+                state.GetType().Assembly.GetType("MegaCrit.Sts2.Core.Runs.RunManager"), "Instance");
+            var v = Reflect.GetMember(rm, "RunTime");
+            return v == null ? 0 : Convert.ToInt64(v);
+        }
+        catch { return 0; }
     }
 
     private static PlayerState ReadPlayer(object player)
@@ -318,39 +400,134 @@ public static class Sts2Access
         return ps;
     }
 
-    // The card-reward options live on the NRewardsScreen UI node: its reward buttons each
-    // carry a Reward; the CardReward one exposes Cards (the offered CardModels). Returns the
-    // bare card ids, or empty when no card reward screen is visible.
-    private static List<string> ReadCardRewardOptions(Node game)
+    // The combat rewards/loot screen (NRewardsScreen): its reward buttons each carry a Reward.
+    // We read every reward type into a LootInfo: GoldReward.Amount, CardReward.Cards,
+    // RelicReward.Relic, PotionReward.Potion, plus a card-removal flag. Null when no rewards
+    // screen is visible. snap.CardReward is derived from Loot.Cards for the overlay/plates.
+    private static LootInfo? ReadRewardsScreen(Node game)
     {
-        var result = new List<string>();
         try
         {
             var screen = game.GetNodeOrNull(
                 "RootSceneContainer/Run/GlobalUi/OverlayScreensContainer/RewardsScreen");
-            if (screen == null) return result;
-            if (screen is CanvasItem ci && !ci.IsVisibleInTree()) return result;
+            if (screen == null) return null;
+            if (screen is CanvasItem ci && !ci.IsVisibleInTree()) return null;
+            if (Reflect.GetMember(screen, "_rewardButtons") is not IEnumerable buttons) return null;
 
-            if (Reflect.GetMember(screen, "_rewardButtons") is not IEnumerable buttons) return result;
+            var loot = new LootInfo();
+            var any = false;
             foreach (var btn in buttons)
             {
                 var reward = Reflect.GetMember(btn, "Reward");
-                if (reward == null || reward.GetType().Name != "CardReward") continue;
-                if (Reflect.GetMember(reward, "Cards") is IEnumerable cards)
+                if (reward == null) continue;
+                any = true;
+                switch (reward.GetType().Name)
                 {
-                    foreach (var card in cards)
-                    {
-                        var id = BareId(Reflect.GetString(card, "Id"));
-                        if (!string.IsNullOrEmpty(id)) result.Add(id!);
-                    }
+                    case "GoldReward":
+                        var gold = Reflect.GetInt(reward, "Amount", -1);
+                        if (gold >= 0) loot.Gold = (loot.Gold ?? 0) + gold;
+                        break;
+                    case "CardReward":
+                        if (Reflect.GetMember(reward, "Cards") is IEnumerable cards)
+                            foreach (var card in cards)
+                            {
+                                var id = BareId(Reflect.GetString(card, "Id"));
+                                if (!string.IsNullOrEmpty(id)) loot.Cards.Add(id!);
+                            }
+                        break;
+                    case "RelicReward":
+                        var relic = BareId(Reflect.GetString(Reflect.GetMember(reward, "Relic"), "Id"));
+                        if (!string.IsNullOrEmpty(relic)) loot.Relics.Add(relic!);
+                        break;
+                    case "PotionReward":
+                        var potion = BareId(Reflect.GetString(Reflect.GetMember(reward, "Potion"), "Id"));
+                        if (!string.IsNullOrEmpty(potion)) loot.Potions.Add(potion!);
+                        break;
+                    case "CardRemovalReward":
+                        loot.CardRemoval = true;
+                        break;
                 }
             }
+            return any ? loot : null;
         }
         catch
         {
-            // tolerate any tree/shape change
+            return null; // tolerate any tree/shape change
         }
-        return result;
+    }
+
+    // Treasure chests deliver their relics on a separate screen (NTreasureRoomRelicCollection),
+    // not the rewards screen ReadRewardsScreen reads, so the offered relics live on the
+    // RunManager singleton's TreasureRoomRelicSynchronizer.CurrentRelics. Merge them into the
+    // loot context (creating it if the rewards screen had nothing) so the spectator gets a
+    // chest panel alongside screen=="treasure". Empty/unopened chest -> no-op.
+    private static void MergeTreasureRelics(object state, Snapshot snap)
+    {
+        try
+        {
+            var rm = Reflect.GetStatic(
+                state.GetType().Assembly.GetType("MegaCrit.Sts2.Core.Runs.RunManager"), "Instance");
+            var sync = Reflect.GetMember(rm, "TreasureRoomRelicSynchronizer");
+            if (Reflect.GetMember(sync, "CurrentRelics") is not IEnumerable relics) return;
+
+            var ids = new List<string>();
+            foreach (var r in relics)
+            {
+                var id = BareId(Reflect.GetString(r, "Id"));
+                if (!string.IsNullOrEmpty(id)) ids.Add(id!);
+            }
+            if (ids.Count == 0) return;
+
+            snap.Loot ??= new LootInfo();
+            snap.Loot.Relics.AddRange(ids);
+        }
+        catch { /* best-effort; the treasure screen flag still tells the viewer it's a chest */ }
+    }
+
+    // Choose-a-card reward grids (Brain Leech's "Share Knowledge" and other choose-a-card events)
+    // live on a separate card-select screen, not the rewards screen ReadRewardsScreen reads. When a
+    // reward selector is up, surface its offered cards as the card reward so the spectator sees the
+    // options. Reward/choose selectors only, not deck-op selectors (upgrade/transform/your-deck),
+    // whose cards are the player's own, not rewards. The cards are rolled when the option is chosen,
+    // so they only exist once the grid is up (nothing to show before the choice).
+    private static void MergeCardSelect(Node game, Snapshot snap)
+    {
+        try
+        {
+            var container = game.GetNodeOrNull(
+                "RootSceneContainer/Run/GlobalUi/OverlayScreensContainer");
+            if (container == null) return;
+            var screen = FindVisibleCardSelect(container);
+            if (screen == null || Reflect.GetMember(screen, "_cards") is not IEnumerable cards) return;
+
+            var ids = new List<string>();
+            foreach (var c in cards)
+            {
+                var id = BareId(Reflect.GetString(c, "Id"));
+                if (!string.IsNullOrEmpty(id)) ids.Add(id!);
+            }
+            if (ids.Count == 0) return;
+
+            snap.Loot ??= new LootInfo();
+            snap.Loot.Cards.AddRange(ids);
+            snap.CardReward = snap.Loot.Cards;
+        }
+        catch { /* best-effort; the card-select grid just won't surface */ }
+    }
+
+    // The visible reward card-select grid among the overlay stack's children, if any. Reward
+    // selectors only (NSimpleCardSelectScreen / NChooseACardSelectionScreen).
+    private static Node? FindVisibleCardSelect(Node node)
+    {
+        foreach (var child in node.GetChildren())
+        {
+            var n = child.GetType().Name;
+            if ((n == "NSimpleCardSelectScreen" || n == "NChooseACardSelectionScreen")
+                && child is CanvasItem ci && ci.IsVisibleInTree())
+                return child;
+            if (FindVisibleCardSelect(child) is { } nested) return nested;
+        }
+        return null;
     }
 
     private static string DetectScreen(object run)
@@ -392,10 +569,13 @@ public static class Sts2Access
         return n;
     }
 
-    private static List<DeckEntry> ReadDeck(object player)
+    private static List<DeckEntry> ReadDeck(object player) => ReadCardList(Reflect.GetMember(player, "Deck"));
+
+    // Read a card collection (the player's Deck, or a combat pile like Hand) into DeckEntry list.
+    private static List<DeckEntry> ReadCardList(object? container)
     {
         var list = new List<DeckEntry>();
-        foreach (var card in Enumerate(Reflect.GetMember(player, "Deck")))
+        foreach (var card in Enumerate(container))
         {
             if (card == null) continue;
             var ench = Reflect.GetMember(card, "Enchantment");

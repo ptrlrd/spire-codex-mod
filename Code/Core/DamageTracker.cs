@@ -136,13 +136,20 @@ public static class DamageTracker
 
     // Hook.AfterDamageGiven(PlayerChoiceContext, ICombatState, Creature? dealer,
     //   DamageResult results, ValueProp props, Creature target, CardModel? cardSource).
+    // Harmony binds by 0-based original index: __1=combatState, __2=dealer, __3=results,
+    // __5=target, __6=cardSource.
     // Damage whose TARGET is an enemy counts as "dealt", so poison/relics/powers all count,
     // not just card hits; cardSource attributes it to a card when one caused it.
-    private static void DamageGivenPrefix(object __1, object __3, object __5, object __6)
+    private static void DamageGivenPrefix(object __1, object __2, object __3, object __5, object __6)
     {
         try
         {
             if (Reflect.GetMember(__5, "IsPlayer") is true) return; // taken, counted elsewhere
+            // Co-op is one shared combat, so this hook fires for both players. In co-op count only
+            // the local player's damage (__2 = dealer); in single-player count everything to
+            // enemies as before (so poison/DoT still counts). Poison/pet damage has no local-player
+            // dealer, so it isn't attributed in co-op, matching the game's own per-player tally.
+            if (LocalPlayer.IsCoop && !LocalPlayer.IsLocalCreature(__2)) return;
             var unblocked = Reflect.GetInt(__3, "UnblockedDamage");
             if (unblocked <= 0) return;
 
@@ -174,6 +181,8 @@ public static class DamageTracker
         try
         {
             if (Reflect.GetMember(__3, "IsPlayer") is not true) return; // player only
+            // Co-op: only count what the LOCAL player takes (__3 = target), not the partner's hits.
+            if (LocalPlayer.IsCoop && !LocalPlayer.IsLocalCreature(__3)) return;
             var unblocked = Reflect.GetInt(__4, "UnblockedDamage");
             if (unblocked <= 0) return;
             lock (Gate)

@@ -22,6 +22,10 @@ public sealed class Snapshot
     public int ActFloor { get; set; }
     public int TotalFloor { get; set; }
     public string? GameMode { get; set; }
+    // Active run modifiers (daily/custom-run mutators), bare ids; empty on a standard run.
+    public List<string> Modifiers { get; set; } = new();
+    // Elapsed run time in seconds (RunManager.RunTime); freezes at the win time once won.
+    public long RunTime { get; set; }
     public string? MapCoord { get; set; }
     public bool IsGameOver { get; set; }
     public int PlayerCount { get; set; }
@@ -56,12 +60,24 @@ public sealed class Snapshot
     // Offered card-reward options (bare ids), present only on the card reward screen.
     public List<string> CardReward { get; set; } = new();
 
+    // The full combat rewards/loot screen contents (gold, offered cards, relics, potions),
+    // present only while the rewards screen is up. Null otherwise.
+    public LootInfo? Loot { get; set; }
+
     // Current event context (name + prompt + the options on offer), present only while
     // the player is in an event room. Null otherwise.
     public EventInfo? Event { get; set; }
 
     // Current shop inventory (items + costs), present only in a merchant room. Null otherwise.
     public ShopInfo? Shop { get; set; }
+
+    // The campfire options on offer (Rest/Smith/Dig/...), present only at a rest site. Null
+    // otherwise. The "rest" ticker event is the moment of resting; this is the button state.
+    public RestInfo? Rest { get; set; }
+
+    // Set once the run ends in death: who killed you + their loss-message quote, for the death
+    // screen. Null while alive / on a victory. Captured at the death moment (see DeathCapture).
+    public DeathInfo? Death { get; set; }
 
     // The act's specific upcoming fights/events (from the pre-rolled, seed-determined
     // sequence), for the route preview + per-encounter danger. Null outside a run / no map.
@@ -88,12 +104,25 @@ public sealed class ActRoute
     public EncounterRef? Ancient { get; set; }
 }
 
-// One choice on the current event page: Key is the stable loc key, Text the resolved
-// localized button label the player sees, Locked = greyed out / unavailable, Proceed = the
-// leave/continue option, Chosen = already picked this run-through.
-public sealed record EventOptionInfo(string Key, string Text, bool Locked, bool Proceed, bool Chosen);
+// One choice on the current event page. Key = stable loc key, Text = the resolved localized button
+// label. Desc = the resolved option description, which carries interpolated consequence numbers
+// (e.g. Slippery Bridge's "Lose 3 HP"). Card = a card the option references (the one it will make
+// you lose/gain, from the option's card hover tip). Relic = a relic it grants. Locked = greyed/
+// unavailable, Proceed = the leave/continue option, Chosen = already picked this run-through.
+public sealed record EventOptionInfo(
+    string Key, string Text, string? Desc, string? Card, string? Relic, bool Locked, bool Proceed, bool Chosen);
 
 public sealed record EventInfo(string Id, string? Title, string? Prompt, List<EventOptionInfo> Options);
+
+// One campfire option: Id the stable option id ("HEAL", "SMITH", "DIG", ...), Title the resolved
+// localized label, Enabled whether it's currently selectable.
+public sealed record RestOptionInfo(string Id, string? Title, bool Enabled);
+
+public sealed record RestInfo(List<RestOptionInfo> Options);
+
+// Run-death detail for the death screen: By = the killer's name (the encounter's title), Line =
+// the killer's loss-message quote. Either may be null (e.g. an event death, no quote).
+public sealed record DeathInfo(string? By, string? Line);
 
 // One shop slot: Id the bare entity id (null when sold/out of stock), Cost the current
 // gold price, OnSale a card's 50%-off flag (always false for relics/potions), Stocked
@@ -105,11 +134,47 @@ public sealed record ShopRemovalInfo(int Cost, bool Stocked);
 public sealed record ShopInfo(
     List<ShopItemInfo> Cards, List<ShopItemInfo> Relics, List<ShopItemInfo> Potions, ShopRemovalInfo? Removal);
 
+// The combat rewards/loot screen: the gold on offer, the card choices, and any relic/potion
+// rewards (bare ids). CardRemoval flags a card-removal reward (e.g. from certain encounters).
+public sealed class LootInfo
+{
+    public int? Gold { get; set; }
+    public List<string> Cards { get; set; } = new();
+    public List<string> Relics { get; set; } = new();
+    public List<string> Potions { get; set; } = new();
+    public bool CardRemoval { get; set; }
+}
+
 public sealed class CombatSnapshot
 {
     public int Energy { get; set; }
     public int? Turn { get; set; } // CombatState.RoundNumber
+    public string? TurnSide { get; set; } // "player" / "enemy" (CombatState.CurrentSide), whose turn
     public List<EnemySnapshot> Enemies { get; set; } = new();
+
+    // The cards in the player's hand this turn (combat only), in hand order. Serialized as `hand`.
+    public List<DeckEntry> Hand { get; set; } = new();
+
+    // Full pile contents this turn (combat only), for spectator hover. The draw pile is
+    // unordered in-game, so this is the set of cards in it, not the draw order. Serialized as
+    // draw_pile / discard_pile / exhaust_pile. The counts below are derived from these.
+    public List<DeckEntry> DrawPile { get; set; } = new();
+    public List<DeckEntry> DiscardPile { get; set; } = new();
+    public List<DeckEntry> ExhaustPile { get; set; } = new();
+
+    // Pile sizes this turn (combat only): draw_count, discard_count, exhaust_count.
+    public int DrawCount { get; set; }
+    public int DiscardCount { get; set; }
+    public int ExhaustCount { get; set; }
+
+    // The local player's active powers/buffs/debuffs this combat (id + stack amount), the
+    // player-side mirror of EnemySnapshot.Powers. Empty when the player has none.
+    public List<PowerEntry> PlayerPowers { get; set; } = new();
+
+    // The local player's channeled orbs this combat (Regent), in slot order. OrbSlots is the
+    // current slot capacity (for drawing empty slots). Empty for non-orb characters.
+    public List<OrbEntry> Orbs { get; set; } = new();
+    public int OrbSlots { get; set; }
 
     // Live damage counters for this fight, from DamageTracker (off the game's damage hooks).
     // Dealt/Taken are unblocked HP damage (to enemies / to the player); BiggestHit is the
@@ -130,7 +195,7 @@ public sealed class EnemySnapshot
     public int Block { get; set; }
     public bool IsAlive { get; set; }
     public bool IntendsToAttack { get; set; } // Monster.IntendsToAttack
-    public List<string> Powers { get; set; } = new(); // bare power ids
+    public List<PowerEntry> Powers { get; set; } = new(); // id + stack amount (buffs/debuffs)
 
     // What this enemy intends to do next turn (Monster.NextMove.Intents), so spectators see
     // the incoming move. Usually one intent; some moves are compound (e.g. attack + buff).
@@ -142,6 +207,13 @@ public sealed class EnemySnapshot
 // Damage/Hits are set only for attacks: Damage is the displayed per-hit damage, Hits the
 // number of strikes (so "16 x2" = 32 incoming).
 public sealed record IntentInfo(string Type, int? Damage, int? Hits);
+
+// One power/buff/debuff on a creature: bare id + current stack amount (PowerModel.Amount).
+public sealed record PowerEntry(string Id, int Amount);
+
+// One channeled orb: bare id (LIGHTNING/FROST/DARK/...), Passive = its per-turn value, Evoke = its
+// value when evoked (both from OrbModel; carry the orb's current accumulated value where it applies).
+public sealed record OrbEntry(string Id, int Passive, int Evoke);
 
 public sealed class PlayerState
 {
@@ -155,6 +227,7 @@ public sealed class PlayerState
     public int DeckSize { get; set; }
     public int RelicCount { get; set; }
     public int PotionCount { get; set; }
+    public bool IsLocal { get; set; } // the local "you" player in co-op; true for the only player solo
 }
 
 public sealed class DeckEntry

@@ -27,6 +27,10 @@ public partial class DamageMeter : Node
     private CanvasLayer _layer = null!;
     private RichTextLabel? _panel;
 
+    // Overwolf coexistence: cached "is the Overwolf overlay up?" check, re-read ~1x/sec.
+    private DateTimeOffset _owChecked = DateTimeOffset.MinValue;
+    private bool _owActive;
+
     // Drag + persisted position. _pos is the user-set top-left (null until moved/loaded); _moved
     // gates whether the auto bottom-left default still applies.
     private bool _dragging;
@@ -59,7 +63,10 @@ public partial class DamageMeter : Node
         if (_accum < 0.15) return;
         _accum = 0;
 
-        var combat = SpireCodexConfig.ShowDamageMeter ? LiveStateProducer.Latest?.Combat : null;
+        // Stand down when the Overwolf overlay is up: it has its own damage meter (fed by this
+        // mod's live-state), so showing ours too would stack two meters.
+        var combat = (SpireCodexConfig.ShowDamageMeter && !OverwolfActive())
+            ? LiveStateProducer.Latest?.Combat : null;
         if (combat == null) { HidePanel(); return; }
 
         var turn = combat.Turn ?? 0;
@@ -177,6 +184,53 @@ public partial class DamageMeter : Node
     {
         _dragging = false; // a hidden meter must never keep capturing input mid-drag
         if (_panel != null && GodotObject.IsInstanceValid(_panel)) _panel.Visible = false;
+    }
+
+    // --- Overwolf coexistence --------------------------------------------------------
+
+    // Match the overlay's own live-state freshness window, so the two sides agree on "live".
+    private const int OverwolfFreshMs = 5000;
+    private static readonly JsonSerializerOptions MarkerOpts = new() { PropertyNameCaseInsensitive = true };
+
+    private sealed record OverlayMarker(long Ts, bool Active);
+
+    // The Overwolf overlay writes this next to live-state.json (same %TEMP% dir) while its in-game
+    // window is up: { "ts": <unix ms>, "active": true }. A fresh + active marker means it's showing
+    // its own meter, so ours hides. Missing/stale/inactive marker -> we show ours as normal.
+    private static string? MarkerPath()
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(Config.LiveStatePath);
+            return string.IsNullOrEmpty(dir) ? null : Path.Combine(dir, "spire-codex-overlay.json");
+        }
+        catch { return null; }
+    }
+
+    // Cached + throttled to ~1x/sec so the marker isn't read on every 0.15s render tick.
+    private bool OverwolfActive()
+    {
+        var now = DateTimeOffset.UtcNow;
+        if ((now - _owChecked).TotalSeconds >= 1.0)
+        {
+            _owChecked = now;
+            _owActive = MarkerFresh();
+        }
+        return _owActive;
+    }
+
+    private static bool MarkerFresh()
+    {
+        try
+        {
+            var path = MarkerPath();
+            if (path == null || !File.Exists(path)) return false;
+            if (JsonSerializer.Deserialize<OverlayMarker>(File.ReadAllText(path), MarkerOpts)
+                is not { Active: true } m) return false;
+            var age = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - m.Ts;
+            return age >= 0 && age < OverwolfFreshMs;
+        }
+        catch { return false; }
     }
 
     // --- position persistence --------------------------------------------------------

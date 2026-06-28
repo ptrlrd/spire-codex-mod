@@ -15,12 +15,15 @@ namespace SpireCodex.Api;
 public static class PresencePublisher
 {
     // Event-driven with a cadence floor: a fresh ticker event (card played, potion
-    // used...) fires a beat as soon as the 2s debounce allows, so plays reach the site
-    // in ~2-3s; the fixed cadences cover non-event changes (enemy HP, intents) in
-    // combat and the slow drift between rooms. Net traffic is lower than a fixed fast
-    // timer because idle moments send nothing extra.
-    private const int IdleIntervalSeconds = 15;
-    private const int CombatIntervalSeconds = 5;
+    // used...) fires a beat as soon as the MinGap debounce allows; the fixed cadences
+    // cover non-event changes (enemy HP, intents, block) in combat and the slow drift
+    // between rooms. The combat floor is the visible latency ceiling for a spectator (HP
+    // bars / intents only refresh that often), so it's kept tight; idle is looser since
+    // most out-of-combat changes are event-driven (act/event/buy fire their own beat).
+    // Net traffic is still lower than a fixed fast timer because idle moments send nothing
+    // extra. Cost of a tighter combat floor: ~2.5x the combat beats per player in a run.
+    private const int IdleIntervalSeconds = 8;
+    private const int CombatIntervalSeconds = 2;
     private const int MinGapSeconds = 2;
 
     private static bool _started;
@@ -39,17 +42,25 @@ public static class PresencePublisher
     {
         var client = new SpireCodexClient();
         var lastBeat = DateTimeOffset.MinValue;
+        string? lastScreen = null; // screen of the last delivered beat, for the change nudge
         while (true)
         {
             try
             {
-                var interval = LiveStateProducer.Latest?.Combat != null
-                    ? CombatIntervalSeconds : IdleIntervalSeconds;
+                var s = LiveStateProducer.Latest;
+                var interval = s?.Combat != null ? CombatIntervalSeconds : IdleIntervalSeconds;
                 var gap = (DateTimeOffset.UtcNow - lastBeat).TotalSeconds;
-                if (gap >= interval || (gap >= MinGapSeconds && Core.RunEvents.Pending > 0))
+                // Entering a shop/rest/treasure fires no ticker event, so without this those
+                // panels wait out the idle floor to first appear. Nudge a beat the moment the
+                // screen changes (debounced by MinGap), so transitions show up in ~1-2s.
+                var screenChanged = s is { Status: "ok", InRun: true, IsGameOver: false }
+                                    && s.Screen != lastScreen;
+                if (gap >= interval
+                    || (gap >= MinGapSeconds && (Core.RunEvents.Pending > 0 || screenChanged)))
                 {
                     await TickAsync(client).ConfigureAwait(false);
                     lastBeat = DateTimeOffset.UtcNow;
+                    lastScreen = s?.Screen;
                 }
             }
             catch { /* never let the loop die */ }
@@ -71,9 +82,15 @@ public static class PresencePublisher
             // run must resend its map graph.
             Core.RunEvents.Clear();
             _mapKeySent = null;
-            // Clear our entry once; if the ping fails the TTL cleans up anyway.
-            if (_published && await client.PostPresenceAsync("{\"ended\":true}").ConfigureAwait(false))
-                _published = false;
+            // Clear our entry once; if the ping fails the TTL cleans up anyway. A death rides the
+            // ended ping: the heartbeat is gated off once IsGameOver, so this is its carrier.
+            if (_published)
+            {
+                var end = s?.Death is { } de
+                    ? JsonSerializer.Serialize(new { ended = true, death = new { by = de.By, line = de.Line } })
+                    : "{\"ended\":true}";
+                if (await client.PostPresenceAsync(end).ConfigureAwait(false)) _published = false;
+            }
             return;
         }
 
@@ -95,19 +112,49 @@ public static class PresencePublisher
             total_floor = s.TotalFloor,
             hp = s.CurrentHp,
             max_hp = s.MaxHp,
+            block = s.Block,
+            energy = s.Combat != null ? s.Energy : (int?)null,
+            max_energy = s.MaxEnergy,
             gold = s.Gold,
             ascension = s.Ascension,
             seed = s.Seed,
+            run_time = s.RunTime,
+            // Active run modifiers (daily/custom mutators); null on a standard run.
+            modifiers = s.Modifiers.Count > 0 ? s.Modifiers.ToArray() : null,
             screen = s.Screen,
             player_count = s.PlayerCount,
+            // Per-player vitals for a future co-op live view. Only in co-op (2+ players); null
+            // solo, where the flattened top-level fields already cover the one player. Not
+            // consumed by the site yet, just plumbed through.
+            players = s.PlayerCount > 1 ? s.Players.Select(pl => new
+            {
+                character = pl.Character, hp = pl.CurrentHp, max_hp = pl.MaxHp, block = pl.Block,
+                alive = pl.IsAlive, gold = pl.Gold, deck_size = pl.DeckSize,
+                relic_count = pl.RelicCount, potion_count = pl.PotionCount, is_me = pl.IsLocal,
+            }).ToArray() : null,
             sts2_version = s.Sts2Version,
             username = Config.Username,
             turn = s.Combat?.Turn,
+            turn_side = s.Combat?.TurnSide, // "player" / "enemy", whose turn it is
             // Live damage for the spectator combat view (null when not fighting).
             damage_dealt = s.Combat?.DamageDealt,
             damage_dealt_this_turn = s.Combat?.DamageDealtThisTurn,
             damage_taken = s.Combat?.DamageTaken,
             biggest_hit = s.Combat?.BiggestHit,
+            // The player's current hand (combat only), ids in hand order, `+` marks upgraded.
+            hand = s.Combat?.Hand.Select(h => h.Upgraded ? h.Id + "+" : h.Id).ToArray(),
+            draw_count = s.Combat?.DrawCount,
+            discard_count = s.Combat?.DiscardCount,
+            exhaust_count = s.Combat?.ExhaustCount,
+            // Full pile contents for spectator hover (combat only); `+` marks upgraded.
+            draw_pile = s.Combat?.DrawPile.Select(c => c.Upgraded ? c.Id + "+" : c.Id).ToArray(),
+            discard_pile = s.Combat?.DiscardPile.Select(c => c.Upgraded ? c.Id + "+" : c.Id).ToArray(),
+            exhaust_pile = s.Combat?.ExhaustPile.Select(c => c.Upgraded ? c.Id + "+" : c.Id).ToArray(),
+            // The player's own buffs/debuffs this fight (id + stacks); null when not fighting.
+            player_powers = s.Combat?.PlayerPowers.Select(p => new { id = p.Id, amount = p.Amount }).ToArray(),
+            // Channeled orbs (Regent), in slot order, with passive/evoke values; orb_slots = capacity.
+            orbs = s.Combat?.Orbs.Select(o => new { id = o.Id, passive = o.Passive, evoke = o.Evoke }).ToArray(),
+            orb_slots = s.Combat?.OrbSlots,
             fighting = s.Combat?.Enemies.Where(e => e.IsAlive).Select(e => e.Id).Take(8).ToArray(),
             // Rich enemy detail for the spectator combat view: HP, block, and the upcoming
             // intent(s) so viewers see what's coming ("16 x2 incoming"). Excluded from the
@@ -119,14 +166,28 @@ public static class PresencePublisher
                 hp = e.CurrentHp,
                 max_hp = e.MaxHp,
                 block = e.Block,
+                // Enemy buffs/debuffs (id + stacks) so the spectator sees Vulnerable/Strength/etc.
+                powers = e.Powers.Select(p => new { id = p.Id, amount = p.Amount }).ToArray(),
                 intents = e.Intents.Select(i => new { type = i.Type, dmg = i.Damage, hits = i.Hits }).ToArray(),
             }).ToArray(),
             events = events.Select(e => new { k = e.Kind, v = e.Value, turn = e.Turn, t = e.At }).ToArray(),
             deck = s.Deck.Select(d => d.Upgraded ? d.Id + "+" : d.Id).ToArray(),
             relics = s.Relics.Select(r => r.Id).ToArray(),
             potions = s.Potions.Select(p => p.Id).ToArray(),
+            // The loot/rewards screen contents (gold, offered cards, relics, potions); null off it.
+            loot = s.Loot == null ? null : new
+            {
+                gold = s.Loot.Gold,
+                cards = s.Loot.Cards.ToArray(),
+                relics = s.Loot.Relics.ToArray(),
+                potions = s.Loot.Potions.ToArray(),
+                card_removal = s.Loot.CardRemoval,
+            },
             path = graph?.Path,
             pos = graph?.Pos,
+            // Per-visited-node reveals [col, row, room_type, encounter_id]: what each circle
+            // actually was (resolves "?" nodes). Rides every beat like path; grows as walked.
+            reveals = graph?.Reveals,
             map = sendMap ? new { act = graph!.Act, nodes = graph.Nodes, edges = graph.Edges } : null,
             // Current-screen detail for the spectator view: present only in an event/shop,
             // null otherwise (the backend clears the stored copy when it sees the null).
@@ -137,7 +198,8 @@ public static class PresencePublisher
                 prompt = ev.Prompt,
                 options = ev.Options.Select(o => new
                 {
-                    key = o.Key, text = o.Text, locked = o.Locked, proceed = o.Proceed, chosen = o.Chosen,
+                    key = o.Key, text = o.Text, desc = o.Desc, card = o.Card, relic = o.Relic,
+                    locked = o.Locked, proceed = o.Proceed, chosen = o.Chosen,
                 }).ToArray(),
             } : null,
             shop = s.Shop is { } sh ? new
@@ -147,6 +209,15 @@ public static class PresencePublisher
                 potions = sh.Potions.Select(ShopItem).ToArray(),
                 removal = sh.Removal is { } r ? new { cost = r.Cost, stocked = r.Stocked } : null,
             } : null,
+            // Campfire options (Rest/Smith/Dig/...) so the spectator's rest panel shows real
+            // buttons; null off a rest site.
+            rest = s.Rest is { } rs ? new
+            {
+                options = rs.Options.Select(o => new { id = o.Id, title = o.Title, enabled = o.Enabled }).ToArray(),
+            } : null,
+            // Death detail for the death screen (killer + loss quote); null until the run ends in
+            // death. Also sent on the ended ping above, which is the reliable carrier.
+            death = s.Death is { } d ? new { by = d.By, line = d.Line } : null,
             // The act's specific upcoming fights/events, for the spectator route panel.
             route = s.Route is { } rt ? new
             {

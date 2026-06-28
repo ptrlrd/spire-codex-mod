@@ -13,11 +13,11 @@ public static class StatFilter
 {
     public static readonly StatFilterDef[] Options =
     {
-        new("all", "All runs"),
-        new("a10", "Ascension 10"),
-        new("a10_wr30", "Asc. 10, >30% WR"),
-        new("a10_wr50", "Asc. 10, >50% WR"),
-        new("a10_wr75", "Asc. 10, >75% WR"),
+        new("all", "All"),
+        new("a10", "A10"),
+        new("a10_wr30", "A10 >30% WR"),
+        new("a10_wr50", "A10 >50% WR"),
+        new("a10_wr75", "A10 >75% WR"),
     };
 
     public const string DefaultKey = "all";

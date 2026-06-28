@@ -19,7 +19,7 @@ namespace SpireCodex.Api;
 public static class ModVersion
 {
     // Bump when a release is verified against a newer game build.
-    private const string FallbackTestedSts2 = "v0.103.3";
+    private const string FallbackTestedSts2 = "v0.107.1";
 
     public static string Current { get; } = ReadManifestVersion() ?? "v0.0.0";
     public static string? UpdateAvailable { get; private set; }

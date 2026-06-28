@@ -21,17 +21,38 @@ namespace SpireCodex.Core;
 //    each entry exposes Id (via Model/CreationResult.Card), Cost, IsStocked, IsOnSale.
 internal static class RoomExport
 {
-    public static (EventInfo? Event, ShopInfo? Shop) Read(object? state)
+    public static (EventInfo? Event, ShopInfo? Shop, RestInfo? RestSite) Read(object? state)
     {
         var room = Reflect.GetMember(state, "CurrentRoom");
-        if (room == null) return (null, null);
+        if (room == null) return (null, null, null);
 
         return room.GetType().Name switch
         {
-            "EventRoom" => (ReadEvent(room), null),
-            "MerchantRoom" => (null, ReadShop(room)),
-            _ => (null, null),
+            "EventRoom" => (ReadEvent(room), null, null),
+            "MerchantRoom" => (null, ReadShop(room), null),
+            "RestSiteRoom" => (null, null, ReadRest(room)),
+            _ => (null, null, null),
         };
+    }
+
+    // RestSiteRoom.Options (the local player's campfire choices). Each RestSiteOption has a
+    // stable OptionId (HEAL/SMITH/DIG/...), a localized Title, and IsEnabled. The button state
+    // for the spectator's rest panel; the actual rest/smith action rides the "rest"/"upgrade"
+    // ticker kinds.
+    private static RestInfo? ReadRest(object room)
+    {
+        if (Reflect.GetMember(room, "Options") is not IEnumerable opts) return null;
+
+        var options = new List<RestOptionInfo>();
+        foreach (var opt in opts)
+        {
+            if (opt == null) continue;
+            var id = Reflect.GetString(opt, "OptionId");
+            if (string.IsNullOrEmpty(id)) continue;
+            options.Add(new RestOptionInfo(
+                id!, LocText(Reflect.GetMember(opt, "Title")), Reflect.GetBool(opt, "IsEnabled", true)));
+        }
+        return options.Count > 0 ? new RestInfo(options) : null;
     }
 
     private static EventInfo? ReadEvent(object room)
@@ -54,6 +75,9 @@ internal static class RoomExport
                 var text = LocText(Reflect.GetMember(opt, "Title")) ?? key;
                 options.Add(new EventOptionInfo(
                     key, text,
+                    LocText(Reflect.GetMember(opt, "Description")),
+                    OptionCard(opt),
+                    Ids.Bare(Reflect.GetString(Reflect.GetMember(opt, "Relic"), "Id")),
                     Reflect.GetBool(opt, "IsLocked"),
                     Reflect.GetBool(opt, "IsProceed"),
                     Reflect.GetBool(opt, "WasChosen")));
@@ -67,9 +91,27 @@ internal static class RoomExport
             options);
     }
 
+    // The card an event option references, pulled from its CardHoverTip (the same preview the game
+    // shows on hover, e.g. the card Slippery Bridge's "Overcome" option will make you lose). The
+    // game pre-picks and displays it, so it's knowable before the choice. Null when no card is hovered.
+    private static string? OptionCard(object opt)
+    {
+        if (Reflect.GetMember(opt, "HoverTips") is not IEnumerable tips) return null;
+        foreach (var t in tips)
+        {
+            if (t == null || t.GetType().Name != "CardHoverTip") continue;
+            var id = Ids.Bare(Reflect.GetString(Reflect.GetMember(t, "Card"), "Id"));
+            if (!string.IsNullOrEmpty(id)) return id;
+        }
+        return null;
+    }
+
     private static ShopInfo? ReadShop(object room)
     {
-        var inv = Reflect.GetMember(room, "Inventory");
+        // MerchantRoom holds per-player Inventories (plural); read the local player's.
+        // GetLocalInventory() is co-op-correct; fall back to the first inventory (single
+        // player, or if the local lookup can't resolve yet).
+        var inv = Reflect.Call(room, "GetLocalInventory") ?? FirstInventory(room);
         if (inv == null) return null;
 
         var cards = new List<ShopItemInfo>();
@@ -86,6 +128,15 @@ internal static class RoomExport
             removal = new ShopRemovalInfo(Reflect.GetInt(rm, "Cost"), Reflect.GetBool(rm, "IsStocked"));
 
         return new ShopInfo(cards, relics, potions, removal);
+    }
+
+    // First merchant inventory (single-player fallback when GetLocalInventory can't resolve).
+    private static object? FirstInventory(object room)
+    {
+        if (Reflect.GetMember(room, "Inventories") is IEnumerable list)
+            foreach (var i in list)
+                if (i != null) return i;
+        return null;
     }
 
     // Card entries: id lives under CreationResult.Card; IsOnSale flags the discounted one.

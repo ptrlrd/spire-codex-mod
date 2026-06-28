@@ -82,6 +82,10 @@ public partial class MainFile : Node
         // ask before anything is sent (M3-C trust gate).
         Ui.ConsentPrompt.Start();
 
+        // First-time welcome: points new players at F5, the Settings tab, and the headline
+        // features. Shows once, after the consent choice, so the two cards don't stack.
+        Ui.WelcomeCard.Start();
+
         // Pre-fetch community Codex Scores so the overlay can annotate the deck/relics,
         // plus community headline stats (portrait/removal tips) and the local personal
         // win-rate scan, so those hovers are instant.

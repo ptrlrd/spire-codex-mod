@@ -42,6 +42,10 @@ public partial class LiveStateProducer : Node
         // `uploads_runs` from the live feed).
         snapshot.UploadsRuns = Config.UploadRuns;
         Latest = snapshot;
+        // Gate the damage tracker's per-player filter on the run's player count, set every tick
+        // (including out-of-run, where PlayerCount is 0) so the flag can't go stale-true into a
+        // later single-player run.
+        LocalPlayer.SetCoop(snapshot.PlayerCount > 1);
         RewardContext.Character = snapshot.InRun ? snapshot.Character : null;
         // HpPct feeds the campfire "At your HP" tip. A rest heal writes Creature.CurrentHp
         // instantly (synchronously on confirm) while the HP bar animates over ~2s, so a raw read

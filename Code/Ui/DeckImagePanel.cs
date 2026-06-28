@@ -35,9 +35,9 @@ public partial class DeckImagePanel : CanvasLayer
     {
         (StatBracket.All, "All", "All runs"),
         (StatBracket.A10, "A10", "Ascension 10"),
-        (StatBracket.A10_WR30, "A10 >30%", "Ascension 10, players above 30% win rate"),
-        (StatBracket.A10_WR50, "A10 >50%", "Ascension 10, players above 50% win rate"),
-        (StatBracket.A10_WR75, "A10 >75%", "Ascension 10, players above 75% win rate"),
+        (StatBracket.A10_WR30, "A10 >30% WR", "Ascension 10, players above 30% win rate"),
+        (StatBracket.A10_WR50, "A10 >50% WR", "Ascension 10, players above 50% win rate"),
+        (StatBracket.A10_WR75, "A10 >75% WR", "Ascension 10, players above 75% win rate"),
     };
 
     // Links (ripped from the Overwolf about page).
@@ -65,6 +65,7 @@ public partial class DeckImagePanel : CanvasLayer
 
     private VBoxContainer _content = null!;
     private Label _hint = null!;
+    private static DeckImagePanel? _instance; // for WelcomeCard's "Open it now"
     private readonly List<Button> _tabButtons = new();
     private readonly List<Button> _bracketButtons = new(); // Settings tab stat-bracket selector
     private int _tab;
@@ -92,6 +93,7 @@ public partial class DeckImagePanel : CanvasLayer
 
     public override void _Ready()
     {
+        _instance = this;
         // Top of every mod overlay so the open F5 panel is never clipped by the card-score
         // plates (200), map hints (199), run card (150), or consent prompt (210). Harmless when
         // closed: the layer is hidden (Visible=false), so the plates render normally then.
@@ -292,6 +294,10 @@ public partial class DeckImagePanel : CanvasLayer
         }
     }
 
+    // Open the overlay from outside (the welcome card's "Open it now"). No-op if already open.
+    public static void OpenOverlay()
+        => Callable.From(() => { if (_instance is { Visible: false }) _instance.ToggleOverlay(); }).CallDeferred();
+
     // Flip the panel's visibility and, when opening, refresh the hint and drop cached feeds so
     // each open shows fresh data. Shared by the keyboard hotkey and the controller binding.
     private void ToggleOverlay()
@@ -467,7 +473,9 @@ public partial class DeckImagePanel : CanvasLayer
                 $"[color={nameColor}][b]{name}[/b][/color]  [color=#c74b4b]{e.CurrentHp}/{e.MaxHp}[/color]" +
                 (e.Block > 0 ? $" [color=#5fcde0]+{e.Block}[/color]" : "") +
                 (intent != "" ? $"   [color=#d7a84a]{intent}[/color]" : "") +
-                (e.Powers.Count > 0 ? $"\n[color=#9aa3b2]{string.Join(", ", e.Powers.Select(Pretty))}[/color]" : "");
+                (e.Powers.Count > 0
+                    ? $"\n[color=#9aa3b2]{string.Join(", ", e.Powers.Select(p => p.Amount != 0 ? $"{Pretty(p.Id)} {p.Amount}" : Pretty(p.Id)))}[/color]"
+                    : "");
             _content.AddChild(row);
         }
     }
@@ -950,6 +958,15 @@ public partial class DeckImagePanel : CanvasLayer
         _content.AddChild(SettingToggle("Post-run card", () => SpireCodexConfig.ShowPostRunCard, v => SpireCodexConfig.ShowPostRunCard = v));
 
         AboutText("These also live in the game's mod settings menu; changes here save the same way. Drag the damage meter to reposition it.");
+
+        var replay = new Button { Text = "Show welcome again", SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
+        replay.AddThemeFontSizeOverride("font_size", 13);
+        replay.AddThemeColorOverride("font_color", Accent);
+        replay.AddThemeStyleboxOverride("normal", ButtonBox(BgSofter, Border));
+        replay.AddThemeStyleboxOverride("hover", ButtonBox(Border, Accent));
+        replay.AddThemeStyleboxOverride("pressed", ButtonBox(Border, Accent));
+        replay.Pressed += () => { Visible = false; WelcomeCard.ShowAgain(); };
+        _content.AddChild(replay);
     }
 
     // A row of selectable bracket buttons; the active one is gold. Clicking sets the config and

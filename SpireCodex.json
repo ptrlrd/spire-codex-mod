@@ -3,7 +3,7 @@
   "name": "Spire Codex",
   "author": "ptrlrd",
   "description": "Connects Slay the Spire 2 to spire-codex.com: automatic run tracking and an in-game companion (lookups, deck stats, leaderboard rank).",
-  "version": "v0.1.0",
+  "version": "v1.0.5",
   "min_game_version": "v0.103.3",
   "has_pck": true,
   "has_dll": true,
