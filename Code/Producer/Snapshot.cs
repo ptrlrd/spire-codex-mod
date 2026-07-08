@@ -83,6 +83,12 @@ public sealed class Snapshot
     // sequence), for the route preview + per-encounter danger. Null outside a run / no map.
     public ActRoute? Route { get; set; }
 
+    // Per-cleared-floor summary across the whole run (all acts), the data behind the game's map
+    // "previous floor" hover: room/enemy, turns, damage/heal, HP+gold snapshot, and the rewards
+    // taken vs skipped. Grows one entry per floor cleared; excludes the floor you're standing on.
+    // Rides the live feed so the overlay can show previous-floor cards during a run.
+    public List<FloorSummary> FloorHistory { get; set; } = new();
+
     public List<PlayerState> Players { get; set; } = new();
 }
 
@@ -143,7 +149,40 @@ public sealed class LootInfo
     public List<string> Relics { get; set; } = new();
     public List<string> Potions { get; set; } = new();
     public bool CardRemoval { get; set; }
+
+    // ScrollBoxes / "Choose a Bundle": the offered cards grouped into packs (each an ordered list of
+    // bare ids), from NChooseABundleSelectionScreen._bundles. Present only on a bundle screen; null
+    // otherwise. When set, these cards are NOT also in Cards, so consumers render the packs instead
+    // of the flat card list.
+    public List<List<string>>? Packs { get; set; }
 }
+
+// One cleared floor, mirroring the game's NMapPointHistoryHoverTip. Floor is the global run
+// floor number (1-based, cumulative across acts); Act is 1-indexed; Type the room kind
+// (monster/elite/boss/shop/restsite/treasure/event/ancient); EncounterId the bare enemy/event
+// id (null for shop/rest/treasure). Hp/MaxHp/Gold are the player's totals as of that floor.
+// Turns/DamageTaken/Healed/GoldSpent/GoldGained are null when zero/not applicable. Rewards =
+// what was taken, Skipped = what was offered and left behind (cards/relics/potions).
+public sealed class FloorSummary
+{
+    public int Floor { get; set; }
+    public int Act { get; set; }
+    public string Type { get; set; } = "";
+    public string? EncounterId { get; set; }
+    public int Hp { get; set; }
+    public int MaxHp { get; set; }
+    public int Gold { get; set; }
+    public int? Turns { get; set; }
+    public int? DamageTaken { get; set; }
+    public int? Healed { get; set; }
+    public int? GoldSpent { get; set; }
+    public int? GoldGained { get; set; }
+    public List<FloorReward> Rewards { get; set; } = new();
+    public List<FloorReward> Skipped { get; set; } = new();
+}
+
+// One reward slot on a floor: Kind is "card"/"relic"/"potion"; Id the bare entity id.
+public sealed record FloorReward(string Kind, string Id);
 
 public sealed class CombatSnapshot
 {
@@ -184,6 +223,24 @@ public sealed class CombatSnapshot
     public int DamageDealtThisTurn { get; set; }
     public int DamageTaken { get; set; }
     public int BiggestHit { get; set; }
+
+    // Friendly summoned creatures on the allies side this fight (the Necrobinder's Osty and any
+    // future pet), read from CombatState.Allies where IsPet. Owner is the index into Snapshot.Players
+    // of the player who summoned it (0 in single-player). Empty when nobody has a pet out.
+    public List<PetEntry> Pets { get; set; } = new();
+}
+
+// A friendly summoned creature (pet), e.g. the Necrobinder's Osty. Id is the bare model id
+// ("OSTY"), Name the display name, plus its HP/block and which player owns it.
+public sealed class PetEntry
+{
+    public string Id { get; set; } = "";
+    public string? Name { get; set; }
+    public int CurrentHp { get; set; }
+    public int MaxHp { get; set; }
+    public int Block { get; set; }
+    public bool IsAlive { get; set; }
+    public int Owner { get; set; } // index into Snapshot.Players of the owning player
 }
 
 public sealed class EnemySnapshot
@@ -223,11 +280,17 @@ public sealed class PlayerState
     public int Block { get; set; }
     public bool IsAlive { get; set; }
     public int Gold { get; set; }
+    public int Energy { get; set; }      // current energy this turn (combat only; 0 otherwise)
     public int MaxEnergy { get; set; }
     public int DeckSize { get; set; }
     public int RelicCount { get; set; }
     public int PotionCount { get; set; }
     public bool IsLocal { get; set; } // the local "you" player in co-op; true for the only player solo
+
+    // Co-op turn indicator: true once this player has hit end-turn this round and the next player
+    // turn hasn't begun (CombatManager.IsPlayerReadyToEndTurn). Combat only; false otherwise. With
+    // the top-level turn_side (player/enemy), lets a spectator see who's still playing vs waiting.
+    public bool EndedTurn { get; set; }
 }
 
 public sealed class DeckEntry

@@ -26,6 +26,11 @@ internal static class LocalPlayer
         catch { return null; }
     }
 
+    // The local player's net id (LocalContext.NetId), for matching against run-history entries'
+    // PlayerId in co-op. Null in single-player / before a lobby (where callers fall back to the
+    // sole entry).
+    public static ulong? NetId => LocalNetId();
+
     // Whether this is a co-op run (2+ players). Set by the producer each tick from the run's
     // player count, NOT from the net id (which RunManager sets to NetService.NetId at run start,
     // so it isn't reliably null in single-player). Player count is unambiguous: the damage tracker

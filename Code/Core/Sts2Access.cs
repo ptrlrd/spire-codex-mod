@@ -52,6 +52,7 @@ public static class Sts2Access
             if (snap.Screen == "treasure") MergeTreasureRelics(state, snap); // chest relics aren't on the rewards screen
             MergeCardSelect(game, snap); // choose-a-card / Share-Knowledge grids live on a separate screen
             MapExport.Update(state, snap); // act map for the live spectator view (throttled)
+            snap.FloorHistory = MapExport.ReadHistory(state, snap); // per-cleared-floor summaries
             (snap.Event, snap.Shop, snap.Rest) = RoomExport.Read(state); // live event / shop / rest detail
             snap.Route = EncounterRoute.Read(state); // the act's specific upcoming fights/events
             snap.InRun = !snap.IsGameOver;
@@ -256,6 +257,29 @@ public static class Sts2Access
             }
         }
 
+        // Friendly summoned creatures (the Necrobinder's Osty and any future pet). CombatState.Allies
+        // holds every allies-side creature; the players are IsPlayer, the pets are IsPet. Read from
+        // the shared combat state so co-op partners' pets show too, tagged with their owner.
+        if (Reflect.GetMember(cs, "Allies") is IEnumerable allies)
+        {
+            List<object>? playerObjs = null;
+            foreach (var ally in allies)
+            {
+                if (ally == null || !Reflect.GetBool(ally, "IsPet")) continue;
+                playerObjs ??= EnumeratePlayers(state);
+                combat.Pets.Add(new PetEntry
+                {
+                    Id = BareId(Reflect.GetString(ally, "ModelId")) ?? "",
+                    Name = Reflect.GetString(ally, "Name"),
+                    CurrentHp = Reflect.GetInt(ally, "CurrentHp"),
+                    MaxHp = Reflect.GetInt(ally, "MaxHp"),
+                    Block = Reflect.GetInt(ally, "Block"),
+                    IsAlive = Reflect.GetBool(ally, "IsAlive", true),
+                    Owner = OwnerIndex(playerObjs, Reflect.GetMember(ally, "PetOwner")),
+                });
+            }
+        }
+
         combat.Hand = ReadCardList(Reflect.GetMember(pcs, "Hand")); // cards in hand this turn
         combat.DrawPile = ReadCardList(Reflect.GetMember(pcs, "DrawPile"));
         combat.DiscardPile = ReadCardList(Reflect.GetMember(pcs, "DiscardPile"));
@@ -397,7 +421,51 @@ public static class Sts2Access
         ps.RelicCount = CountAny(Reflect.GetMember(player, "Relics"));
         ps.PotionCount = CountAny(Reflect.GetMember(player, "Potions"));
 
+        // Current energy + co-op turn state (both meaningful only in combat). Energy is 0 and
+        // EndedTurn false outside a fight (no PlayerCombatState / cleared end-turn set).
+        ps.Energy = Reflect.GetInt(Reflect.GetMember(player, "PlayerCombatState"), "Energy");
+        ps.EndedTurn = PlayerEndedTurn(player);
+
         return ps;
+    }
+
+    // Whether this player has hit end-turn this round (CombatManager.IsPlayerReadyToEndTurn), the
+    // per-player half of the turn indicator in co-op. False out of combat / on any read failure.
+    private static Type? _combatMgrType;
+    private static bool _combatMgrResolved;
+    private static bool PlayerEndedTurn(object player)
+    {
+        try
+        {
+            if (!_combatMgrResolved)
+            {
+                _combatMgrResolved = true;
+                _combatMgrType = player.GetType().Assembly.GetType("MegaCrit.Sts2.Core.Combat.CombatManager");
+            }
+            var mgr = Reflect.GetStatic(_combatMgrType, "Instance");
+            return Reflect.CallWith(mgr, "IsPlayerReadyToEndTurn", player) is true;
+        }
+        catch { return false; }
+    }
+
+    // The run's Player objects as a list, in the same order Snapshot.Players is built, so a pet's
+    // owner resolves to the matching token index.
+    private static List<object> EnumeratePlayers(object state)
+    {
+        var list = new List<object>();
+        foreach (var p in Enumerate(Reflect.GetMember(state, "Players")))
+            if (p != null) list.Add(p);
+        return list;
+    }
+
+    // Index of a pet's owner among the run's players (matched by reference), or 0 as a safe default
+    // (single-player, or an owner we couldn't line up).
+    private static int OwnerIndex(List<object> players, object? owner)
+    {
+        if (owner == null) return 0;
+        for (var i = 0; i < players.Count; i++)
+            if (ReferenceEquals(players[i], owner)) return i;
+        return 0;
     }
 
     // The combat rewards/loot screen (NRewardsScreen): its reward buttons each carry a Reward.
@@ -497,6 +565,22 @@ public static class Sts2Access
             var container = game.GetNodeOrNull(
                 "RootSceneContainer/Run/GlobalUi/OverlayScreensContainer");
             if (container == null) return;
+
+            // ScrollBoxes / "Choose a Bundle": the offered cards are grouped into packs, which the
+            // flat _cards read below would collapse into one undifferentiated blob. Emit the grouping
+            // as loot.packs and DON'T also flatten them into loot.cards (consumers hide the flat card
+            // list when packs is present, so leaving them in cards would double-render them).
+            if (FindVisibleScreen(container, "NChooseABundleSelectionScreen") is { } bundleScreen)
+            {
+                var packs = ReadBundles(bundleScreen);
+                if (packs.Count > 0)
+                {
+                    snap.Loot ??= new LootInfo();
+                    snap.Loot.Packs = packs;
+                }
+                return;
+            }
+
             var screen = FindVisibleCardSelect(container);
             if (screen == null || Reflect.GetMember(screen, "_cards") is not IEnumerable cards) return;
 
@@ -528,6 +612,38 @@ public static class Sts2Access
             if (FindVisibleCardSelect(child) is { } nested) return nested;
         }
         return null;
+    }
+
+    // First visible node of the given runtime type name under this subtree, or null. Used to find
+    // the bundle screen the same way FindVisibleCardSelect finds the flat card-select screens.
+    private static Node? FindVisibleScreen(Node node, string typeName)
+    {
+        foreach (var child in node.GetChildren())
+        {
+            if (child.GetType().Name == typeName && child is CanvasItem ci && ci.IsVisibleInTree())
+                return child;
+            if (FindVisibleScreen(child, typeName) is { } nested) return nested;
+        }
+        return null;
+    }
+
+    // The bundle screen's packs as lists of bare card ids, from its _bundles field (an
+    // IReadOnlyList<IReadOnlyList<CardModel>>). Empty bundles are dropped.
+    private static List<List<string>> ReadBundles(Node screen)
+    {
+        var packs = new List<List<string>>();
+        if (Reflect.GetMember(screen, "_bundles") is not IEnumerable bundles) return packs;
+        foreach (var bundle in bundles)
+        {
+            var ids = new List<string>();
+            foreach (var card in Enumerate(bundle))
+            {
+                var id = BareId(Reflect.GetString(card, "Id"));
+                if (!string.IsNullOrEmpty(id)) ids.Add(id!);
+            }
+            if (ids.Count > 0) packs.Add(ids);
+        }
+        return packs;
     }
 
     private static string DetectScreen(object run)

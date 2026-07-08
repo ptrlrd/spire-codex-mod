@@ -129,6 +129,150 @@ public static class MapExport
         catch { /* reveals are best-effort; the rest of the map still ships */ }
     }
 
+    // ---- Per-floor run history (the game's "previous floor" hover data) ---------------------
+    // Built from RunState.MapPointHistory (per-act, row-indexed) joined with each entry's
+    // PlayerStats (HP/gold/damage/turns/rewards/skipped). Kept separate from the act-map above so
+    // it survives screen/act changes (it reads MapPointHistory off RunState, not the ActMap, which
+    // blanks between rooms). Throttled to once a second and keyed on the run seed so a fresh run
+    // clears the previous one's floors instead of serving them stale for a beat.
+    private static volatile List<Producer.FloorSummary> _history = new();
+    private static DateTimeOffset _historyAt = DateTimeOffset.MinValue;
+    private static string? _historyKey;
+
+    private const int RewardCap = 24; // bound a shop's full stock / degenerate floors on the wire
+
+    public static List<Producer.FloorSummary> ReadHistory(object state, Producer.Snapshot snap)
+    {
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var key = snap.Seed;
+            var newRun = key != _historyKey; // rebuild immediately on a new run, don't serve stale
+            if (!newRun && (now - _historyAt).TotalSeconds < 1.0) return _history;
+            _historyAt = now;
+            _historyKey = key;
+
+            var list = new List<Producer.FloorSummary>();
+            if (Reflect.GetMember(state, "MapPointHistory") is not IList acts) { _history = list; return list; }
+
+            // Skip the floor the player is standing on (the game's hover only shows cleared nodes).
+            var curAct = Reflect.GetInt(state, "CurrentActIndex", -1);
+            var curRow = CoordOf(Reflect.GetMember(state, "CurrentMapCoord")) is { } cc ? cc[1] : -1;
+
+            // Global floor number = within-act row (0-based index + 1) + all prior acts' floors,
+            // matching NMapPoint's own numbering (coord.row + 1 + sum of earlier acts' counts).
+            var priorFloors = 0;
+            for (var a = 0; a < acts.Count; a++)
+            {
+                if (acts[a] is not IList rows) continue;
+                for (var j = 0; j < rows.Count; j++)
+                {
+                    if (a == curAct && j == curRow) continue;
+                    if (ReadFloor(rows[j], j + 1 + priorFloors, a + 1) is { } f)
+                        list.Add(f);
+                }
+                priorFloors += rows.Count;
+            }
+
+            _history = list;
+            return list;
+        }
+        catch { return _history; } // best-effort; keep the last good history on a read error
+    }
+
+    private static Producer.FloorSummary? ReadFloor(object? entry, int floor, int act)
+    {
+        if (entry == null) return null;
+
+        var rooms = Reflect.GetMember(entry, "Rooms") as IList;
+        var room0 = rooms != null && rooms.Count > 0 ? rooms[0] : null;
+
+        // Prefer the resolved MapPointType (Shop/RestSite/Elite/...); fall back to the room's
+        // RoomType (which is what an unresolved "?" node records as).
+        var type = Reflect.GetString(entry, "MapPointType")?.ToLowerInvariant();
+        if (string.IsNullOrEmpty(type) || type == "unknown")
+            type = Reflect.GetString(room0, "RoomType")?.ToLowerInvariant() ?? "unknown";
+
+        // Enemy/event id from the first room (null for shop/rest/treasure), as the hover uses.
+        var encId = Ids.Bare(Reflect.GetString(room0, "ModelId"));
+
+        // Turns from whichever room recorded a combat (0 on non-combat rooms).
+        var turns = 0;
+        if (rooms != null)
+            foreach (var r in rooms)
+                turns = Math.Max(turns, Reflect.GetInt(r, "TurnsTaken"));
+
+        var f = new Producer.FloorSummary
+        {
+            Floor = floor,
+            Act = act,
+            Type = type ?? "unknown",
+            EncounterId = encId,
+            Turns = turns > 0 ? turns : (int?)null,
+        };
+
+        if (LocalStats(Reflect.GetMember(entry, "PlayerStats") as IList) is { } pe)
+        {
+            f.Hp = Reflect.GetInt(pe, "CurrentHp");
+            f.MaxHp = Reflect.GetInt(pe, "MaxHp");
+            f.Gold = Reflect.GetInt(pe, "CurrentGold");
+            var dmg = Reflect.GetInt(pe, "DamageTaken");
+            var heal = Reflect.GetInt(pe, "HpHealed");
+            var spent = Reflect.GetInt(pe, "GoldSpent");
+            var gained = Reflect.GetInt(pe, "GoldGained");
+            f.DamageTaken = dmg > 0 ? dmg : (int?)null;
+            f.Healed = heal > 0 ? heal : (int?)null;
+            f.GoldSpent = spent > 0 ? spent : (int?)null;
+            f.GoldGained = gained > 0 ? gained : (int?)null;
+            ReadRewards(pe, f);
+        }
+
+        return f;
+    }
+
+    // The local player's stats entry for this floor. Solo: the sole entry. Co-op: match PlayerId
+    // against the local net id, falling back to the first entry.
+    private static object? LocalStats(IList? players)
+    {
+        if (players == null || players.Count == 0) return null;
+        if (players.Count == 1) return players[0];
+        if (LocalPlayer.NetId is { } local)
+            foreach (var p in players)
+                try { if (Reflect.GetMember(p, "PlayerId") is { } id && Convert.ToUInt64(id) == local) return p; }
+                catch { /* mismatched id type: skip */ }
+        return players[0];
+    }
+
+    private static void ReadRewards(object pe, Producer.FloorSummary f)
+    {
+        // Cards taken this floor: a combat pick, an event grant, or a shop purchase all land in
+        // CardsGained (the game records only the non-picked choices as "skipped").
+        foreach (var c in Enumerate(Reflect.GetMember(pe, "CardsGained")))
+            AddReward(f.Rewards, "card", Ids.Bare(Reflect.GetString(c, "Id")));
+        // Cards offered but not taken (the reward's other two, or a shop's unbought cards).
+        foreach (var ch in Enumerate(Reflect.GetMember(pe, "CardChoices")))
+            if (!Reflect.GetBool(ch, "wasPicked"))
+                AddReward(f.Skipped, "card", Ids.Bare(Reflect.GetString(Reflect.GetMember(ch, "Card"), "Id")));
+        // Relic / potion choices split by whether they were taken (covers shop stock too).
+        SplitChoices(Reflect.GetMember(pe, "RelicChoices"), "relic", f);
+        SplitChoices(Reflect.GetMember(pe, "PotionChoices"), "potion", f);
+    }
+
+    private static void SplitChoices(object? choices, string kind, Producer.FloorSummary f)
+    {
+        foreach (var mc in Enumerate(choices))
+            AddReward(Reflect.GetBool(mc, "wasPicked") ? f.Rewards : f.Skipped,
+                kind, Ids.Bare(Reflect.GetString(mc, "choice")));
+    }
+
+    private static void AddReward(List<Producer.FloorReward> into, string kind, string? id)
+    {
+        if (!string.IsNullOrEmpty(id) && into.Count < RewardCap)
+            into.Add(new Producer.FloorReward(kind, id!));
+    }
+
+    private static IEnumerable Enumerate(object? c) => c as IEnumerable ?? System.Array.Empty<object>();
+
     // MapCoord (struct with col/row fields), possibly boxed from MapCoord?.
     private static int[]? CoordOf(object? coord)
     {

@@ -129,8 +129,10 @@ public static class PresencePublisher
             players = s.PlayerCount > 1 ? s.Players.Select(pl => new
             {
                 character = pl.Character, hp = pl.CurrentHp, max_hp = pl.MaxHp, block = pl.Block,
-                alive = pl.IsAlive, gold = pl.Gold, deck_size = pl.DeckSize,
+                alive = pl.IsAlive, gold = pl.Gold, energy = pl.Energy, deck_size = pl.DeckSize,
                 relic_count = pl.RelicCount, potion_count = pl.PotionCount, is_me = pl.IsLocal,
+                // Co-op turn indicator: true once this player has ended their turn this round.
+                ended_turn = pl.EndedTurn,
             }).ToArray() : null,
             sts2_version = s.Sts2Version,
             username = Config.Username,
@@ -170,6 +172,13 @@ public static class PresencePublisher
                 powers = e.Powers.Select(p => new { id = p.Id, amount = p.Amount }).ToArray(),
                 intents = e.Intents.Select(i => new { type = i.Type, dmg = i.Damage, hits = i.Hits }).ToArray(),
             }).ToArray(),
+            // Friendly pets (Necrobinder's Osty etc.), with HP and which player owns them; null when
+            // nobody has one out. owner indexes into players[].
+            pets = s.Combat != null && s.Combat.Pets.Count > 0 ? s.Combat.Pets.Select(p => new
+            {
+                id = p.Id, name = p.Name, hp = p.CurrentHp, max_hp = p.MaxHp,
+                block = p.Block, alive = p.IsAlive, owner = p.Owner,
+            }).ToArray() : null,
             events = events.Select(e => new { k = e.Kind, v = e.Value, turn = e.Turn, t = e.At }).ToArray(),
             deck = s.Deck.Select(d => d.Upgraded ? d.Id + "+" : d.Id).ToArray(),
             relics = s.Relics.Select(r => r.Id).ToArray(),
@@ -182,6 +191,9 @@ public static class PresencePublisher
                 relics = s.Loot.Relics.ToArray(),
                 potions = s.Loot.Potions.ToArray(),
                 card_removal = s.Loot.CardRemoval,
+                // ScrollBoxes bundle groups (each a list of bare ids); null off a bundle screen. When
+                // present the flat `cards` list is empty, so consumers render packs instead.
+                packs = s.Loot.Packs?.Select(p => p.ToArray()).ToArray(),
             },
             path = graph?.Path,
             pos = graph?.Pos,
@@ -227,6 +239,26 @@ public static class PresencePublisher
                 elites = rt.Elites.Select(RouteRef).ToArray(),
                 events = rt.Events.Select(RouteRef).ToArray(),
             } : null,
+            // Per-cleared-floor summaries (the game's "previous floor" hover): room/enemy, turns,
+            // damage/heal, HP+gold snapshot, and rewards taken vs skipped. Null until a floor is
+            // cleared. Grows across the run; rides every beat like reveals/route.
+            floor_history = s.FloorHistory.Count > 0 ? s.FloorHistory.Select(fl => new
+            {
+                floor = fl.Floor,
+                act = fl.Act,
+                type = fl.Type,
+                encounter_id = fl.EncounterId,
+                hp = fl.Hp,
+                max_hp = fl.MaxHp,
+                gold = fl.Gold,
+                turns = fl.Turns,
+                damage_taken = fl.DamageTaken,
+                healed = fl.Healed,
+                gold_spent = fl.GoldSpent,
+                gold_gained = fl.GoldGained,
+                rewards = fl.Rewards.Select(r => new { kind = r.Kind, id = r.Id }).ToArray(),
+                skipped = fl.Skipped.Select(r => new { kind = r.Kind, id = r.Id }).ToArray(),
+            }).ToArray() : null,
         });
 
         if (await client.PostPresenceAsync(payload).ConfigureAwait(false))
