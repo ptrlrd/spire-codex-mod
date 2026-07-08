@@ -66,6 +66,10 @@ public partial class DeckImagePanel : CanvasLayer
     private VBoxContainer _content = null!;
     private Label _hint = null!;
     private static DeckImagePanel? _instance; // for WelcomeCard's "Open it now"
+
+    // True while the F5 overlay (the card/deck display) is open, so other on-map surfaces (the
+    // map danger route) can stand down rather than drawing their rings around/through it.
+    public static bool IsOpen => _instance is { Visible: true };
     private readonly List<Button> _tabButtons = new();
     private readonly List<Button> _bracketButtons = new(); // Settings tab stat-bracket selector
     private int _tab;

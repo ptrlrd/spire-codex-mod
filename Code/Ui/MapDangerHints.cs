@@ -89,7 +89,16 @@ public partial class MapDangerHints : Node
             _searchAccum = 0;
             CardScan.FindCachedByType(_game, "NMapScreen", ref _mapScreen);
         }
-        if (_mapScreen is not Control { Visible: true } screen)
+        // Render only while the map is the genuinely-active front screen. Visible/IsOpen both
+        // linger true on the map when ANOTHER screen covers it (the card library, inspect
+        // card/relic, modals) or after leaving it, which leaked the rings onto those screens.
+        // MapIsFront is the game's own "am I the current screen" test (the one NMapScreen uses to
+        // hide its own UX). Plus stand down when the F5 overlay is up (it draws above us, so our
+        // rings would otherwise show around/through it).
+        if (_mapScreen is not Control { Visible: true } screen
+            || !Reflect.GetBool(screen, "IsOpen")
+            || !MapIsFront(screen)
+            || DeckImagePanel.IsOpen)
         {
             ClearAll();
             return;
@@ -502,6 +511,23 @@ public partial class MapDangerHints : Node
             foreach (var l in _labels.Values) if (GodotObject.IsInstanceValid(l)) l.QueueFree();
             _labels.Clear();
         }
+    }
+
+    // The game's own "is the map the active screen" test. NMapScreen hides its own UX when it
+    // isn't current (ActiveScreenContext.IsCurrent at NMapScreen.cs), which is exactly when
+    // another screen covers it (card library, inspect card/relic, modals) while the map's
+    // Visible/IsOpen stay true underneath. Returns true on any read failure so we never over-hide
+    // (the IsOpen gate above still handles the leave-the-map case).
+    private static bool MapIsFront(Node mapScreen)
+    {
+        try
+        {
+            var ascType = mapScreen.GetType().Assembly.GetType(
+                "MegaCrit.Sts2.Core.Nodes.Screens.ScreenContext.ActiveScreenContext");
+            var asc = Reflect.GetStatic(ascType, "Instance");
+            return Reflect.CallWith(asc, "IsCurrent", mapScreen) is not false; // false only when positively not current
+        }
+        catch { return true; }
     }
 
     private void ClearAll()
