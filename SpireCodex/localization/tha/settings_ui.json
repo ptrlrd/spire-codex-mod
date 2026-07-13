@@ -1,0 +1,20 @@
+{
+  "SPIRECODEX.mod_title": "Spire Codex",
+
+  "SPIRECODEX-RUN_TRACKING.title": "การติดตามการเดินทาง",
+  "SPIRECODEX-UPLOAD_RUNS.title": "อัปโหลดการเดินทางที่จบแล้วของคุณไปยัง spire-codex.com",
+  "SPIRECODEX-BACKFILL_HISTORY.title": "อัปโหลดการเดินทางในอดีตที่มีอยู่ของคุณด้วย (ครั้งเดียว)",
+  "SPIRECODEX-SHARE_LIVE_STATUS.title": "แสดงการเดินทางแบบสดของคุณบนเว็บไซต์ขณะที่คุณเล่น",
+
+  "SPIRECODEX-OVERLAY.title": "โอเวอร์เลย์ & UI ในเกม",
+  "SPIRECODEX-SHOW_DECK_VIEW.title": "แสดงแผงโอเวอร์เลย์คู่หู",
+  "SPIRECODEX-SHOW_CARD_REWARD_HINTS.title": "แสดงป้ายอัตราชนะบนรางวัลการ์ดและร้านค้า",
+  "SPIRECODEX-SHOW_HOVER_TIPS.title": "แสดงสถิติชุมชนภายในคำแนะนำของเกม",
+  "SPIRECODEX-SHOW_MAP_DANGER.title": "แสดงเส้นทางที่แนะนำและอันตรายบนแผนที่",
+  "SPIRECODEX-SHOW_UPCOMING_EVENTS.title": "แสดงรายการเหตุการณ์ที่กำลังจะมาถึงบนแผนที่",
+  "SPIRECODEX-SHOW_POST_RUN_CARD.title": "แสดงการ์ดที่แชร์ได้เมื่อการเดินทางจบลง",
+
+  "SPIRECODEX-HOTKEYS.title": "ปุ่มลัด",
+  "SPIRECODEX-OVERLAY_KEY.title": "เปิดแผงโอเวอร์เลย์",
+  "SPIRECODEX-OVERLAY_PAD.title": "เปิดแผงโอเวอร์เลย์ (คอนโทรลเลอร์)"
+}

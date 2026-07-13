@@ -7,17 +7,19 @@ namespace SpireCodex.Api;
 // The set MIRRORS the website's stat toggles, and the backend owns what each Key means
 // (ascension floor + the players' win-rate threshold), so the mod just passes the key through.
 // "all" is the default and the value an un-upgraded backend falls back to.
-public readonly record struct StatFilterDef(string Key, string Label);
+// LabelKey is a Loc key (translated at the display site, not baked here, so a language switch
+// takes effect without rebuilding this static table).
+public readonly record struct StatFilterDef(string Key, string LabelKey);
 
 public static class StatFilter
 {
     public static readonly StatFilterDef[] Options =
     {
-        new("all", "All"),
-        new("a10", "A10"),
-        new("a10_wr30", "A10 >30% WR"),
-        new("a10_wr50", "A10 >50% WR"),
-        new("a10_wr75", "A10 >75% WR"),
+        new("all", "sf_all"),
+        new("a10", "sf_a10"),
+        new("a10_wr30", "sf_a10_wr30"),
+        new("a10_wr50", "sf_a10_wr50"),
+        new("a10_wr75", "sf_a10_wr75"),
     };
 
     public const string DefaultKey = "all";

@@ -28,16 +28,19 @@ public partial class DeckImagePanel : CanvasLayer
     private static readonly Color Good = Hex("4ec977");
     private static readonly Color Danger = Hex("c74b4b");
 
-    private static readonly string[] Tabs = { "Current Run", "Leaderboard", "Runs", "Settings", "About" };
+    // Loc KEYS (not text): resolved to on-screen strings at the render site (BuildTabBar), since
+    // the array is built at class load when the language may not be ready yet.
+    private static readonly string[] Tabs = { "deck_tab_current_run", "deck_tab_leaderboard", "deck_tab_runs", "deck_tab_settings", "deck_tab_about" };
 
-    // The community stat bracket choices shown in the Settings tab selector (label + tooltip).
+    // The community stat bracket choices shown in the Settings tab selector (Label/Tip hold loc
+    // KEYS, resolved via Loc.T at the render site in BuildBracketRow).
     private static readonly (StatBracket Bracket, string Label, string Tip)[] BracketChoices =
     {
-        (StatBracket.All, "All", "All runs"),
-        (StatBracket.A10, "A10", "Ascension 10"),
-        (StatBracket.A10_WR30, "A10 >30% WR", "Ascension 10, players above 30% win rate"),
-        (StatBracket.A10_WR50, "A10 >50% WR", "Ascension 10, players above 50% win rate"),
-        (StatBracket.A10_WR75, "A10 >75% WR", "Ascension 10, players above 75% win rate"),
+        (StatBracket.All, "deck_bracket_all", "deck_bracket_all_tip"),
+        (StatBracket.A10, "deck_bracket_a10", "deck_bracket_a10_tip"),
+        (StatBracket.A10_WR30, "deck_bracket_a10_wr30", "deck_bracket_a10_wr30_tip"),
+        (StatBracket.A10_WR50, "deck_bracket_a10_wr50", "deck_bracket_a10_wr50_tip"),
+        (StatBracket.A10_WR75, "deck_bracket_a10_wr75", "deck_bracket_a10_wr75_tip"),
     };
 
     // Links (ripped from the Overwolf about page).
@@ -81,7 +84,8 @@ public partial class DeckImagePanel : CanvasLayer
     private List<RunSummary>? _wins;
     private List<RunSummary>? _runs;
 
-    private static readonly string[] LbSub = { "Fast Wins (A10)", "Daily Climb", "Your Standing" };
+    // Loc KEYS (not text): resolved via Loc.T at the render site (BuildLbSubNav).
+    private static readonly string[] LbSub = { "deck_lbsub_fast_wins", "deck_lbsub_daily_climb", "deck_lbsub_your_standing" };
 
     public static void Start()
     {
@@ -183,7 +187,7 @@ public partial class DeckImagePanel : CanvasLayer
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         brand.AddThemeFontSizeOverride("normal_font_size", 18);
-        brand.Text = "[color=#d7a84a][b]Spire[/b][/color] [color=#e6e6e6][b]Codex[/b][/color]";
+        brand.Text = Loc.T("deck_brand_wordmark");
         row.AddChild(brand);
 
         _hint = new Label { MouseFilter = Control.MouseFilterEnum.Ignore };
@@ -211,7 +215,7 @@ public partial class DeckImagePanel : CanvasLayer
         for (var i = 0; i < Tabs.Length; i++)
         {
             var idx = i;
-            var b = new Button { Text = Tabs[i], Flat = true };
+            var b = new Button { Text = Loc.T(Tabs[i]), Flat = true };
             b.AddThemeFontSizeOverride("font_size", 14);
             b.Pressed += () => SetTab(idx);
             _tabButtons.Add(b);
@@ -309,6 +313,12 @@ public partial class DeckImagePanel : CanvasLayer
         Visible = !Visible;
         if (Visible)
         {
+            // Re-read the game language each open, so a language change (or a first open before
+            // the game's LocManager was ready at boot) is reflected. Re-apply the tab labels,
+            // which are built once and otherwise wouldn't pick up the refreshed language.
+            Loc.Refresh();
+            for (var i = 0; i < _tabButtons.Count && i < Tabs.Length; i++)
+                _tabButtons[i].Text = Loc.T(Tabs[i]);
             UpdateHint(); // reflect the current configured hotkey (it may have been rebound)
             _a10 = null; _daily = null; _wins = null; _runs = null; // refresh each open
             SetTab(_tab);
@@ -323,16 +333,16 @@ public partial class DeckImagePanel : CanvasLayer
         var padLabel = PadLabel(SpireCodexConfig.OverlayPad); // e.g. "R3/L3"
         string close;
         if (!string.IsNullOrEmpty(keyLabel) && !string.IsNullOrEmpty(padLabel))
-            close = $"{keyLabel} or ({padLabel})";
+            close = Loc.F("deck_hint_key_or_pad", keyLabel, padLabel);
         else
-            close = keyLabel ?? padLabel ?? "hotkey";
-        _hint.Text = $"Drag to move  ·  Tab / L1·R1 to switch  ·  {close} to close";
+            close = keyLabel ?? padLabel ?? Loc.T("deck_hint_hotkey");
+        _hint.Text = Loc.F("deck_hint_controls", close);
     }
 
     // Short controller-binding label for the close hint (null when the pad toggle is off).
     private static string? PadLabel(ControllerToggle t) => t switch
     {
-        ControllerToggle.StickClick => "R3/L3",
+        ControllerToggle.StickClick => Loc.T("deck_pad_r3l3"),
         _ => null,
     };
 
@@ -371,29 +381,30 @@ public partial class DeckImagePanel : CanvasLayer
     {
         // Version warnings (relocated from the retired F9 overlay).
         if (ModVersion.UpdateAvailable is { } up)
-            AddWarn($"Update {up} available — {ModVersion.UpdateUrl ?? "spire-codex.com"}");
+            AddWarn(Loc.F("deck_update_available", up, ModVersion.UpdateUrl ?? "spire-codex.com"));
         if (ModVersion.Sts2Untested)
-            AddWarn("Game build is newer than tested; stats may misread.");
+            AddWarn(Loc.T("deck_warn_untested"));
 
         var s = LiveStateProducer.Latest;
         if (s is not { Status: "ok", InRun: true })
         {
-            AddEmpty(_content, "Not in a run. Start a run to see your live stats here.");
+            AddEmpty(_content, Loc.T("deck_empty_not_in_run"));
             return;
         }
 
-        _content.AddChild(SectionHeader($"{Pretty(s.Character)} · Ascension {s.Ascension}", s.TotalFloor));
+        _content.AddChild(SectionHeader(Loc.F("deck_run_character_ascension", CharName(s.Character), s.Ascension), s.TotalFloor));
         AddCharWinRates(s.Character);
 
         var info = InfoLabel();
+        var actName = string.IsNullOrEmpty(s.ActName) ? "" : Loc.F("deck_vitals_act_name", s.ActName);
+        var seed = string.IsNullOrEmpty(s.Seed) ? "" : Loc.F("deck_vitals_seed", s.Seed);
         info.Text =
-            $"[color=#e6e6e6]Act {s.Act}{(string.IsNullOrEmpty(s.ActName) ? "" : $" · {s.ActName}")} · floor {s.ActFloor} · [i]{s.Screen}[/i][/color]\n" +
-            $"[color=#c74b4b]HP {s.CurrentHp}/{s.MaxHp}[/color]" +
-            (s.Block > 0 ? $"   [color=#5fcde0]Block {s.Block}[/color]" : "") +
-            $"   [color=#d7a84a]Gold {s.Gold}[/color]" +
-            (s.Combat != null ? $"   [color=#c8ccd5]Energy {s.Energy}/{s.MaxEnergy}[/color]" : "") + "\n" +
-            $"[color=#c8ccd5]Deck {s.DeckSize} · Relics {s.RelicCount} · Potions {s.PotionCount}" +
-            (string.IsNullOrEmpty(s.Seed) ? "" : $" · Seed {s.Seed}") + "[/color]";
+            Loc.F("deck_vitals_line1", s.Act, actName, s.ActFloor, s.Screen) + "\n" +
+            Loc.F("deck_vitals_hp", s.CurrentHp, s.MaxHp) +
+            (s.Block > 0 ? Loc.F("deck_vitals_block", s.Block) : "") +
+            Loc.F("deck_vitals_gold", s.Gold) +
+            (s.Combat != null ? Loc.F("deck_vitals_energy", s.Energy, s.MaxEnergy) : "") + "\n" +
+            Loc.F("deck_vitals_deck_line", s.DeckSize, s.RelicCount, s.PotionCount, seed);
         _content.AddChild(info);
 
         BuildDeckSummary(s.Deck);
@@ -423,9 +434,9 @@ public partial class DeckImagePanel : CanvasLayer
 
         var parts = new List<string>();
         if (mine != null)
-            parts.Add($"[color=#c8ccd5]You[/color] [color=#e6e6e6][b]{mine.WinRate:0.0}%[/b][/color] [color=#9aa3b2]({mine.Runs} runs)[/color]");
+            parts.Add(Loc.F("deck_winrate_you", $"{mine.WinRate:0.0}", mine.Runs));
         if (community != null)
-            parts.Add($"[color=#c8ccd5]Community[/color] [color=#e6e6e6][b]{community.WinRate:0.0}%[/b][/color] [color=#9aa3b2]({community.Runs:N0} runs)[/color]");
+            parts.Add(Loc.F("deck_winrate_community", $"{community.WinRate:0.0}", $"{community.Runs:N0}"));
 
         var l = InfoLabel();
         l.AddThemeFontSizeOverride("normal_font_size", 12);
@@ -453,9 +464,9 @@ public partial class DeckImagePanel : CanvasLayer
         var l = InfoLabel();
         l.AddThemeFontSizeOverride("normal_font_size", 12);
         l.Text =
-            $"[color=#c8ccd5]Build[/color]  [color=#{TierHex(tier)}][b]{tier}[/b][/color] [color=#9aa3b2]avg ({n} rated)[/color]" +
-            (bestId != null ? $"    [color=#c8ccd5]Best[/color] [color=#86e08a]{Pretty(bestId)}[/color]" : "") +
-            (worstId != null && worstId != bestId ? $"    [color=#c8ccd5]Weakest[/color] [color=#e08a86]{Pretty(worstId)}[/color]" : "");
+            Loc.F("deck_build_summary", TierHex(tier), tier, n) +
+            (bestId != null ? Loc.F("deck_build_best", CardName(bestId)) : "") +
+            (worstId != null && worstId != bestId ? Loc.F("deck_build_weakest", CardName(worstId)) : "");
         _content.AddChild(l);
     }
 
@@ -464,11 +475,11 @@ public partial class DeckImagePanel : CanvasLayer
     private void BuildCombat(CombatSnapshot c)
     {
         _content.AddChild(SectionHeader(
-            c.Turn is { } t ? $"Combat · turn {t}" : "Combat", c.Enemies.Count(e => e.IsAlive)));
+            c.Turn is { } t ? Loc.F("deck_combat_turn", t) : Loc.T("deck_combat"), c.Enemies.Count(e => e.IsAlive)));
         foreach (var e in c.Enemies)
         {
             if (!e.IsAlive) continue;
-            var name = string.IsNullOrEmpty(e.Name) ? Pretty(e.Id) : e.Name;
+            var name = string.IsNullOrEmpty(e.Name) ? MonName(e.Id) : e.Name;
             var intent = e.Intents.Count > 0 ? IntentText(e.Intents) : "";
             // An enemy lining up an attack gets a reddish name so the threat reads at a glance.
             var nameColor = e.IntendsToAttack ? "#f0a0a0" : "#e6e6e6";
@@ -478,7 +489,7 @@ public partial class DeckImagePanel : CanvasLayer
                 (e.Block > 0 ? $" [color=#5fcde0]+{e.Block}[/color]" : "") +
                 (intent != "" ? $"   [color=#d7a84a]{intent}[/color]" : "") +
                 (e.Powers.Count > 0
-                    ? $"\n[color=#9aa3b2]{string.Join(", ", e.Powers.Select(p => p.Amount != 0 ? $"{Pretty(p.Id)} {p.Amount}" : Pretty(p.Id)))}[/color]"
+                    ? $"\n[color=#9aa3b2]{string.Join(", ", e.Powers.Select(p => p.Amount != 0 ? $"{PowerName(p.Id)} {p.Amount}" : PowerName(p.Id)))}[/color]"
                     : "");
             _content.AddChild(row);
         }
@@ -489,7 +500,7 @@ public partial class DeckImagePanel : CanvasLayer
     private void BuildRewardHelper(List<string> offered)
     {
         PersonalStats.EnsureLoaded(); // the player's own pick history, when signed in
-        _content.AddChild(SectionHeader("Card reward", offered.Count));
+        _content.AddChild(SectionHeader(Loc.T("deck_section_card_reward"), offered.Count));
         // Match the in-world plates' best pick when known, else the highest Codex Score on offer.
         var best = RewardContext.BestCardId;
         if (string.IsNullOrEmpty(best))
@@ -503,12 +514,12 @@ public partial class DeckImagePanel : CanvasLayer
         {
             var sc = CodexScores.Card(id);
             var tier = ScoreTier(sc);
-            var flag = id == best ? " [color=#ffd34d][b]Best pick[/b][/color]" : "";
-            var stat = sc is { Picks: > 0 } ? $"  [color=#9aa3b2]Score {sc.Score:0} · {sc.WinRate:0.0}% win[/color]" : "";
-            var you = PersonalStats.Card(id) is { Offered: > 0 } u ? $"  [color=#7fb0ff]you {(int)System.Math.Round(u.Picked * 100.0 / u.Offered)}%[/color]" : "";
+            var flag = id == best ? Loc.T("deck_best_pick") : "";
+            var stat = sc is { Picks: > 0 } ? Loc.F("deck_reward_score", $"{sc.Score:0}", $"{sc.WinRate:0.0}") : "";
+            var you = PersonalStats.Card(id) is { Offered: > 0 } u ? Loc.F("deck_reward_you", (int)System.Math.Round(u.Picked * 100.0 / u.Offered)) : "";
             var row = InfoLabel();
             row.Text = (tier != null ? $"[color=#{TierHex(tier)}][b]{tier}[/b][/color]  " : "") +
-                       $"[color=#e6e6e6]{Pretty(id)}[/color]{flag}{stat}{you}";
+                       $"[color=#e6e6e6]{CardName(id)}[/color]{flag}{stat}{you}";
             _content.AddChild(row);
         }
     }
@@ -516,19 +527,19 @@ public partial class DeckImagePanel : CanvasLayer
     private void BuildShop(ShopInfo shop)
     {
         var stocked = shop.Cards.Concat(shop.Relics).Concat(shop.Potions).Count(i => i.Stocked && i.Id != null);
-        _content.AddChild(SectionHeader("Shop", stocked));
-        AddShopRow("Cards", shop.Cards, CodexScores.Card);
-        AddShopRow("Relics", shop.Relics, CodexScores.Relic);
-        AddShopRow("Potions", shop.Potions, CodexScores.Potion);
+        _content.AddChild(SectionHeader(Loc.T("deck_section_shop"), stocked));
+        AddShopRow(Loc.T("deck_section_cards"), shop.Cards, CodexScores.Card, CardName);
+        AddShopRow(Loc.T("deck_section_relics"), shop.Relics, CodexScores.Relic, RelicName);
+        AddShopRow(Loc.T("deck_section_potions"), shop.Potions, CodexScores.Potion, PotionName);
         if (shop.Removal is { Stocked: true } rm)
         {
             var l = InfoLabel();
-            l.Text = $"[color=#c8ccd5]Card removal[/color]   [color=#d7a84a]{rm.Cost}g[/color]";
+            l.Text = Loc.F("deck_card_removal", rm.Cost);
             _content.AddChild(l);
         }
     }
 
-    private void AddShopRow(string label, List<ShopItemInfo> items, Func<string, EntityScore?> score)
+    private void AddShopRow(string label, List<ShopItemInfo> items, Func<string, EntityScore?> score, Func<string?, string> name)
     {
         var stocked = items.Where(i => i.Stocked && i.Id != null).ToList();
         if (stocked.Count == 0) return;
@@ -541,15 +552,15 @@ public partial class DeckImagePanel : CanvasLayer
             var tier = ScoreTier(score(i.Id!));
             var row = InfoLabel();
             row.Text = (tier != null ? $"[color=#{TierHex(tier)}][b]{tier}[/b][/color]  " : "") +
-                       $"[color=#e6e6e6]{Pretty(i.Id)}[/color]   [color=#d7a84a]{i.Cost}g[/color]" +
-                       (i.OnSale ? "   [color=#4ec977]50% off[/color]" : "");
+                       $"[color=#e6e6e6]{name(i.Id)}[/color]   [color=#d7a84a]{i.Cost}g[/color]" +
+                       (i.OnSale ? Loc.T("deck_shop_on_sale") : "");
             _content.AddChild(row);
         }
     }
 
     private void BuildEvent(EventInfo ev)
     {
-        _content.AddChild(SectionHeader(ev.Title ?? "Event", ev.Options.Count));
+        _content.AddChild(SectionHeader(ev.Title ?? Loc.T("deck_section_event"), ev.Options.Count));
         if (!string.IsNullOrEmpty(ev.Prompt))
         {
             var p = InfoLabel();
@@ -562,9 +573,9 @@ public partial class DeckImagePanel : CanvasLayer
         foreach (var o in ev.Options)
         {
             var pct = comm != null ? EventOptionPct(comm, o.Key) : null;
-            var pctText = pct is { } v ? $"   [color=#9aa3b2]{v:0}% pick[/color]" : "";
-            var state = o.Chosen ? "   [color=#9aa3b2](chosen)[/color]"
-                : o.Locked ? "   [color=#9aa3b2](locked)[/color]" : "";
+            var pctText = pct is { } v ? Loc.F("deck_event_pick_pct", $"{v:0}") : "";
+            var state = o.Chosen ? Loc.T("deck_event_chosen")
+                : o.Locked ? Loc.T("deck_event_locked") : "";
             var color = o.Locked ? "#9aa3b2" : "#e6e6e6";
             var row = InfoLabel();
             row.Text = $"[color={color}]• {o.Text}[/color]{state}{pctText}";
@@ -597,17 +608,17 @@ public partial class DeckImagePanel : CanvasLayer
         var count = route.Monsters.Count + route.Elites.Count + route.Events.Count
                     + (route.Boss != null ? 1 : 0) + (route.Ancient != null ? 1 : 0);
         if (count == 0) return;
-        _content.AddChild(SectionHeader("Coming this act", count));
-        foreach (var m in route.Monsters) AddRouteLine("Fight", m, "#e6e6e6");
-        foreach (var e in route.Elites) AddRouteLine("Elite", e, "#e0b070");
-        foreach (var ev in route.Events) AddRouteLine("Event", ev, "#6bd3c7");
-        if (route.Boss is { } boss) AddRouteLine("Boss", boss, "#c74b4b");
-        if (route.Ancient is { } anc) AddRouteLine("Ancient", anc, "#b58cff");
+        _content.AddChild(SectionHeader(Loc.T("deck_section_coming_this_act"), count));
+        foreach (var m in route.Monsters) AddRouteLine(Loc.T("deck_route_fight"), m, "#e6e6e6");
+        foreach (var e in route.Elites) AddRouteLine(Loc.T("deck_route_elite"), e, "#e0b070");
+        foreach (var ev in route.Events) AddRouteLine(Loc.T("deck_section_event"), ev, "#6bd3c7");
+        if (route.Boss is { } boss) AddRouteLine(Loc.T("deck_route_boss"), boss, "#c74b4b");
+        if (route.Ancient is { } anc) AddRouteLine(Loc.T("deck_route_ancient"), anc, "#b58cff");
     }
 
     private void AddRouteLine(string kind, EncounterRef enc, string color)
     {
-        var name = string.IsNullOrEmpty(enc.Name) ? Pretty(enc.Id) : enc.Name;
+        var name = string.IsNullOrEmpty(enc.Name) ? EncName(enc.Id) : enc.Name;
         var row = InfoLabel();
         row.Text = $"[color=#9aa3b2]{kind}[/color]  [color={color}]{name}[/color]{DangerSuffix(enc.Id)}";
         _content.AddChild(row);
@@ -618,15 +629,15 @@ public partial class DeckImagePanel : CanvasLayer
     private static string DangerSuffix(string id)
     {
         if (CommunityStats.Encounter(id) is not { } d) return "";
-        return $"   [color=#c8ccd5]{d.AvgDmgPct:0}% HP[/color]" +
-               (d.DeathRate > 0 ? $" [color=#c74b4b]· {d.DeathRate:0.#}% deaths[/color]" : "");
+        return Loc.F("deck_danger_hp", $"{d.AvgDmgPct:0}") +
+               (d.DeathRate > 0 ? Loc.F("deck_danger_deaths", $"{d.DeathRate:0.#}") : "");
     }
 
     // ---- Current Run: live loadout (deck / relics / potions) ------------------------
 
     private void BuildDeckList(List<DeckEntry> deck)
     {
-        _content.AddChild(SectionHeader("Deck", deck.Count));
+        _content.AddChild(SectionHeader(Loc.T("deck_section_deck"), deck.Count));
         // Collapse duplicates by (id, upgraded, enchantment); keep first-seen order for the sort.
         var groups = new Dictionary<string, (DeckEntry Entry, int Count)>();
         var order = new List<string>();
@@ -649,8 +660,8 @@ public partial class DeckImagePanel : CanvasLayer
         foreach (var (entry, n) in rows)
         {
             var tier = ScoreTier(CodexScores.Card(entry.Id));
-            var name = Pretty(entry.Id) + (entry.Upgraded ? "[color=#86e08a]+[/color]" : "");
-            if (!string.IsNullOrEmpty(entry.Enchantment)) name += $" [color=#b58cff]{Pretty(entry.Enchantment)}[/color]";
+            var name = CardName(entry.Id) + (entry.Upgraded ? "[color=#86e08a]+[/color]" : "");
+            if (!string.IsNullOrEmpty(entry.Enchantment)) name += $" [color=#b58cff]{EnchName(entry.Enchantment)}[/color]";
             if (n > 1) name += $" [color=#9aa3b2]×{n}[/color]";
             flow.AddChild(Chip(name, tier));
         }
@@ -659,16 +670,16 @@ public partial class DeckImagePanel : CanvasLayer
 
     private void BuildRelicList(List<RelicEntry> relics)
     {
-        _content.AddChild(SectionHeader("Relics", relics.Count));
+        _content.AddChild(SectionHeader(Loc.T("deck_section_relics"), relics.Count));
         var flow = ChipFlow();
         foreach (var r in relics)
-            flow.AddChild(Chip(Pretty(r.Id), ScoreTier(CodexScores.Relic(r.Id))));
+            flow.AddChild(Chip(RelicName(r.Id), ScoreTier(CodexScores.Relic(r.Id))));
         _content.AddChild(flow);
     }
 
     private void BuildPotionList(List<PotionEntry> potions)
     {
-        _content.AddChild(SectionHeader("Potions", potions.Count));
+        _content.AddChild(SectionHeader(Loc.T("deck_section_potions"), potions.Count));
         var counts = new Dictionary<string, int>();
         var order = new List<string>();
         foreach (var p in potions)
@@ -679,7 +690,7 @@ public partial class DeckImagePanel : CanvasLayer
         var flow = ChipFlow();
         foreach (var id in order)
         {
-            var name = Pretty(id) + (counts[id] > 1 ? $" [color=#9aa3b2]×{counts[id]}[/color]" : "");
+            var name = PotionName(id) + (counts[id] > 1 ? $" [color=#9aa3b2]×{counts[id]}[/color]" : "");
             flow.AddChild(Chip(name, ScoreTier(CodexScores.Potion(id))));
         }
         _content.AddChild(flow);
@@ -752,12 +763,12 @@ public partial class DeckImagePanel : CanvasLayer
             case 0:
                 ShowBoard(_a10, b => _a10 = b,
                     () => RunFeeds.LeaderboardAsync("fastest", minAscension: 10, limit: 25),
-                    "Fastest wins · Ascension 10+", metricTime: true);
+                    Loc.T("deck_board_fastest_wins"), metricTime: true);
                 break;
             case 1:
                 ShowBoard(_daily, b => _daily = b,
                     () => RunFeeds.LeaderboardAsync("highest_ascension", gameMode: "daily", today: true, limit: 25),
-                    "Today's daily climb", metricTime: false);
+                    Loc.T("deck_board_daily_climb"), metricTime: false);
                 break;
             case 2:
                 ShowStanding();
@@ -772,7 +783,7 @@ public partial class DeckImagePanel : CanvasLayer
         for (var i = 0; i < LbSub.Length; i++)
         {
             var idx = i;
-            var b = new Button { Text = $"{i + 1}. {LbSub[i]}", Flat = true };
+            var b = new Button { Text = Loc.F("deck_lb_subnav_item", i + 1, Loc.T(LbSub[i])), Flat = true };
             b.AddThemeFontSizeOverride("font_size", 12);
             b.AddThemeColorOverride("font_color", i == _lbSub ? Accent : TextMuted);
             b.Pressed += () => SetLbSub(idx);
@@ -794,7 +805,7 @@ public partial class DeckImagePanel : CanvasLayer
         Func<System.Threading.Tasks.Task<List<BoardRun>>> fetch, string title, bool metricTime)
     {
         if (cache != null) { RenderBoard(cache, title, metricTime); return; }
-        AddEmpty(_content, "Loading…");
+        AddEmpty(_content, Loc.T("deck_loading"));
         var token = _loadToken;
         _ = LoadAsync(fetch(), b =>
         {
@@ -806,15 +817,15 @@ public partial class DeckImagePanel : CanvasLayer
     private void RenderBoard(List<BoardRun> board, string title, bool metricTime)
     {
         _content.AddChild(SectionHeader(title, board.Count));
-        if (board.Count == 0) { AddEmpty(_content, "No runs on this board yet."); return; }
+        if (board.Count == 0) { AddEmpty(_content, Loc.T("deck_board_empty")); return; }
 
         var grid = LbGrid(6);
-        HeaderCells(grid, "#", "Player", "Character", "Asc", metricTime ? "Time" : "Floors", "");
+        HeaderCells(grid, "#", Loc.T("deck_col_player"), Loc.T("deck_col_character"), Loc.T("deck_col_asc"), metricTime ? Loc.T("deck_col_time") : Loc.T("deck_col_floors"), "");
         foreach (var r in board)
         {
             Cell(grid, r.Rank.ToString(), TextMuted);
             Cell(grid, r.Player, Text);
-            Cell(grid, Pretty(r.Character), Text);
+            Cell(grid, CharName(r.Character), Text);
             Cell(grid, "A" + r.Ascension, TextMuted);
             Cell(grid, metricTime ? FmtTime(r.RunTime) : r.Floors.ToString(), Accent);
             grid.AddChild(r.Hash is { } h ? ViewButton(Config.RunUrl(h)) : new Control());
@@ -829,10 +840,10 @@ public partial class DeckImagePanel : CanvasLayer
         if (_wins != null) { RenderStanding(_wins); return; }
         if (string.IsNullOrEmpty(Config.SteamId))
         {
-            AddEmpty(_content, "Sign-in pending; your standing will appear here.");
+            AddEmpty(_content, Loc.T("deck_standing_signin_pending"));
             return;
         }
-        AddEmpty(_content, "Loading your standing…");
+        AddEmpty(_content, Loc.T("deck_standing_loading"));
         var token = _loadToken;
         _ = LoadAsync(RunFeeds.PlayerWinsAsync(Config.SteamId, 60), w =>
         {
@@ -843,15 +854,15 @@ public partial class DeckImagePanel : CanvasLayer
 
     private void RenderStanding(List<RunSummary> wins)
     {
-        _content.AddChild(SectionHeader("Your wins · global rank", wins.Count));
+        _content.AddChild(SectionHeader(Loc.T("deck_standing_title"), wins.Count));
         if (wins.Count == 0)
         {
-            AddEmpty(_content, "No wins uploaded yet. Win a run with tracking on to rank here.");
+            AddEmpty(_content, Loc.T("deck_standing_empty"));
             return;
         }
 
         var grid = LbGrid(5);
-        HeaderCells(grid, "Rank", "Character", "Asc", "Time", "");
+        HeaderCells(grid, Loc.T("deck_col_rank"), Loc.T("deck_col_character"), Loc.T("deck_col_asc"), Loc.T("deck_col_time"), "");
         var shown = 0;
         foreach (var w in wins)
         {
@@ -860,7 +871,7 @@ public partial class DeckImagePanel : CanvasLayer
             rankCell.AddThemeColorOverride("font_color", Accent);
             rankCell.AddThemeFontSizeOverride("font_size", 13);
             grid.AddChild(rankCell);
-            Cell(grid, Pretty(w.Character), Text);
+            Cell(grid, CharName(w.Character), Text);
             Cell(grid, "A" + w.Ascension, TextMuted);
             Cell(grid, FmtTime(w.RunTime), Text);
             grid.AddChild(w.Hash is { } h ? ViewButton(Config.RunUrl(h)) : new Control());
@@ -888,8 +899,8 @@ public partial class DeckImagePanel : CanvasLayer
     private void BuildRuns()
     {
         if (_runs != null) { RenderRuns(_runs); return; }
-        if (string.IsNullOrEmpty(Config.SteamId)) { AddEmpty(_content, "Sign-in pending; your runs will appear here."); return; }
-        AddEmpty(_content, "Loading your runs…");
+        if (string.IsNullOrEmpty(Config.SteamId)) { AddEmpty(_content, Loc.T("deck_runs_signin_pending")); return; }
+        AddEmpty(_content, Loc.T("deck_runs_loading"));
         var token = _loadToken;
         _ = LoadAsync(RunFeeds.RecentRunsAsync(Config.SteamId, 20), runs =>
         {
@@ -900,8 +911,8 @@ public partial class DeckImagePanel : CanvasLayer
 
     private void RenderRuns(List<RunSummary> runs)
     {
-        _content.AddChild(SectionHeader("Your recent runs", runs.Count));
-        if (runs.Count == 0) { AddEmpty(_content, "No uploaded runs yet. Turn on run tracking to see them here."); return; }
+        _content.AddChild(SectionHeader(Loc.T("deck_runs_title"), runs.Count));
+        if (runs.Count == 0) { AddEmpty(_content, Loc.T("deck_runs_empty")); return; }
 
         foreach (var r in runs)
         {
@@ -925,12 +936,12 @@ public partial class DeckImagePanel : CanvasLayer
             };
             line.AddThemeFontSizeOverride("normal_font_size", 13);
             var result = r.Abandoned
-                ? "[color=#9aa3b2]Abandoned[/color]"
-                : r.Win ? "[color=#4ec977]Victory[/color]"
-                : $"[color=#c74b4b]Death[/color][color=#9aa3b2] · {Pretty(r.KilledBy)}[/color]";
+                ? Loc.T("deck_result_abandoned")
+                : r.Win ? Loc.T("deck_result_victory")
+                : Loc.F("deck_result_death", EncName(r.KilledBy));
             line.Text =
-                $"[color=#e6e6e6][b]{Pretty(r.Character)}[/b][/color]   A{r.Ascension}   {result}\n" +
-                $"[color=#9aa3b2]{r.Floors} floors · {FmtTime(r.RunTime)} · {FmtDate(r.Date)}[/color]";
+                $"[color=#e6e6e6][b]{CharName(r.Character)}[/b][/color]   A{r.Ascension}   {result}\n" +
+                Loc.F("deck_runs_meta", r.Floors, FmtTime(r.RunTime), FmtDate(r.Date));
             row.AddChild(line);
 
             // "View" opens the run's public page in the browser (alt-tabs out of the game).
@@ -949,21 +960,21 @@ public partial class DeckImagePanel : CanvasLayer
     // it the same way (the auto-property setters don't save on their own).
     private void BuildSettings()
     {
-        AboutHead("Community stats");
-        AboutText("Which players the shown win-rates and pick-rates are drawn from. Higher brackets follow more competitive players. Applies to plates and hover tips.");
+        AboutHead(Loc.T("deck_settings_community_stats"));
+        AboutText(Loc.T("deck_settings_community_stats_desc"));
         _content.AddChild(BuildBracketRow());
 
-        AboutHead("On-screen");
-        _content.AddChild(SettingToggle("Damage meter", () => SpireCodexConfig.ShowDamageMeter, v => SpireCodexConfig.ShowDamageMeter = v));
-        _content.AddChild(SettingToggle("Card reward hints", () => SpireCodexConfig.ShowCardRewardHints, v => SpireCodexConfig.ShowCardRewardHints = v));
-        _content.AddChild(SettingToggle("Hover tips", () => SpireCodexConfig.ShowHoverTips, v => SpireCodexConfig.ShowHoverTips = v));
-        _content.AddChild(SettingToggle("Map guidance", () => SpireCodexConfig.ShowMapDanger, v => SpireCodexConfig.ShowMapDanger = v));
-        _content.AddChild(SettingToggle("Upcoming events", () => SpireCodexConfig.ShowUpcomingEvents, v => SpireCodexConfig.ShowUpcomingEvents = v));
-        _content.AddChild(SettingToggle("Post-run card", () => SpireCodexConfig.ShowPostRunCard, v => SpireCodexConfig.ShowPostRunCard = v));
+        AboutHead(Loc.T("deck_settings_onscreen"));
+        _content.AddChild(SettingToggle(Loc.T("deck_toggle_damage_meter"), () => SpireCodexConfig.ShowDamageMeter, v => SpireCodexConfig.ShowDamageMeter = v));
+        _content.AddChild(SettingToggle(Loc.T("deck_toggle_card_reward_hints"), () => SpireCodexConfig.ShowCardRewardHints, v => SpireCodexConfig.ShowCardRewardHints = v));
+        _content.AddChild(SettingToggle(Loc.T("deck_toggle_hover_tips"), () => SpireCodexConfig.ShowHoverTips, v => SpireCodexConfig.ShowHoverTips = v));
+        _content.AddChild(SettingToggle(Loc.T("deck_toggle_map_guidance"), () => SpireCodexConfig.ShowMapDanger, v => SpireCodexConfig.ShowMapDanger = v));
+        _content.AddChild(SettingToggle(Loc.T("deck_toggle_upcoming_events"), () => SpireCodexConfig.ShowUpcomingEvents, v => SpireCodexConfig.ShowUpcomingEvents = v));
+        _content.AddChild(SettingToggle(Loc.T("deck_toggle_post_run_card"), () => SpireCodexConfig.ShowPostRunCard, v => SpireCodexConfig.ShowPostRunCard = v));
 
-        AboutText("These also live in the game's mod settings menu; changes here save the same way. Drag the damage meter to reposition it.");
+        AboutText(Loc.T("deck_settings_onscreen_desc"));
 
-        var replay = new Button { Text = "Show welcome again", SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
+        var replay = new Button { Text = Loc.T("deck_settings_show_welcome"), SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
         replay.AddThemeFontSizeOverride("font_size", 13);
         replay.AddThemeColorOverride("font_color", Accent);
         replay.AddThemeStyleboxOverride("normal", ButtonBox(BgSofter, Border));
@@ -971,6 +982,11 @@ public partial class DeckImagePanel : CanvasLayer
         replay.AddThemeStyleboxOverride("pressed", ButtonBox(Border, Accent));
         replay.Pressed += () => { Visible = false; WelcomeCard.ShowAgain(); };
         _content.AddChild(replay);
+
+        // Localization note: there's no setting to change here (the mod follows the game's
+        // language automatically), just a heads-up so players know the behaviour exists.
+        AboutHead(Loc.T("deck_settings_localization"));
+        AboutText(Loc.T("deck_settings_localization_desc"));
     }
 
     // A row of selectable bracket buttons; the active one is gold. Clicking sets the config and
@@ -984,7 +1000,7 @@ public partial class DeckImagePanel : CanvasLayer
         foreach (var (bracket, label, tip) in BracketChoices)
         {
             var pick = bracket;
-            var b = new Button { Text = label, TooltipText = tip };
+            var b = new Button { Text = Loc.T(label), TooltipText = Loc.T(tip) };
             b.AddThemeFontSizeOverride("font_size", 13);
             b.AddThemeStyleboxOverride("normal", ButtonBox(BgSofter, Border));
             b.AddThemeStyleboxOverride("hover", ButtonBox(Border, Accent));
@@ -1024,7 +1040,7 @@ public partial class DeckImagePanel : CanvasLayer
         void Paint()
         {
             var on = get();
-            b.Text = on ? "On" : "Off";
+            b.Text = on ? Loc.T("deck_on") : Loc.T("deck_off");
             b.AddThemeColorOverride("font_color", on ? Good : TextMuted);
         }
         b.Pressed += () => { set(!get()); PersistConfig(); Paint(); };
@@ -1044,8 +1060,7 @@ public partial class DeckImagePanel : CanvasLayer
     {
         var brand = InfoLabel();
         brand.AddThemeFontSizeOverride("normal_font_size", 20);
-        brand.Text = "[color=#d7a84a][b]Spire[/b][/color] [color=#e6e6e6][b]Codex[/b][/color]" +
-                     "  [color=#c8ccd5]— the comprehensive Slay the Spire 2 database[/color]";
+        brand.Text = Loc.T("deck_brand_wordmark") + Loc.T("deck_about_tagline");
         _content.AddChild(brand);
 
         var links = new HBoxContainer();
@@ -1057,40 +1072,27 @@ public partial class DeckImagePanel : CanvasLayer
         _content.AddChild(links);
 
         var note = InfoLabel();
-        note.Text = "[color=#c8ccd5]This mod is the in-game companion to the Spire Codex " +
-                    "[/color][color=#d7a84a]Overwolf overlay[/color][color=#c8ccd5] — the same " +
-                    "database and live run tracking, native to the game.[/color]";
+        note.Text = Loc.T("deck_about_companion");
         _content.AddChild(note);
-        _content.AddChild(LinkButton("Download the Overwolf overlay", OverlayUrl));
+        _content.AddChild(LinkButton(Loc.T("deck_about_download_overlay"), OverlayUrl));
 
-        AboutHead("What it is");
-        AboutText("Spire Codex is a searchable, always-up-to-date database of every card, relic, " +
-                  "potion, monster, event, power, ascension level, and game mechanic. The data is " +
-                  "reverse-engineered directly from the game files, so it tracks every patch within " +
-                  "hours of release.");
+        AboutHead(Loc.T("deck_about_whatitis"));
+        AboutText(Loc.T("deck_about_whatitis_body"));
 
-        AboutHead("How the data is built");
-        AboutText("Each patch: PCK extraction pulls the card art and assets, ILSpy decompiles the " +
-                  "game DLL, 22 Python parsers extract structured data, SmartFormat resolves the " +
-                  "descriptions, Spine renders the characters and monsters, and changelog diffs " +
-                  "capture every change.");
+        AboutHead(Loc.T("deck_about_data"));
+        AboutText(Loc.T("deck_about_data_body"));
 
-        AboutHead("How scoring works");
-        AboutText("Two community numbers, computed straight from uploaded runs (not opinion): the " +
-                  "Codex Score (0-100, win-rate based) and Codex Elo (head-to-head strength from " +
-                  "reward-screen picks). Full writeup with worked examples at " +
-                  "spire-codex.com/leaderboards/scoring.");
-        _content.AddChild(LinkButton("Read the scoring writeup", ScoringUrl));
+        AboutHead(Loc.T("deck_about_scoring"));
+        AboutText(Loc.T("deck_about_scoring_body"));
+        _content.AddChild(LinkButton(Loc.T("deck_about_read_scoring"), ScoringUrl));
 
-        AboutHead("Support the project");
-        AboutText("Spire Codex is free. If it helps your runs, you can support ongoing development " +
-                  "and the server costs on Patreon — every bit keeps the data and updates coming.");
-        _content.AddChild(LinkButton("Support on Patreon", PatreonUrl));
+        AboutHead(Loc.T("deck_about_support"));
+        AboutText(Loc.T("deck_about_support_body"));
+        _content.AddChild(LinkButton(Loc.T("deck_about_support_patreon"), PatreonUrl));
 
-        AboutHead("Feedback & feature requests");
-        AboutText("Always open to feedback — please let me know if you love or hate the mod, or want " +
-                  "any features. The Discord is the fastest way to reach me.");
-        _content.AddChild(LinkButton("Join the Discord", DiscordUrl));
+        AboutHead(Loc.T("deck_about_feedback"));
+        AboutText(Loc.T("deck_about_feedback_body"));
+        _content.AddChild(LinkButton(Loc.T("deck_about_join_discord"), DiscordUrl));
     }
 
     private void AboutHead(string title)
@@ -1197,7 +1199,7 @@ public partial class DeckImagePanel : CanvasLayer
 
     private Button ViewButton(string url)
     {
-        var b = LinkButton("View", url);
+        var b = LinkButton(Loc.T("deck_view"), url);
         b.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
         b.AddThemeFontSizeOverride("font_size", 12);
         return b;
@@ -1243,6 +1245,19 @@ public partial class DeckImagePanel : CanvasLayer
         => DateTimeOffset.TryParse(iso, out var d) ? d.ToString("MMM d") : "";
 
     // "THE_INSATIABLE_BOSS" -> "The Insatiable Boss"; null -> "?".
+    // Character display name in the player's language (the game's own translation), falling back
+    // to the prettified id if the game hasn't loaded that character's loc, or the id is unknown.
+    // Game terms resolve to the game's own localized name (via its loc tables); each falls back
+    // to a prettified id when the game has no entry, so a miss reads the same as before.
+    private static string CharName(string? id) => Loc.CharacterName(id) ?? Pretty(id);
+    private static string CardName(string? id) => Loc.CardName(id) ?? Pretty(id);
+    private static string RelicName(string? id) => Loc.RelicName(id) ?? Pretty(id);
+    private static string PotionName(string? id) => Loc.PotionName(id) ?? Pretty(id);
+    private static string PowerName(string? id) => Loc.PowerName(id) ?? Pretty(id);
+    private static string EnchName(string? id) => Loc.EnchantmentName(id) ?? Pretty(id);
+    private static string MonName(string? id) => Loc.MonsterName(id) ?? Pretty(id);
+    private static string EncName(string? id) => Loc.EncounterName(id) ?? Pretty(id);
+
     private static string Pretty(string? id)
     {
         if (string.IsNullOrEmpty(id)) return "?";

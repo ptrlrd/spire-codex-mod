@@ -44,7 +44,7 @@ public static class CodexScores
 
     // The active stat filter (for the on-screen indicator).
     public static string CurrentFilter => _filter;
-    public static string CurrentFilterLabel => StatFilter.ByKey(_filter).Label;
+    public static string CurrentFilterLabel => Loc.T(StatFilter.ByKey(_filter).LabelKey);
 
     private static string Key(string? charId, string filter) => $"{charId ?? "_"}|{filter}";
 

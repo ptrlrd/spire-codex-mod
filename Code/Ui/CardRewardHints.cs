@@ -197,7 +197,7 @@ public partial class CardRewardHints : Node
 
         // Tier letter (Elo-based when rated) + win%. The raw Elo number lives in the
         // hovertip only — on the plate it stretched the box.
-        var best = isBest ? "[color=#ffd34d][b]BEST[/b][/color]  " : "";
+        var best = isBest ? $"[color=#ffd34d][b]{Loc.T("plate_best")}[/b][/color]  " : "";
         badge.Text =
             $"[center]{best}[color={TierHex(tier)}][b]{tier}[/b][/color]" +
             $"  [color=#5b636c]·[/color]  [color=#eae5d8]{sc.WinRate:0}%[/color][/center]";

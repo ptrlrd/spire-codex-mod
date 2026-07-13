@@ -74,15 +74,15 @@ public partial class RunCompleteCard : CanvasLayer
         var row = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.End };
         vbox.AddChild(row);
 
-        var open = new Button { Text = "Open" };
+        var open = new Button { Text = Loc.T("rc_open") };
         open.Pressed += () => OS.ShellOpen(_url);
         row.AddChild(open);
 
-        var copy = new Button { Text = "Copy link" };
+        var copy = new Button { Text = Loc.T("rc_copy_link") };
         copy.Pressed += () => DisplayServer.ClipboardSet(_url);
         row.AddChild(copy);
 
-        var dismiss = new Button { Text = "Dismiss" };
+        var dismiss = new Button { Text = Loc.T("rc_dismiss") };
         dismiss.Pressed += Dismiss;
         row.AddChild(dismiss);
 
@@ -100,8 +100,8 @@ public partial class RunCompleteCard : CanvasLayer
             ? ""
             : $"\n[color=#ff9a7a]{damageLine}[/color]";
         _text.Text =
-            "[color=#ffd34d][b]Run tracked[/b][/color]\n" +
-            "Live on Spire Codex:\n" +
+            $"[color=#ffd34d][b]{Loc.T("rc_run_tracked")}[/b][/color]\n" +
+            Loc.T("rc_live_on") + "\n" +
             $"[color=#8fd0ff]{url}[/color]" + rank + damage;
         Visible = true;
         _showing = true;

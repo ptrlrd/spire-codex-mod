@@ -79,7 +79,7 @@ public static class DamageTracker
         {
             if (_runCombats == 0 && _runDealt == 0) return null;
             var perTurn = _runTurns > 0 ? _runDealt / _runTurns : _runDealt;
-            return $"Dealt {_runDealt:N0} · {perTurn:N0}/turn · biggest hit {_runBiggest:N0}";
+            return Loc.F("rc_damage_line", _runDealt.ToString("N0"), perTurn.ToString("N0"), _runBiggest.ToString("N0"));
         }
     }
 

@@ -110,7 +110,7 @@ internal static class EncounterRoute
         var id = Ids.Bare(Reflect.GetString(encounter, "Id"));
         if (id == null) return null;
         var type = Reflect.GetString(encounter, "RoomType")?.ToLowerInvariant() ?? fallbackType;
-        return new EncounterRef(id, Pretty(id), type, Reflect.GetBool(encounter, "IsWeak"));
+        return new EncounterRef(id, Loc.EncounterName(id) ?? Pretty(id), type, Reflect.GetBool(encounter, "IsWeak"));
     }
 
     private static HashSet<string> VisitedEventIds(object? state)
@@ -129,8 +129,8 @@ internal static class EncounterRoute
     }
 
     // "CORPSE_SLUGS_WEAK" -> "Corpse Slugs": drop a trailing variant marker, title-case the
-    // rest. Encounters have no localized name, so this is the in-game label; the bare id
-    // also rides to the backend/frontend which resolve a proper name.
+    // rest. Fallback only, for when the game's `encounters` loc table has no entry for the id
+    // (EncounterName is tried first); the bare id also rides to the backend/frontend.
     private static readonly HashSet<string> Variant = new()
         { "WEAK", "NORMAL", "ELITE", "BOSS", "A", "B", "C", "1", "2", "3" };
 

@@ -1,0 +1,17 @@
+{
+  "SPIRECODEX.mod_title": "Spire Codex",
+  "SPIRECODEX-RUN_TRACKING.title": "プレイ記録",
+  "SPIRECODEX-UPLOAD_RUNS.title": "完了したプレイを spire-codex.com にアップロード",
+  "SPIRECODEX-BACKFILL_HISTORY.title": "既存の過去のプレイもアップロード（一度だけ）",
+  "SPIRECODEX-SHARE_LIVE_STATUS.title": "プレイ中の進行状況をウェブサイトに表示",
+  "SPIRECODEX-OVERLAY.title": "オーバーレイとゲーム内UI",
+  "SPIRECODEX-SHOW_DECK_VIEW.title": "コンパニオンのオーバーレイパネルを表示",
+  "SPIRECODEX-SHOW_CARD_REWARD_HINTS.title": "カード報酬とショップに勝率プレートを表示",
+  "SPIRECODEX-SHOW_HOVER_TIPS.title": "ゲームのツールチップ内にコミュニティ統計を表示",
+  "SPIRECODEX-SHOW_MAP_DANGER.title": "マップに推奨ルートと危険度を表示",
+  "SPIRECODEX-SHOW_UPCOMING_EVENTS.title": "マップに今後のイベント一覧を表示",
+  "SPIRECODEX-SHOW_POST_RUN_CARD.title": "プレイ終了時に共有用カードを表示",
+  "SPIRECODEX-HOTKEYS.title": "ホットキー",
+  "SPIRECODEX-OVERLAY_KEY.title": "オーバーレイパネルを開く",
+  "SPIRECODEX-OVERLAY_PAD.title": "オーバーレイパネルを開く（コントローラー）"
+}

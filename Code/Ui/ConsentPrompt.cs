@@ -13,6 +13,7 @@ public partial class ConsentPrompt : CanvasLayer
     private static ConsentPrompt? _instance;
 
     private PanelContainer _panel = null!;
+    private RichTextLabel _body = null!;
     private double _sinceCheck;
 
     public static void Start()
@@ -54,7 +55,7 @@ public partial class ConsentPrompt : CanvasLayer
         vbox.AddThemeConstantOverride("separation", 10);
         _panel.AddChild(vbox);
 
-        var text = new RichTextLabel
+        _body = new RichTextLabel
         {
             BbcodeEnabled = true,
             FitContent = true,
@@ -62,30 +63,15 @@ public partial class ConsentPrompt : CanvasLayer
             CustomMinimumSize = new Vector2(520, 0),
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        text.AddThemeColorOverride("default_color", new Color(0.91f, 0.89f, 0.84f));
-        text.Text =
-            "[color=#ffd34d][b]Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color] " +
-            "[color=#ffd966][b]run tracking[/b][/color]\n" +
-            "Turn on run tracking to get a live, ranked, shareable page for every run, and to " +
-            "power the community stats you see in-game. This is set to off by default, contributing is great but not required.:\n\n" +
-            "- Completed runs (character, deck, relics, score, seed, result) are sent to " +
-            "[color=#8fd0ff]spire-codex.com[/color]\n" +
-            "- Live Viewing of your run is viewable at " +
-            "[color=#8fd0ff]spire-codex.com/live[/color]\n" +
-            "- Card scoring info is community based and does not guarantee that you will win a run if you pick purely high tier cards every run is situational " +
-            "[color=#8fd0ff]https://spire-codex.com/leaderboards/scoring[/color]\n" +
-            "- Runs are attributed to your Steam id and shown on public run pages and leaderboards\n" +
-            "- Backfill history uploads your existing local runs once; Share live status shows " +
-            "your in-progress run (character, floor, HP) on the site while you play\n\n" +
-            "Keep it off? You can turn it on later under [b]Run Tracking - Upload runs[/b] in " +
-            "the SpireCodex mod settings.";
-        vbox.AddChild(text);
+        _body.AddThemeColorOverride("default_color", new Color(0.91f, 0.89f, 0.84f));
+        _body.Text = Loc.T("consent_body");
+        vbox.AddChild(_body);
 
         var row = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.End };
         row.AddThemeConstantOverride("separation", 10);
         vbox.AddChild(row);
 
-        var turnOn = new Button { Text = "Turn on" };
+        var turnOn = new Button { Text = Loc.T("consent_turnon") };
         turnOn.Pressed += () =>
         {
             Visible = false;
@@ -96,7 +82,7 @@ public partial class ConsentPrompt : CanvasLayer
         };
         row.AddChild(turnOn);
 
-        var keepOff = new Button { Text = "Keep off" };
+        var keepOff = new Button { Text = Loc.T("consent_keepoff") };
         keepOff.Pressed += () =>
         {
             Visible = false;
@@ -119,6 +105,13 @@ public partial class ConsentPrompt : CanvasLayer
         // Show the onboarding choice once (until the player answers), AND re-show the
         // disclosure if they later enable uploads in settings without having granted. Once
         // granted, never again; once "Keep off" with uploads off, the condition is false.
-        if (!Consent.Granted && (!Consent.Answered || Config.UploadRuns)) Visible = true;
+        if (!Consent.Granted && (!Consent.Answered || Config.UploadRuns))
+        {
+            // Resolve the language now (the card is built at boot, possibly before the game's
+            // LocManager was ready) and re-apply the body text before showing.
+            Loc.Refresh();
+            _body.Text = Loc.T("consent_body");
+            Visible = true;
+        }
     }
 }

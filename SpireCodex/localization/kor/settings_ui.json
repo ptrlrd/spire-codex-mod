@@ -1,0 +1,17 @@
+{
+  "SPIRECODEX.mod_title": "Spire Codex",
+  "SPIRECODEX-RUN_TRACKING.title": "도전 추적",
+  "SPIRECODEX-UPLOAD_RUNS.title": "완료한 도전을 spire-codex.com에 업로드",
+  "SPIRECODEX-BACKFILL_HISTORY.title": "기존 과거 도전도 함께 업로드 (1회)",
+  "SPIRECODEX-SHARE_LIVE_STATUS.title": "플레이 중 진행 중인 도전을 웹사이트에 표시",
+  "SPIRECODEX-OVERLAY.title": "오버레이 & 인게임 UI",
+  "SPIRECODEX-SHOW_DECK_VIEW.title": "동반자 오버레이 패널 표시",
+  "SPIRECODEX-SHOW_CARD_REWARD_HINTS.title": "카드 보상과 상점에 승률 플레이트 표시",
+  "SPIRECODEX-SHOW_HOVER_TIPS.title": "게임 툴팁 안에 커뮤니티 통계 표시",
+  "SPIRECODEX-SHOW_MAP_DANGER.title": "지도에 추천 경로와 위험 표시",
+  "SPIRECODEX-SHOW_UPCOMING_EVENTS.title": "지도에 다가오는 이벤트 목록 표시",
+  "SPIRECODEX-SHOW_POST_RUN_CARD.title": "도전 종료 시 공유 카드 표시",
+  "SPIRECODEX-HOTKEYS.title": "단축키",
+  "SPIRECODEX-OVERLAY_KEY.title": "오버레이 패널 열기",
+  "SPIRECODEX-OVERLAY_PAD.title": "오버레이 패널 열기 (컨트롤러)"
+}

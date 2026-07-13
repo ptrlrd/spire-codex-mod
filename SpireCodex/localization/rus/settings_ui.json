@@ -1,0 +1,20 @@
+{
+  "SPIRECODEX.mod_title": "Spire Codex",
+
+  "SPIRECODEX-RUN_TRACKING.title": "Отслеживание вылазок",
+  "SPIRECODEX-UPLOAD_RUNS.title": "Загружать завершенные вылазки на spire-codex.com",
+  "SPIRECODEX-BACKFILL_HISTORY.title": "Также загрузить ваши прошлые вылазки (один раз)",
+  "SPIRECODEX-SHARE_LIVE_STATUS.title": "Показывать текущую вылазку на сайте во время игры",
+
+  "SPIRECODEX-OVERLAY.title": "Оверлей и внутриигровой интерфейс",
+  "SPIRECODEX-SHOW_DECK_VIEW.title": "Показывать панель оверлея-компаньона",
+  "SPIRECODEX-SHOW_CARD_REWARD_HINTS.title": "Показывать плашки с процентом побед на наградах-картах и в магазинах",
+  "SPIRECODEX-SHOW_HOVER_TIPS.title": "Показывать статистику сообщества в игровых подсказках",
+  "SPIRECODEX-SHOW_MAP_DANGER.title": "Показывать рекомендуемый путь и опасность на карте",
+  "SPIRECODEX-SHOW_UPCOMING_EVENTS.title": "Показывать список ближайших событий на карте",
+  "SPIRECODEX-SHOW_POST_RUN_CARD.title": "Показывать карточку для публикации по завершении вылазки",
+
+  "SPIRECODEX-HOTKEYS.title": "Горячие клавиши",
+  "SPIRECODEX-OVERLAY_KEY.title": "Открыть панель оверлея",
+  "SPIRECODEX-OVERLAY_PAD.title": "Открыть панель оверлея (контроллер)"
+}

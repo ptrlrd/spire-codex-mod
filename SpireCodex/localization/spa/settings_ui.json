@@ -1,0 +1,20 @@
+{
+  "SPIRECODEX.mod_title": "Spire Codex",
+
+  "SPIRECODEX-RUN_TRACKING.title": "Seguimiento de partidas",
+  "SPIRECODEX-UPLOAD_RUNS.title": "Sube tus partidas terminadas a spire-codex.com",
+  "SPIRECODEX-BACKFILL_HISTORY.title": "Sube también tus partidas anteriores (una sola vez)",
+  "SPIRECODEX-SHARE_LIVE_STATUS.title": "Muestra tu partida en directo en la web mientras juegas",
+
+  "SPIRECODEX-OVERLAY.title": "Superposición e interfaz en el juego",
+  "SPIRECODEX-SHOW_DECK_VIEW.title": "Muestra el panel de la superposición complementaria",
+  "SPIRECODEX-SHOW_CARD_REWARD_HINTS.title": "Muestra placas de tasa de victorias en las recompensas de cartas y las tiendas",
+  "SPIRECODEX-SHOW_HOVER_TIPS.title": "Muestra estadísticas de la comunidad en los consejos del juego",
+  "SPIRECODEX-SHOW_MAP_DANGER.title": "Muestra la ruta recomendada y el peligro en el mapa",
+  "SPIRECODEX-SHOW_UPCOMING_EVENTS.title": "Muestra la lista de próximos eventos en el mapa",
+  "SPIRECODEX-SHOW_POST_RUN_CARD.title": "Muestra la tarjeta compartible al terminar una partida",
+
+  "SPIRECODEX-HOTKEYS.title": "Atajos",
+  "SPIRECODEX-OVERLAY_KEY.title": "Abrir el panel de la superposición",
+  "SPIRECODEX-OVERLAY_PAD.title": "Abrir el panel de la superposición (mando)"
+}

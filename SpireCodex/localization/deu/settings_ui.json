@@ -1,0 +1,17 @@
+{
+  "SPIRECODEX.mod_title": "Spire Codex",
+  "SPIRECODEX-RUN_TRACKING.title": "Run-Tracking",
+  "SPIRECODEX-UPLOAD_RUNS.title": "Deine abgeschlossenen Runs zu spire-codex.com hochladen",
+  "SPIRECODEX-BACKFILL_HISTORY.title": "Auch deine vorhandenen früheren Runs hochladen (einmalig)",
+  "SPIRECODEX-SHARE_LIVE_STATUS.title": "Deinen laufenden Run auf der Website anzeigen, während du spielst",
+  "SPIRECODEX-OVERLAY.title": "Overlay & Spiel-UI",
+  "SPIRECODEX-SHOW_DECK_VIEW.title": "Das Begleiter-Overlay-Panel anzeigen",
+  "SPIRECODEX-SHOW_CARD_REWARD_HINTS.title": "Siegraten-Plaketten bei Kartenbelohnungen und in Läden anzeigen",
+  "SPIRECODEX-SHOW_HOVER_TIPS.title": "Community-Statistiken in den Tooltips des Spiels anzeigen",
+  "SPIRECODEX-SHOW_MAP_DANGER.title": "Empfohlene Route und Gefahr auf der Karte anzeigen",
+  "SPIRECODEX-SHOW_UPCOMING_EVENTS.title": "Liste kommender Ereignisse auf der Karte anzeigen",
+  "SPIRECODEX-SHOW_POST_RUN_CARD.title": "Die teilbare Abschlusskarte anzeigen, wenn ein Run endet",
+  "SPIRECODEX-HOTKEYS.title": "Tastenkürzel",
+  "SPIRECODEX-OVERLAY_KEY.title": "Das Overlay-Panel öffnen",
+  "SPIRECODEX-OVERLAY_PAD.title": "Das Overlay-Panel öffnen (Controller)"
+}

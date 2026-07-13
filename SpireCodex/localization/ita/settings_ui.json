@@ -1,0 +1,20 @@
+{
+  "SPIRECODEX.mod_title": "Spire Codex",
+
+  "SPIRECODEX-RUN_TRACKING.title": "Tracciamento partite",
+  "SPIRECODEX-UPLOAD_RUNS.title": "Invia le tue partite completate a spire-codex.com",
+  "SPIRECODEX-BACKFILL_HISTORY.title": "Invia anche le tue partite passate esistenti (una volta sola)",
+  "SPIRECODEX-SHARE_LIVE_STATUS.title": "Mostra la tua partita in tempo reale sul sito mentre giochi",
+
+  "SPIRECODEX-OVERLAY.title": "Overlay e interfaccia di gioco",
+  "SPIRECODEX-SHOW_DECK_VIEW.title": "Mostra il pannello overlay del compagno",
+  "SPIRECODEX-SHOW_CARD_REWARD_HINTS.title": "Mostra le targhette con le percentuali di vittoria sulle ricompense di carte e nei negozi",
+  "SPIRECODEX-SHOW_HOVER_TIPS.title": "Mostra le statistiche della comunità nelle descrizioni del gioco",
+  "SPIRECODEX-SHOW_MAP_DANGER.title": "Mostra il percorso consigliato e i pericoli sulla mappa",
+  "SPIRECODEX-SHOW_UPCOMING_EVENTS.title": "Mostra l'elenco dei prossimi eventi sulla mappa",
+  "SPIRECODEX-SHOW_POST_RUN_CARD.title": "Mostra la scheda condivisibile al termine di una partita",
+
+  "SPIRECODEX-HOTKEYS.title": "Scorciatoie",
+  "SPIRECODEX-OVERLAY_KEY.title": "Apri il pannello overlay",
+  "SPIRECODEX-OVERLAY_PAD.title": "Apri il pannello overlay (controller)"
+}

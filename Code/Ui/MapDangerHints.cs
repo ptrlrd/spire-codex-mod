@@ -480,7 +480,7 @@ public partial class MapDangerHints : Node
         }
 
         var sb = new System.Text.StringBuilder();
-        sb.Append("[color=#ffd34d][b]Upcoming events[/b][/color]");
+        sb.Append($"[color=#ffd34d][b]{Loc.T("map_upcoming_events")}[/b][/color]");
         for (var i = 0; i < events.Count && i < 3; i++)
             sb.Append($"\n[color={(i == 0 ? "#e8e8e8" : "#9aa0a8")}]{events[i].Name}[/color]");
         _eventBanner.Text = sb.ToString();

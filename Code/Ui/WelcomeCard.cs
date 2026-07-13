@@ -14,6 +14,7 @@ public partial class WelcomeCard : CanvasLayer
 {
     private static WelcomeCard? _instance;
     private PanelContainer _panel = null!;
+    private RichTextLabel _body = null!;
     private double _sinceCheck;
     private bool _settled; // stop polling once shown or already-seen
 
@@ -52,7 +53,22 @@ public partial class WelcomeCard : CanvasLayer
         if (Consent.Answered) { _settled = true; WriteSeenMarker(); Open(); }
     }
 
-    private void Open() => Visible = true;
+    private void Open()
+    {
+        // Resolve the language now (the card is built at boot, possibly before the game's
+        // LocManager was ready) and re-apply the body before showing.
+        Loc.Refresh();
+        _body.Text = BodyText();
+        Visible = true;
+    }
+
+    // The welcome body, in the current language, with the player's actual overlay hotkey
+    // (defaults to F5; stays right if rebound).
+    private static string BodyText()
+    {
+        var key = SpireCodexConfig.OverlayKey is var k and not HotKey.None ? k.ToString() : "F5";
+        return Loc.F("welcome_body", key);
+    }
 
     private void BuildUi()
     {
@@ -79,34 +95,25 @@ public partial class WelcomeCard : CanvasLayer
         vbox.AddThemeConstantOverride("separation", 10);
         _panel.AddChild(vbox);
 
-        // Reflect the player's actual overlay hotkey (defaults to F5; stays right if rebound).
-        var key = SpireCodexConfig.OverlayKey is var k and not HotKey.None ? k.ToString() : "F5";
-        var text = new RichTextLabel
+        _body = new RichTextLabel
         {
             BbcodeEnabled = true, FitContent = true, ScrollActive = false,
             CustomMinimumSize = new Vector2(520, 0),
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        text.AddThemeColorOverride("default_color", new Color(0.91f, 0.89f, 0.84f));
-        text.Text =
-            "[color=#ffd34d][b]Welcome to Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color]\n" +
-            $"Press [color=#d7a84a][b]{key}[/b][/color] anytime to open the overlay, your live run " +
-            "dashboard, leaderboards, and [b]Settings[/b].\n\n" +
-            "- Community win-rates and Codex tiers on every card, relic, and event tooltip\n" +
-            "- A live damage meter, plus map route and danger guidance, during combat\n" +
-            "- Open [b]Settings[/b] in the overlay to toggle any surface or pick a stat bracket\n\n" +
-            "[color=#c8ccd5]Controller: click a stick to open, bumpers to switch tabs.[/color]";
-        vbox.AddChild(text);
+        _body.AddThemeColorOverride("default_color", new Color(0.91f, 0.89f, 0.84f));
+        _body.Text = BodyText();
+        vbox.AddChild(_body);
 
         var row = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.End };
         row.AddThemeConstantOverride("separation", 10);
         vbox.AddChild(row);
 
-        var open = new Button { Text = "Open it now" };
+        var open = new Button { Text = Loc.T("welcome_open") };
         open.Pressed += () => { Visible = false; DeckImagePanel.OpenOverlay(); };
         row.AddChild(open);
 
-        var gotIt = new Button { Text = "Got it" };
+        var gotIt = new Button { Text = Loc.T("welcome_gotit") };
         gotIt.Pressed += () => Visible = false;
         row.AddChild(gotIt);
     }

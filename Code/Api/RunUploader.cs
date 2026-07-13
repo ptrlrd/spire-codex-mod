@@ -155,8 +155,8 @@ public sealed class RunUploader : IDisposable
                 ? sr.GetInt32() : (int?)null;
             var total = r.TryGetProperty("seed_total", out var st) && st.ValueKind == JsonValueKind.Number
                 ? st.GetInt32() : (int?)null;
-            if (rank is { } rv && total is { } tv) rankLine = $"Ranked #{rv} of {tv} on this seed";
-            else if (total is { } tv2 and > 1) rankLine = $"{tv2} runs tracked on this seed";
+            if (rank is { } rv && total is { } tv) rankLine = Loc.F("rc_seed_rank", rv, tv);
+            else if (total is { } tv2 and > 1) rankLine = Loc.F("rc_seed_tracked", tv2);
 
             return new UploadInfo(hash, url, rankLine);
         }

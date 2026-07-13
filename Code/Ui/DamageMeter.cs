@@ -74,12 +74,12 @@ public partial class DamageMeter : Node
 
         EnsurePanel();
         _panel!.Text =
-            $"[color={Accent}][b]Damage[/b][/color]"
-            + $"\n[font_size=22][color={Text}]{perTurn}[/color][/font_size] [color={Muted}]dmg / turn[/color]"
-            + $"\n[color={Muted}]This turn[/color] [color={Text}]{combat.DamageDealtThisTurn}[/color]"
-            + $"   [color={Muted}]Total[/color] [color={Text}]{combat.DamageDealt}[/color]"
-            + $"\n[color={Muted}]Biggest[/color] [color={Text}]{combat.BiggestHit}[/color]"
-            + $"   [color={Muted}]Taken[/color] [color={Text}]{combat.DamageTaken}[/color]";
+            $"[color={Accent}][b]{Loc.T("dm_damage")}[/b][/color]"
+            + $"\n[font_size=22][color={Text}]{perTurn}[/color][/font_size] [color={Muted}]{Loc.T("dm_dmg_per_turn")}[/color]"
+            + $"\n[color={Muted}]{Loc.T("dm_this_turn")}[/color] [color={Text}]{combat.DamageDealtThisTurn}[/color]"
+            + $"   [color={Muted}]{Loc.T("dm_total")}[/color] [color={Text}]{combat.DamageDealt}[/color]"
+            + $"\n[color={Muted}]{Loc.T("dm_biggest")}[/color] [color={Text}]{combat.BiggestHit}[/color]"
+            + $"   [color={Muted}]{Loc.T("dm_taken")}[/color] [color={Text}]{combat.DamageTaken}[/color]";
 
         // Position the meter — but never while a drag is in flight (MoveTo owns it then; writing
         // here would race it and snap/flicker). Size is valid after FitContent lays the text out,

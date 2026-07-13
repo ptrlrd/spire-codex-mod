@@ -1,0 +1,20 @@
+{
+  "SPIRECODEX.mod_title": "Spire Codex",
+
+  "SPIRECODEX-RUN_TRACKING.title": "对局记录",
+  "SPIRECODEX-UPLOAD_RUNS.title": "将你已完成的对局上传到 spire-codex.com",
+  "SPIRECODEX-BACKFILL_HISTORY.title": "同时上传你已有的历史对局（仅一次）",
+  "SPIRECODEX-SHARE_LIVE_STATUS.title": "在你游玩时于网站上展示你的实时对局",
+
+  "SPIRECODEX-OVERLAY.title": "覆盖层与游戏内界面",
+  "SPIRECODEX-SHOW_DECK_VIEW.title": "显示助手覆盖面板",
+  "SPIRECODEX-SHOW_CARD_REWARD_HINTS.title": "在卡牌奖励和商店上显示胜率标牌",
+  "SPIRECODEX-SHOW_HOVER_TIPS.title": "在游戏提示框中显示社区统计数据",
+  "SPIRECODEX-SHOW_MAP_DANGER.title": "在地图上显示推荐路线和危险提示",
+  "SPIRECODEX-SHOW_UPCOMING_EVENTS.title": "在地图上显示即将出现的事件列表",
+  "SPIRECODEX-SHOW_POST_RUN_CARD.title": "在对局结束时显示可分享的卡片",
+
+  "SPIRECODEX-HOTKEYS.title": "快捷键",
+  "SPIRECODEX-OVERLAY_KEY.title": "打开覆盖面板",
+  "SPIRECODEX-OVERLAY_PAD.title": "打开覆盖面板（控制器）"
+}

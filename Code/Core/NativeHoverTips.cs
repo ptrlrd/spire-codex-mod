@@ -173,15 +173,15 @@ internal static class NativeHoverTips
 
         var sb = new StringBuilder();
         sb.Append(Logo).Append('\n');
-        sb.Append($"[b]{rc.Label}[/b] — picked [b]{rc.Pct:0}%[/b] of campfires\n");
+        sb.Append(Loc.F("hover_rest_picked", rc.Label, rc.Pct));
         var hp = RewardContext.HpPct;
         if (hp is { } h && rc.PctLowHp is { } lo && rc.PctHighHp is { } hi)
         {
             var band = h < 50 ? lo : hi;
-            sb.Append($"At your HP ({h:0}%): players pick this [b]{band:0}%[/b]\n");
+            sb.Append(Loc.F("hover_rest_at_hp", h, band));
         }
         if (rc.WinRate is { } wr)
-            sb.Append($"Win rate when chosen [b]{wr:0.0}%[/b]\n");
+            sb.Append(Loc.F("hover_rest_win_rate", wr));
         return sb.ToString().TrimEnd();
     }
 
@@ -282,7 +282,7 @@ internal static class NativeHoverTips
             if (id == null || CodexScores.Card(id) is not { Picks: > 0 } sc) return null;
             var text = BuildStats(sc, CardStatsCache.Get(id), id == RewardContext.BestCardId, showElo: true);
             if (PersonalStats.Card(id) is { Offered: > 0 } you)
-                text += $"\nYou kept it [b]{Pct(you)}%[/b] of the time ({you.Picked}/{you.Offered})";
+                text += "\n" + Loc.F("hover_you_kept", Pct(you), you.Picked, you.Offered);
             return text;
         }
 
@@ -296,9 +296,9 @@ internal static class NativeHoverTips
             // line for the ancient screen; harmless context elsewhere), plus the player's own
             // take rate when signed in.
             if (CommunityStats.Ancient(id) is { } anc)
-                text += $"\nAncient offers: taken [b]{anc.TakeRate:0}%[/b]  [color=#9aa3ab]({anc.Offered:N0} offers)[/color]";
+                text += "\n" + Loc.F("hover_ancient_taken", anc.TakeRate, anc.Offered);
             if (PersonalStats.Ancient(id) is { Offered: > 0 } youAnc)
-                text += $"\nYou took it [b]{Pct(youAnc)}%[/b] ({youAnc.Picked} of {youAnc.Offered})";
+                text += "\n" + Loc.F("hover_you_took", Pct(youAnc), youAnc.Picked, youAnc.Offered);
             return text;
         }
 
@@ -334,10 +334,10 @@ internal static class NativeHoverTips
         var character = RewardContext.Character;
         var sb = new StringBuilder();
         sb.Append(Logo).Append('\n');
-        if (isBest) sb.Append("[color=#ffd34d][b]Best pick[/b][/color]\n");
-        sb.Append($"[color={TierHex(tier)}][b]{tier} tier[/b][/color]\n");
-        if (showElo && sc.Elo is { } elo) sb.Append($"Codex Elo [b]{elo:0}[/b]\n");
-        sb.Append($"Codex Score [b]{sc.Score:0}[/b]\n");
+        if (isBest) sb.Append($"[color=#ffd34d]{Loc.T("hover_best_pick")}[/color]\n");
+        sb.Append($"[color={TierHex(tier)}]{Loc.F("hover_tier", tier)}[/color]\n");
+        if (showElo && sc.Elo is { } elo) sb.Append(Loc.F("hover_codex_elo", elo));
+        sb.Append(Loc.F("hover_codex_score", sc.Score));
 
         // Win rate: current character's slice when available, else global.
         double wr;
@@ -351,15 +351,15 @@ internal static class NativeHoverTips
         else if (full != null) { wr = full.WinRate; delta = wr - full.BaselineWinRate; }
         else wr = sc.WinRate;
 
-        sb.Append($"Win rate [b]{wr:0.0}%[/b]");
+        sb.Append(Loc.F("hover_win_rate", wr));
         if (delta is { } d)
         {
             var dc = d >= 0 ? "#86e08a" : "#e08a86";
-            sb.Append($"  [color={dc}]({(d >= 0 ? "+" : "")}{d:0.0}% vs base)[/color]");
+            sb.Append($"  [color={dc}]{Loc.F("hover_vs_base", d >= 0 ? "+" : "", d)}[/color]");
         }
         sb.Append('\n');
 
-        if (full is { PickRate: > 0 }) sb.Append($"Pick rate [b]{full.PickRate:0.0}%[/b]\n");
+        if (full is { PickRate: > 0 }) sb.Append(Loc.F("hover_pick_rate", full.PickRate));
         return sb.ToString().TrimEnd();
     }
 
@@ -412,7 +412,7 @@ internal static class NativeHoverTips
 
         var sb = new StringBuilder();
         sb.Append(Logo).Append('\n');
-        sb.Append($"[b]{pct:0}%[/b] of players pick this  [color=#9aa3ab]({count:N0} of {ev.Total:N0})[/color]");
+        sb.Append(Loc.F("hover_players_pick", pct, count, ev.Total));
         return sb.ToString();
     }
 
@@ -428,9 +428,9 @@ internal static class NativeHoverTips
         // No Codex tier/score here: ancient-pool relics are situational and read as low tiers on
         // the reward-based score, which is misleading when picking at an ancient. The community
         // take rate is the signal that actually applies, so show just that (plus the player's own).
-        var text = $"{Logo}\nAncient offers: taken [b]{anc.TakeRate:0}%[/b]  [color=#9aa3ab]({anc.Offered:N0} offers)[/color]";
+        var text = $"{Logo}\n" + Loc.F("hover_ancient_taken", anc.TakeRate, anc.Offered);
         if (PersonalStats.Ancient(relicId) is { Offered: > 0 } you)
-            text += $"\nYou took it [b]{Pct(you)}%[/b] ({you.Picked} of {you.Offered})";
+            text += "\n" + Loc.F("hover_you_took", Pct(you), you.Picked, you.Offered);
         return text;
     }
 
@@ -451,12 +451,12 @@ internal static class NativeHoverTips
         if (data == null || data.MostRemoved.Count == 0) return null;
         var sb = new StringBuilder();
         sb.Append(Logo).Append('\n');
-        sb.Append("[b]Most removed by the community[/b]\n");
+        sb.Append(Loc.T("hover_most_removed"));
         var n = Math.Min(3, data.MostRemoved.Count);
         for (var i = 0; i < n; i++)
         {
             var r = data.MostRemoved[i];
-            sb.Append($"{i + 1}. {r.Name}  [color=#9aa3ab]{r.Pct:0.0}% of removals[/color]\n");
+            sb.Append(Loc.F("hover_removal_row", i + 1, r.Name, r.Pct));
         }
         return sb.ToString().TrimEnd();
     }
@@ -487,11 +487,11 @@ internal static class NativeHoverTips
 
         var sb = new StringBuilder();
         sb.Append(Logo).Append('\n');
-        sb.Append($"[b]{Pretty(character)}[/b]\n");
+        sb.Append($"[b]{Loc.CharacterName(character) ?? Pretty(character)}[/b]\n");
         if (mine != null)
-            sb.Append($"Your win rate [b]{mine.WinRate:0.0}%[/b]  [color=#9aa3ab]({mine.Runs:N0} runs)[/color]\n");
+            sb.Append(Loc.F("hover_your_win_rate", mine.WinRate, mine.Runs));
         if (community != null)
-            sb.Append($"Community [b]{community.WinRate:0.0}%[/b]  [color=#9aa3ab]({community.Runs:N0} runs · {community.Share:0.0}% of all)[/color]\n");
+            sb.Append(Loc.F("hover_community_win_rate", community.WinRate, community.Runs, community.Share));
         return sb.ToString().TrimEnd();
     }
 

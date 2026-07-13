@@ -44,7 +44,7 @@ public partial class StatFilterIndicator : Node
         EnsurePill();
         if (label != _shown)
         {
-            _pill!.Text = $"[color=#d7a84a][b]Stats[/b][/color] [color=#e8e8e8]{label}[/color]";
+            _pill!.Text = $"[color=#d7a84a][b]{Loc.T("sf_stats")}[/b][/color] [color=#e8e8e8]{label}[/color]";
             _shown = label;
         }
 

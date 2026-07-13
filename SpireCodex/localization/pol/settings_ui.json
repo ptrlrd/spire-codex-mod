@@ -1,0 +1,17 @@
+{
+  "SPIRECODEX.mod_title": "Spire Codex",
+  "SPIRECODEX-RUN_TRACKING.title": "Śledzenie wypraw",
+  "SPIRECODEX-UPLOAD_RUNS.title": "Przesyłaj ukończone wyprawy na spire-codex.com",
+  "SPIRECODEX-BACKFILL_HISTORY.title": "Prześlij także swoje wcześniejsze wyprawy (jednorazowo)",
+  "SPIRECODEX-SHARE_LIVE_STATUS.title": "Pokazuj wyprawę na żywo na stronie w trakcie gry",
+  "SPIRECODEX-OVERLAY.title": "Nakładka i interfejs w grze",
+  "SPIRECODEX-SHOW_DECK_VIEW.title": "Pokazuj panel nakładki towarzysza",
+  "SPIRECODEX-SHOW_CARD_REWARD_HINTS.title": "Pokazuj plakietki wskaźnika zwycięstw przy nagrodach kart i u Handlarza",
+  "SPIRECODEX-SHOW_HOVER_TIPS.title": "Pokazuj statystyki społeczności w podpowiedziach gry",
+  "SPIRECODEX-SHOW_MAP_DANGER.title": "Pokazuj zalecaną trasę i zagrożenia na mapie",
+  "SPIRECODEX-SHOW_UPCOMING_EVENTS.title": "Pokazuj listę nadchodzących wydarzeń na mapie",
+  "SPIRECODEX-SHOW_POST_RUN_CARD.title": "Pokazuj kartę do udostępnienia po zakończeniu wyprawy",
+  "SPIRECODEX-HOTKEYS.title": "Skróty klawiszowe",
+  "SPIRECODEX-OVERLAY_KEY.title": "Otwórz panel nakładki",
+  "SPIRECODEX-OVERLAY_PAD.title": "Otwórz panel nakładki (kontroler)"
+}

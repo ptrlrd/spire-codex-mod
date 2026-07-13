@@ -1,0 +1,17 @@
+{
+  "SPIRECODEX.mod_title": "Spire Codex",
+  "SPIRECODEX-RUN_TRACKING.title": "Rastreamento de Partidas",
+  "SPIRECODEX-UPLOAD_RUNS.title": "Envie suas partidas concluídas para spire-codex.com",
+  "SPIRECODEX-BACKFILL_HISTORY.title": "Também enviar suas partidas antigas existentes (uma vez)",
+  "SPIRECODEX-SHARE_LIVE_STATUS.title": "Mostrar sua partida ao vivo no site enquanto você joga",
+  "SPIRECODEX-OVERLAY.title": "Sobreposição & Interface no Jogo",
+  "SPIRECODEX-SHOW_DECK_VIEW.title": "Mostrar o painel de sobreposição companheiro",
+  "SPIRECODEX-SHOW_CARD_REWARD_HINTS.title": "Mostrar placas de taxa de vitória nas recompensas de cartas e lojas",
+  "SPIRECODEX-SHOW_HOVER_TIPS.title": "Mostrar estatísticas da comunidade nas descrições do jogo",
+  "SPIRECODEX-SHOW_MAP_DANGER.title": "Mostrar a rota recomendada e o perigo no mapa",
+  "SPIRECODEX-SHOW_UPCOMING_EVENTS.title": "Mostrar a lista de próximos eventos no mapa",
+  "SPIRECODEX-SHOW_POST_RUN_CARD.title": "Mostrar o cartão compartilhável quando uma partida termina",
+  "SPIRECODEX-HOTKEYS.title": "Atalhos",
+  "SPIRECODEX-OVERLAY_KEY.title": "Abrir o painel de sobreposição",
+  "SPIRECODEX-OVERLAY_PAD.title": "Abrir o painel de sobreposição (controle)"
+}

@@ -47,6 +47,12 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!-- Mod-chrome translations (tabs, labels, prose). Compiled into the dll so they are
+             available even in a no-pck dev build; read by Loc via GetManifestResourceStream. -->
+        <EmbeddedResource Include="Code/Loc/mod_ui.json" />
+    </ItemGroup>
+
+    <ItemGroup>
         <None Include="SpireCodex.json" />
         <None Include="project.godot" />
         <None Include="export_presets.cfg" />
