@@ -15,6 +15,7 @@ public partial class WelcomeCard : CanvasLayer
     private static WelcomeCard? _instance;
     private PanelContainer _panel = null!;
     private RichTextLabel _body = null!;
+    private RichTextLabel _saveWarn = null!;
     private double _sinceCheck;
     private bool _settled; // stop polling once shown or already-seen
 
@@ -59,16 +60,19 @@ public partial class WelcomeCard : CanvasLayer
         // LocManager was ready) and re-apply the body before showing.
         Loc.Refresh();
         _body.Text = BodyText();
+        _saveWarn.Text = SaveWarnText();
         Visible = true;
     }
 
     // The welcome body, in the current language, with the player's actual overlay hotkey
     // (defaults to F5; stays right if rebound).
-    private static string BodyText()
-    {
-        var key = SpireCodexConfig.OverlayKey is var k and not HotKey.None ? k.ToString() : "F5";
-        return Loc.F("welcome_body", key);
-    }
+    private static string BodyText() => Loc.F("welcome_body", OverlayKeyName());
+
+    // The modded-save callout, which points at the Settings importer behind the same hotkey.
+    private static string SaveWarnText() => Loc.F("welcome_modded_save", OverlayKeyName());
+
+    private static string OverlayKeyName() =>
+        SpireCodexConfig.OverlayKey is var k and not HotKey.None ? k.ToString() : "F5";
 
     private void BuildUi()
     {
@@ -88,7 +92,7 @@ public partial class WelcomeCard : CanvasLayer
         style.ContentMarginLeft = 22; style.ContentMarginRight = 22;
         style.ContentMarginTop = 16; style.ContentMarginBottom = 16;
         _panel.AddThemeStyleboxOverride("panel", style);
-        if (ThemeDB.GetProjectTheme() is { } theme) _panel.Theme = theme;
+        Skin.ApplyFont(_panel);
         AddChild(_panel);
 
         var vbox = new VBoxContainer();
@@ -104,6 +108,32 @@ public partial class WelcomeCard : CanvasLayer
         _body.AddThemeColorOverride("default_color", new Color(0.91f, 0.89f, 0.84f));
         _body.Text = BodyText();
         vbox.AddChild(_body);
+
+        // Red "your client is now modded" callout: modded STS2 uses a separate save profile, so
+        // reassure the player their vanilla progress isn't gone and send them to the Settings
+        // tab's "Import vanilla saves", which copies it across properly. (Copying the folder by
+        // hand does not survive the game's cloud sync; see Core/SaveImport.)
+        var warn = new PanelContainer();
+        var warnStyle = new StyleBoxFlat
+        {
+            BgColor = new Color(0.20f, 0.07f, 0.07f, 0.55f),
+            BorderColor = new Color(0.78f, 0.29f, 0.29f),
+        };
+        warnStyle.SetBorderWidthAll(1);
+        warnStyle.SetCornerRadiusAll(6);
+        warnStyle.ContentMarginLeft = 14; warnStyle.ContentMarginRight = 14;
+        warnStyle.ContentMarginTop = 10; warnStyle.ContentMarginBottom = 10;
+        warn.AddThemeStyleboxOverride("panel", warnStyle);
+        _saveWarn = new RichTextLabel
+        {
+            BbcodeEnabled = true, FitContent = true, ScrollActive = false,
+            CustomMinimumSize = new Vector2(520, 0),
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        _saveWarn.AddThemeColorOverride("default_color", new Color(0.95f, 0.86f, 0.84f));
+        _saveWarn.Text = SaveWarnText();
+        warn.AddChild(_saveWarn);
+        vbox.AddChild(warn);
 
         var row = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.End };
         row.AddThemeConstantOverride("separation", 10);

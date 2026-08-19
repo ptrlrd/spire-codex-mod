@@ -46,6 +46,12 @@ game? Right-click it in your Steam library, choose Manage, then Browse local fil
 - Discord: [discord.gg/uged4qFufK](https://discord.gg/uged4qFufK)
 - Support: [Patreon](https://www.patreon.com/cw/SpireCodex)
 
+## Credits
+
+The "Import vanilla saves" button is based on
+[ImportVanillaSaves](https://github.com/Ind-E/ImportVanillaSaves) by Ind-E, used with permission.
+Full credits and licenses: [THIRD-PARTY.md](THIRD-PARTY.md).
+
 ## Building
 
 Built with the [ModTemplate-StS2](https://github.com/Alchyr/ModTemplate-StS2) starter

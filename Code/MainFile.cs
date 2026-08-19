@@ -86,6 +86,12 @@ public partial class MainFile : Node
         // features. Shows once, after the consent choice, so the two cards don't stack.
         Ui.WelcomeCard.Start();
 
+        // "Import vanilla saves" on the profile-select screen (plus the card it opens), so a
+        // first-time modder can bring their unmodded profile across right where they notice the
+        // empty slots. Only attaches when there's actually an unmodded save to import.
+        Ui.ImportCard.Start();
+        Ui.ProfileImportButton.Start();
+
         // Pre-fetch community Codex Scores so the overlay can annotate the deck/relics,
         // plus community headline stats (portrait/removal tips) and the local personal
         // win-rate scan, so those hovers are instant.

@@ -54,7 +54,7 @@ public partial class RunCompleteCard : CanvasLayer
         style.ContentMarginLeft = 18; style.ContentMarginRight = 18;
         style.ContentMarginTop = 12; style.ContentMarginBottom = 12;
         _panel.AddThemeStyleboxOverride("panel", style);
-        if (ThemeDB.GetProjectTheme() is { } theme) _panel.Theme = theme;
+        Skin.ApplyFont(_panel);
         AddChild(_panel);
 
         var vbox = new VBoxContainer();

@@ -15,12 +15,11 @@ namespace SpireCodex.Ui;
 // when the Damage meter setting is off. Toggle: ShowDamageMeter.
 public partial class DamageMeter : Node
 {
-    // F5 overlay design tokens (src/windows/in_game/overlay.css :root), mirrored here so the
-    // meter matches the companion panel.
-    private static readonly Color Bg = Color.FromHtml("16181d");
+    // Unified Spire Codex palette (matches the F5 companion panel): brand gold on a warm dark card.
+    private static readonly Color Bg = Color.FromHtml("171c24");
     private static readonly Color Border = Color.FromHtml("2c313c");
-    private const string Accent = "#d7a84a"; // brand gold
-    private const string Text = "#e6e6e6";
+    private const string Accent = "#ffd34d"; // brand gold
+    private const string Text = "#e8e3d6";
     private const string Muted = "#c8ccd5";
 
     private double _accum;
@@ -175,7 +174,7 @@ public partial class DamageMeter : Node
         };
         _panel.AddThemeStyleboxOverride("normal", card);
         _panel.AddThemeFontSizeOverride("normal_font_size", 14);
-        if (ThemeDB.GetProjectTheme() is { } theme) _panel.Theme = theme; // match the game/F5 font
+        Skin.ApplyFont(_panel); // Kreon, so the meter matches the game
         _panel.GuiInput += OnPanelInput;
         _layer.AddChild(_panel);
     }

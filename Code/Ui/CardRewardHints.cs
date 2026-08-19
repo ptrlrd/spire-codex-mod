@@ -41,7 +41,7 @@ public partial class CardRewardHints : Node
 
     public override void _Ready()
     {
-        _gameTheme = ThemeDB.GetProjectTheme();
+        // (font applied per-badge via Skin.ApplyFont below)
 
         // High layer so plates draw above the card-selection screen itself, which sits on
         // the game's overlay-screen canvas (above the normal layer-0 UI).
@@ -173,7 +173,7 @@ public partial class CardRewardHints : Node
             };
             badge.AddThemeStyleboxOverride("normal", MakePlate());
             badge.AddThemeFontSizeOverride("normal_font_size", 19);
-            if (_gameTheme != null) badge.Theme = _gameTheme;
+            Skin.ApplyFont(badge);
             _badgeLayer.AddChild(badge);
             _badges[key] = badge;
         }

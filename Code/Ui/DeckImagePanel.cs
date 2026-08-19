@@ -1,36 +1,39 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Godot;
 using SpireCodex.Api;
-using SpireCodex.Core;
-using SpireCodex.Producer;
 
 namespace SpireCodex.Ui;
 
-// The companion panel (default hotkey F5, rebindable), styled 1:1 with the Spire Codex Overwolf overlay's live panel
-// (design tokens copied from overlay.css). Four tabs: Current Run (live dashboard - vitals,
-// build quality, combat, reward/shop/event decision help, the act's road ahead, and the full
-// deck/relics/potions with Codex tiers), Leaderboard, Runs, and About. Switch tabs by clicking
-// or pressing Tab while open. Godot has no web view, so this rebuilds the overlay's look
-// natively. The Current Run sections all read data the mod already captures each tick (the
-// live snapshot + in-memory score/community caches), so they cost no extra network.
+// The companion panel (default hotkey F5, rebindable), styled with the unified Spire Codex
+// palette (brand gold #ffd34d on warm dark cards, shared with the FTUE cards and the extractor
+// mod). Five tabs: Leaderboard, Runs, Import, Settings, and About. Switch tabs by clicking or pressing
+// Tab while open (the shoulder bumpers on a controller). The live in-run dashboard is handled by
+// the Spire Codex Overwolf overlay; this native panel focuses on rankings, your run history,
+// in-overlay settings, and info.
 public partial class DeckImagePanel : CanvasLayer
 {
-    // Overwolf overlay design tokens (src/windows/in_game/overlay.css :root).
-    private static readonly Color Bg = Hex("16181d");
-    private static readonly Color BgSoft = Hex("1d2027");
-    private static readonly Color BgSofter = Hex("242832");
-    private static readonly Color Border = Hex("2c313c");
-    private static readonly Color Text = Hex("e6e6e6");
-    private static readonly Color TextMuted = Hex("c8ccd5");
-    private static readonly Color Accent = Hex("d7a84a"); // brand gold
-    private static readonly Color Good = Hex("4ec977");
-    private static readonly Color Danger = Hex("c74b4b");
+    // Unified Spire Codex palette: warm card surfaces + brand gold #ffd34d + warm off-white text,
+    // shared with the FTUE cards and the extractor mod so the whole thing reads as one product.
+    // The tokens live in Skin (one source of truth for every surface); aliased here so the rest
+    // of this file reads unchanged.
+    private static readonly Color Bg = Skin.Bg;
+    private static readonly Color BgSoft = Skin.BgSoft;
+    private static readonly Color BgSofter = Skin.BgSofter;
+    private static readonly Color Border = Skin.Border;
+    private static readonly Color Text = Skin.Text;
+    private static readonly Color TextMuted = Skin.TextMuted;
+    private static readonly Color Accent = Skin.Accent;
+    private static readonly Color AccentBright = Skin.AccentBright;
+    private static readonly Color AccentDim = Skin.AccentDim;
+    private static readonly Color Field = Skin.Field;
+    private static readonly Color Good = Skin.Good;
+    private static readonly Color Danger = Skin.Danger;
 
     // Loc KEYS (not text): resolved to on-screen strings at the render site (BuildTabBar), since
     // the array is built at class load when the language may not be ready yet.
-    private static readonly string[] Tabs = { "deck_tab_current_run", "deck_tab_leaderboard", "deck_tab_runs", "deck_tab_settings", "deck_tab_about" };
+    private static readonly string[] Tabs =
+        { "deck_tab_leaderboard", "deck_tab_runs", "deck_tab_import", "deck_tab_settings", "deck_tab_about" };
 
     // The community stat bracket choices shown in the Settings tab selector (Label/Tip hold loc
     // KEYS, resolved via Loc.T at the render site in BuildBracketRow).
@@ -50,6 +53,7 @@ public partial class DeckImagePanel : CanvasLayer
     private const string OverlayUrl = "https://overwolf.com/app/ptrlrd-spire_codex";
     private const string ScoringUrl = "https://spire-codex.com/leaderboards/scoring";
     private const string PatreonUrl = "https://www.patreon.com/cw/SpireCodex";
+    private const string ImportCreditUrl = "https://github.com/Ind-E/ImportVanillaSaves";
 
     private PanelContainer _panel = null!;
     private bool _dragging;
@@ -59,7 +63,16 @@ public partial class DeckImagePanel : CanvasLayer
     // and emits this as a synthetic action; it's also the native left-stick-click binding when
     // Steam Input is off. Listening for the action (not a raw joypad button) is the only thing
     // that reaches the mod while Steam Input is active, which is the default.
-    private static readonly StringName StickClickAction = "controller_joystick_press";
+    //
+    // The game renames these: v0.109.1 turned controller_joystick_press into
+    // controller_l_stick_press. So resolve against the live InputMap rather than hard-coding one
+    // name, newest first. A rename then costs a lookup instead of silently killing the binding.
+    private static readonly string[] StickClickNames =
+    {
+        "controller_l_stick_press", "controller_joystick_press", "controller_left_stick_press",
+    };
+    private static StringName? _stickClick;
+    private static bool _stickClickResolved;
 
     // L1 / R1 bumpers (also synthetic actions under Steam Input) cycle the panel's tabs while
     // it's open — the controller mirror of the Tab key.
@@ -68,6 +81,10 @@ public partial class DeckImagePanel : CanvasLayer
 
     private VBoxContainer _content = null!;
     private Label _hint = null!;
+    private Label? _backfillStatus; // the Settings "Backfill past runs" progress line, when built
+    private Button? _importButton;  // the Import tab's action button, when built
+    private int _importSource = 1, _importTarget = 1;
+    private bool _importArmed;      // second press of Import actually writes
     private static DeckImagePanel? _instance; // for WelcomeCard's "Open it now"
 
     // True while the F5 overlay (the card/deck display) is open, so other on-map surfaces (the
@@ -127,6 +144,7 @@ public partial class DeckImagePanel : CanvasLayer
         style.ContentMarginLeft = 0; style.ContentMarginRight = 0;
         style.ContentMarginTop = 0; style.ContentMarginBottom = 0;
         panel.AddThemeStyleboxOverride("panel", style);
+        Skin.ApplyFont(panel); // Kreon for the whole panel; it never adopted a theme before
         AddChild(panel);
 
         var root = new VBoxContainer();
@@ -187,6 +205,7 @@ public partial class DeckImagePanel : CanvasLayer
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         brand.AddThemeFontSizeOverride("normal_font_size", 18);
+        brand.AddThemeFontSizeOverride("bold_font_size", 18);
         brand.Text = Loc.T("deck_brand_wordmark");
         row.AddChild(brand);
 
@@ -196,6 +215,10 @@ public partial class DeckImagePanel : CanvasLayer
         _hint.VerticalAlignment = VerticalAlignment.Center;
         UpdateHint();
         row.AddChild(_hint);
+
+        // Close affordance in the corner. The hotkey still works, but a visible X is what people
+        // reach for first, and it does not depend on remembering which key they bound.
+        row.AddChild(CloseButton(() => { if (Visible) ToggleOverlay(); }));
 
         header.AddChild(row);
         return header;
@@ -228,6 +251,28 @@ public partial class DeckImagePanel : CanvasLayer
     public override void _Process(double delta)
     {
         if (Visible && !SpireCodexConfig.ShowDeckView) Visible = false;
+
+        // Live "Backfill past runs" progress on the Settings tab: a running count/percentage while
+        // it uploads, then a one-line summary. Driven from RunUploader so it reflects the auto
+        // first-enable backfill too, not only a button press.
+        if (Visible && _tab == 3 && _backfillStatus is { } s && GodotObject.IsInstanceValid(s))
+        {
+            if (RunUploader.BackfillActive)
+            {
+                var total = RunUploader.BackfillTotal;
+                var done = RunUploader.BackfillDone;
+                var pct = total > 0 ? done * 100 / total : 0;
+                s.Text = Loc.F("deck_backfill_progress", done, total, pct);
+                s.AddThemeColorOverride("font_color", Accent);
+                s.Visible = true;
+            }
+            else if (RunUploader.BackfillHasRun)
+            {
+                s.Text = Loc.F("deck_backfill_done", RunUploader.BackfillAdded, RunUploader.BackfillDuplicate);
+                s.AddThemeColorOverride("font_color", Good);
+                s.Visible = true;
+            }
+        }
     }
 
     public override void _Input(InputEvent @event)
@@ -255,7 +300,8 @@ public partial class DeckImagePanel : CanvasLayer
         // action; this also matches the native joypad binding when Steam Input is off.
         if (SpireCodexConfig.OverlayPad == ControllerToggle.StickClick
             && SpireCodexConfig.ShowDeckView
-            && @event.IsActionPressed(StickClickAction))
+            && StickClickAction() is { } stickClick
+            && IsAction(@event, stickClick))
         {
             ToggleOverlay();
             GetViewport().SetInputAsHandled();
@@ -263,13 +309,13 @@ public partial class DeckImagePanel : CanvasLayer
         }
 
         // While the panel is open, the bumpers cycle tabs (controller mirror of Tab).
-        if (Visible && @event.IsActionPressed(BumperRight))
+        if (Visible && IsAction(@event, BumperRight))
         {
             SetTab((_tab + 1) % Tabs.Length);
             GetViewport().SetInputAsHandled();
             return;
         }
-        if (Visible && @event.IsActionPressed(BumperLeft))
+        if (Visible && IsAction(@event, BumperLeft))
         {
             SetTab((_tab - 1 + Tabs.Length) % Tabs.Length);
             GetViewport().SetInputAsHandled();
@@ -287,7 +333,7 @@ public partial class DeckImagePanel : CanvasLayer
         }
 
         // Number keys pick the leaderboard sub-board while on that tab.
-        if (Visible && _tab == 1 && key.Keycode is Key.Key1 or Key.Key2 or Key.Key3)
+        if (Visible && _tab == 0 && key.Keycode is Key.Key1 or Key.Key2 or Key.Key3)
         {
             SetLbSub((int)(key.Keycode - Key.Key1));
             GetViewport().SetInputAsHandled();
@@ -302,9 +348,58 @@ public partial class DeckImagePanel : CanvasLayer
         }
     }
 
+    // The X that closes a surface: quiet until hovered, then brand gold. Plain capital X rather
+    // than a dingbat so it renders in Kreon instead of falling back to another face.
+    internal static Button CloseButton(Action onPressed)
+    {
+        var b = new Button { Text = "X", Flat = true, TooltipText = Loc.T("deck_close") };
+        b.AddThemeFontSizeOverride("font_size", 15);
+        b.AddThemeColorOverride("font_color", TextMuted);
+        b.AddThemeColorOverride("font_hover_color", Accent);
+        b.AddThemeColorOverride("font_pressed_color", AccentDim);
+        b.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
+        b.Pressed += onPressed;
+        return b;
+    }
+
+    // Matches an action only when the game actually defines it. Godot logs an error for every
+    // lookup of an unknown action, and _Input runs on every event, so an action the game has
+    // renamed would otherwise spam the log thousands of times a session (v0.109.1 did exactly
+    // that: 1794 lines in one run). HasAction is a dictionary hit, so the guard is free.
+    private static bool IsAction(InputEvent e, StringName action) =>
+        InputMap.HasAction(action) && e.IsActionPressed(action);
+
+    // The stick-click action under whatever name this game build uses, or null when it defines
+    // none of them (the pad toggle then does nothing instead of erroring on every event).
+    private static StringName? StickClickAction()
+    {
+        if (_stickClickResolved) return _stickClick;
+        _stickClickResolved = true;
+        foreach (var name in StickClickNames)
+        {
+            if (!InputMap.HasAction(name)) continue;
+            _stickClick = name;
+            MainFile.Logger.Info($"controller: stick-click action is '{name}'");
+            return _stickClick;
+        }
+        MainFile.Logger.Info("controller: no known stick-click action in this build; pad toggle disabled");
+        return null;
+    }
+
     // Open the overlay from outside (the welcome card's "Open it now"). No-op if already open.
     public static void OpenOverlay()
         => Callable.From(() => { if (_instance is { Visible: false }) _instance.ToggleOverlay(); }).CallDeferred();
+
+    // Open straight onto the Settings tab (the main-menu entry). Switches tabs even when the
+    // panel is already up, so the entry always lands where it says it will.
+    public static void OpenSettings() => OpenOn(3);
+
+    private static void OpenOn(int tab) => Callable.From(() =>
+    {
+        if (_instance is not { } panel) return;
+        if (!panel.Visible) panel.ToggleOverlay();
+        panel.SetTab(tab);
+    }).CallDeferred();
 
     // Flip the panel's visibility and, when opening, refresh the hint and drop cached feeds so
     // each open shows fresh data. Shared by the keyboard hotkey and the controller binding.
@@ -365,391 +460,22 @@ public partial class DeckImagePanel : CanvasLayer
             _tabButtons[i].AddThemeColorOverride("font_color", i == tab ? Accent : TextMuted);
 
         foreach (var c in _content.GetChildren()) c.QueueFree();
-        switch (tab)
-        {
-            case 0: BuildCurrentRun(); break;
-            case 1: BuildLeaderboard(); break;
-            case 2: BuildRuns(); break;
-            case 3: BuildSettings(); break;
-            case 4: BuildAbout(); break;
-        }
-    }
 
-    // ---- Current Run tab ------------------------------------------------------------
-
-    private void BuildCurrentRun()
-    {
-        // Version warnings (relocated from the retired F9 overlay).
+        // Version nudges (relocated from the retired Current Run tab): shown atop whichever tab is
+        // open so an available update or an untested game build is never missed.
         if (ModVersion.UpdateAvailable is { } up)
             AddWarn(Loc.F("deck_update_available", up, ModVersion.UpdateUrl ?? "spire-codex.com"));
         if (ModVersion.Sts2Untested)
             AddWarn(Loc.T("deck_warn_untested"));
 
-        var s = LiveStateProducer.Latest;
-        if (s is not { Status: "ok", InRun: true })
+        switch (tab)
         {
-            AddEmpty(_content, Loc.T("deck_empty_not_in_run"));
-            return;
+            case 0: BuildLeaderboard(); break;
+            case 1: BuildRuns(); break;
+            case 2: BuildImport(); break;
+            case 3: BuildSettings(); break;
+            case 4: BuildAbout(); break;
         }
-
-        _content.AddChild(SectionHeader(Loc.F("deck_run_character_ascension", CharName(s.Character), s.Ascension), s.TotalFloor));
-        AddCharWinRates(s.Character);
-
-        var info = InfoLabel();
-        var actName = string.IsNullOrEmpty(s.ActName) ? "" : Loc.F("deck_vitals_act_name", s.ActName);
-        var seed = string.IsNullOrEmpty(s.Seed) ? "" : Loc.F("deck_vitals_seed", s.Seed);
-        info.Text =
-            Loc.F("deck_vitals_line1", s.Act, actName, s.ActFloor, s.Screen) + "\n" +
-            Loc.F("deck_vitals_hp", s.CurrentHp, s.MaxHp) +
-            (s.Block > 0 ? Loc.F("deck_vitals_block", s.Block) : "") +
-            Loc.F("deck_vitals_gold", s.Gold) +
-            (s.Combat != null ? Loc.F("deck_vitals_energy", s.Energy, s.MaxEnergy) : "") + "\n" +
-            Loc.F("deck_vitals_deck_line", s.DeckSize, s.RelicCount, s.PotionCount, seed);
-        _content.AddChild(info);
-
-        BuildDeckSummary(s.Deck);
-
-        // Decision-help sections that only apply on the current screen.
-        if (s.Combat is { } c && c.Enemies.Count > 0) BuildCombat(c);
-        if (s.CardReward.Count > 0) BuildRewardHelper(s.CardReward);
-        if (s.Shop is { } shop) BuildShop(shop);
-        if (s.Event is { } ev) BuildEvent(ev);
-
-        // The act's seed-determined road ahead, with per-encounter community danger.
-        if (s.Route is { } route) BuildRoute(route);
-
-        // Full live loadout (the panel is named for the deck; show the real thing).
-        if (s.Deck.Count > 0) BuildDeckList(s.Deck);
-        if (s.Relics.Count > 0) BuildRelicList(s.Relics);
-        if (s.Potions.Count > 0) BuildPotionList(s.Potions);
-    }
-
-    // Your win rate as this character (from local .run history) next to the community's.
-    private void AddCharWinRates(string? character)
-    {
-        if (string.IsNullOrEmpty(character)) return;
-        var mine = LocalStats.For(character);
-        var community = CommunityStats.Character(character);
-        if (mine == null && community == null) return;
-
-        var parts = new List<string>();
-        if (mine != null)
-            parts.Add(Loc.F("deck_winrate_you", $"{mine.WinRate:0.0}", mine.Runs));
-        if (community != null)
-            parts.Add(Loc.F("deck_winrate_community", $"{community.WinRate:0.0}", $"{community.Runs:N0}"));
-
-        var l = InfoLabel();
-        l.AddThemeFontSizeOverride("normal_font_size", 12);
-        l.Text = string.Join("    ", parts);
-        _content.AddChild(l);
-    }
-
-    // One-line build-quality read: average Codex tier across rated cards, plus the strongest
-    // and weakest card. Derived entirely from the in-memory score cache.
-    private void BuildDeckSummary(List<DeckEntry> deck)
-    {
-        double sum = 0; var n = 0;
-        string? bestId = null; var bestScore = double.MinValue;
-        string? worstId = null; var worstScore = double.MaxValue;
-        foreach (var d in deck)
-        {
-            if (CodexScores.Card(d.Id) is not { Picks: > 0 } sc) continue;
-            sum += sc.Score; n++;
-            if (sc.Score > bestScore) { bestScore = sc.Score; bestId = d.Id; }
-            if (sc.Score < worstScore) { worstScore = sc.Score; worstId = d.Id; }
-        }
-        if (n == 0) return;
-
-        var tier = Ranks.Tier(sum / n);
-        var l = InfoLabel();
-        l.AddThemeFontSizeOverride("normal_font_size", 12);
-        l.Text =
-            Loc.F("deck_build_summary", TierHex(tier), tier, n) +
-            (bestId != null ? Loc.F("deck_build_best", CardName(bestId)) : "") +
-            (worstId != null && worstId != bestId ? Loc.F("deck_build_weakest", CardName(worstId)) : "");
-        _content.AddChild(l);
-    }
-
-    // ---- Current Run: live combat ---------------------------------------------------
-
-    private void BuildCombat(CombatSnapshot c)
-    {
-        _content.AddChild(SectionHeader(
-            c.Turn is { } t ? Loc.F("deck_combat_turn", t) : Loc.T("deck_combat"), c.Enemies.Count(e => e.IsAlive)));
-        foreach (var e in c.Enemies)
-        {
-            if (!e.IsAlive) continue;
-            var name = string.IsNullOrEmpty(e.Name) ? MonName(e.Id) : e.Name;
-            var intent = e.Intents.Count > 0 ? IntentText(e.Intents) : "";
-            // An enemy lining up an attack gets a reddish name so the threat reads at a glance.
-            var nameColor = e.IntendsToAttack ? "#f0a0a0" : "#e6e6e6";
-            var row = InfoLabel();
-            row.Text =
-                $"[color={nameColor}][b]{name}[/b][/color]  [color=#c74b4b]{e.CurrentHp}/{e.MaxHp}[/color]" +
-                (e.Block > 0 ? $" [color=#5fcde0]+{e.Block}[/color]" : "") +
-                (intent != "" ? $"   [color=#d7a84a]{intent}[/color]" : "") +
-                (e.Powers.Count > 0
-                    ? $"\n[color=#9aa3b2]{string.Join(", ", e.Powers.Select(p => p.Amount != 0 ? $"{PowerName(p.Id)} {p.Amount}" : PowerName(p.Id)))}[/color]"
-                    : "");
-            _content.AddChild(row);
-        }
-    }
-
-    // ---- Current Run: reward / shop / event decision help ---------------------------
-
-    private void BuildRewardHelper(List<string> offered)
-    {
-        PersonalStats.EnsureLoaded(); // the player's own pick history, when signed in
-        _content.AddChild(SectionHeader(Loc.T("deck_section_card_reward"), offered.Count));
-        // Match the in-world plates' best pick when known, else the highest Codex Score on offer.
-        var best = RewardContext.BestCardId;
-        if (string.IsNullOrEmpty(best))
-        {
-            var top = double.MinValue;
-            foreach (var id in offered)
-                if (CodexScores.Card(id) is { } sc && sc.Score > top) { top = sc.Score; best = id; }
-        }
-
-        foreach (var id in offered.OrderByDescending(id => CodexScores.Card(id)?.Score ?? -1))
-        {
-            var sc = CodexScores.Card(id);
-            var tier = ScoreTier(sc);
-            var flag = id == best ? Loc.T("deck_best_pick") : "";
-            var stat = sc is { Picks: > 0 } ? Loc.F("deck_reward_score", $"{sc.Score:0}", $"{sc.WinRate:0.0}") : "";
-            var you = PersonalStats.Card(id) is { Offered: > 0 } u ? Loc.F("deck_reward_you", (int)System.Math.Round(u.Picked * 100.0 / u.Offered)) : "";
-            var row = InfoLabel();
-            row.Text = (tier != null ? $"[color=#{TierHex(tier)}][b]{tier}[/b][/color]  " : "") +
-                       $"[color=#e6e6e6]{CardName(id)}[/color]{flag}{stat}{you}";
-            _content.AddChild(row);
-        }
-    }
-
-    private void BuildShop(ShopInfo shop)
-    {
-        var stocked = shop.Cards.Concat(shop.Relics).Concat(shop.Potions).Count(i => i.Stocked && i.Id != null);
-        _content.AddChild(SectionHeader(Loc.T("deck_section_shop"), stocked));
-        AddShopRow(Loc.T("deck_section_cards"), shop.Cards, CodexScores.Card, CardName);
-        AddShopRow(Loc.T("deck_section_relics"), shop.Relics, CodexScores.Relic, RelicName);
-        AddShopRow(Loc.T("deck_section_potions"), shop.Potions, CodexScores.Potion, PotionName);
-        if (shop.Removal is { Stocked: true } rm)
-        {
-            var l = InfoLabel();
-            l.Text = Loc.F("deck_card_removal", rm.Cost);
-            _content.AddChild(l);
-        }
-    }
-
-    private void AddShopRow(string label, List<ShopItemInfo> items, Func<string, EntityScore?> score, Func<string?, string> name)
-    {
-        var stocked = items.Where(i => i.Stocked && i.Id != null).ToList();
-        if (stocked.Count == 0) return;
-        var head = new Label { Text = label.ToUpperInvariant() };
-        head.AddThemeColorOverride("font_color", TextMuted);
-        head.AddThemeFontSizeOverride("font_size", 10);
-        _content.AddChild(head);
-        foreach (var i in stocked)
-        {
-            var tier = ScoreTier(score(i.Id!));
-            var row = InfoLabel();
-            row.Text = (tier != null ? $"[color=#{TierHex(tier)}][b]{tier}[/b][/color]  " : "") +
-                       $"[color=#e6e6e6]{name(i.Id)}[/color]   [color=#d7a84a]{i.Cost}g[/color]" +
-                       (i.OnSale ? Loc.T("deck_shop_on_sale") : "");
-            _content.AddChild(row);
-        }
-    }
-
-    private void BuildEvent(EventInfo ev)
-    {
-        _content.AddChild(SectionHeader(ev.Title ?? Loc.T("deck_section_event"), ev.Options.Count));
-        if (!string.IsNullOrEmpty(ev.Prompt))
-        {
-            var p = InfoLabel();
-            p.AddThemeColorOverride("default_color", TextMuted);
-            p.AddThemeFontSizeOverride("normal_font_size", 13);
-            p.Text = ev.Prompt;
-            _content.AddChild(p);
-        }
-        var comm = CommunityStats.Event(ev.Id);
-        foreach (var o in ev.Options)
-        {
-            var pct = comm != null ? EventOptionPct(comm, o.Key) : null;
-            var pctText = pct is { } v ? Loc.F("deck_event_pick_pct", $"{v:0}") : "";
-            var state = o.Chosen ? Loc.T("deck_event_chosen")
-                : o.Locked ? Loc.T("deck_event_locked") : "";
-            var color = o.Locked ? "#9aa3b2" : "#e6e6e6";
-            var row = InfoLabel();
-            row.Text = $"[color={color}]• {o.Text}[/color]{state}{pctText}";
-            _content.AddChild(row);
-        }
-    }
-
-    // Community pick rate for an event option, matched by the key's last segment and summing
-    // staged repeats (KEY_0, KEY_1...), mirroring the native event hover tip.
-    private static double? EventOptionPct(EventCommunity comm, string textKey)
-    {
-        if (comm.Total <= 0 || string.IsNullOrEmpty(textKey)) return null;
-        var key = textKey.Substring(textKey.LastIndexOf('.') + 1).ToUpperInvariant();
-        var count = -1;
-        foreach (var o in comm.Options) if (o.Id == key) { count = o.Count; break; }
-        if (count < 0)
-        {
-            count = 0;
-            foreach (var o in comm.Options)
-                if (o.Id.StartsWith(key + "_", StringComparison.Ordinal)) count += o.Count;
-            if (count == 0) return null;
-        }
-        return count * 100.0 / comm.Total;
-    }
-
-    // ---- Current Run: route preview -------------------------------------------------
-
-    private void BuildRoute(ActRoute route)
-    {
-        var count = route.Monsters.Count + route.Elites.Count + route.Events.Count
-                    + (route.Boss != null ? 1 : 0) + (route.Ancient != null ? 1 : 0);
-        if (count == 0) return;
-        _content.AddChild(SectionHeader(Loc.T("deck_section_coming_this_act"), count));
-        foreach (var m in route.Monsters) AddRouteLine(Loc.T("deck_route_fight"), m, "#e6e6e6");
-        foreach (var e in route.Elites) AddRouteLine(Loc.T("deck_route_elite"), e, "#e0b070");
-        foreach (var ev in route.Events) AddRouteLine(Loc.T("deck_section_event"), ev, "#6bd3c7");
-        if (route.Boss is { } boss) AddRouteLine(Loc.T("deck_route_boss"), boss, "#c74b4b");
-        if (route.Ancient is { } anc) AddRouteLine(Loc.T("deck_route_ancient"), anc, "#b58cff");
-    }
-
-    private void AddRouteLine(string kind, EncounterRef enc, string color)
-    {
-        var name = string.IsNullOrEmpty(enc.Name) ? EncName(enc.Id) : enc.Name;
-        var row = InfoLabel();
-        row.Text = $"[color=#9aa3b2]{kind}[/color]  [color={color}]{name}[/color]{DangerSuffix(enc.Id)}";
-        _content.AddChild(row);
-    }
-
-    // " 28% HP · 4% deaths" - community danger for a specific encounter (percent scale), or
-    // "" when below the sample floor / unknown.
-    private static string DangerSuffix(string id)
-    {
-        if (CommunityStats.Encounter(id) is not { } d) return "";
-        return Loc.F("deck_danger_hp", $"{d.AvgDmgPct:0}") +
-               (d.DeathRate > 0 ? Loc.F("deck_danger_deaths", $"{d.DeathRate:0.#}") : "");
-    }
-
-    // ---- Current Run: live loadout (deck / relics / potions) ------------------------
-
-    private void BuildDeckList(List<DeckEntry> deck)
-    {
-        _content.AddChild(SectionHeader(Loc.T("deck_section_deck"), deck.Count));
-        // Collapse duplicates by (id, upgraded, enchantment); keep first-seen order for the sort.
-        var groups = new Dictionary<string, (DeckEntry Entry, int Count)>();
-        var order = new List<string>();
-        foreach (var d in deck)
-        {
-            var key = $"{d.Id}|{d.Upgraded}|{d.Enchantment}";
-            if (groups.TryGetValue(key, out var g)) groups[key] = (g.Entry, g.Count + 1);
-            else { groups[key] = (d, 1); order.Add(key); }
-        }
-
-        var rows = order.Select(k => groups[k]).ToList();
-        rows.Sort((a, b) =>
-        {
-            var sa = CodexScores.Card(a.Entry.Id)?.Score ?? -1;
-            var sb = CodexScores.Card(b.Entry.Id)?.Score ?? -1;
-            return sa != sb ? sb.CompareTo(sa) : string.Compare(a.Entry.Id, b.Entry.Id, StringComparison.Ordinal);
-        });
-
-        var flow = ChipFlow();
-        foreach (var (entry, n) in rows)
-        {
-            var tier = ScoreTier(CodexScores.Card(entry.Id));
-            var name = CardName(entry.Id) + (entry.Upgraded ? "[color=#86e08a]+[/color]" : "");
-            if (!string.IsNullOrEmpty(entry.Enchantment)) name += $" [color=#b58cff]{EnchName(entry.Enchantment)}[/color]";
-            if (n > 1) name += $" [color=#9aa3b2]×{n}[/color]";
-            flow.AddChild(Chip(name, tier));
-        }
-        _content.AddChild(flow);
-    }
-
-    private void BuildRelicList(List<RelicEntry> relics)
-    {
-        _content.AddChild(SectionHeader(Loc.T("deck_section_relics"), relics.Count));
-        var flow = ChipFlow();
-        foreach (var r in relics)
-            flow.AddChild(Chip(RelicName(r.Id), ScoreTier(CodexScores.Relic(r.Id))));
-        _content.AddChild(flow);
-    }
-
-    private void BuildPotionList(List<PotionEntry> potions)
-    {
-        _content.AddChild(SectionHeader(Loc.T("deck_section_potions"), potions.Count));
-        var counts = new Dictionary<string, int>();
-        var order = new List<string>();
-        foreach (var p in potions)
-        {
-            if (counts.TryGetValue(p.Id, out var n)) counts[p.Id] = n + 1;
-            else { counts[p.Id] = 1; order.Add(p.Id); }
-        }
-        var flow = ChipFlow();
-        foreach (var id in order)
-        {
-            var name = PotionName(id) + (counts[id] > 1 ? $" [color=#9aa3b2]×{counts[id]}[/color]" : "");
-            flow.AddChild(Chip(name, ScoreTier(CodexScores.Potion(id))));
-        }
-        _content.AddChild(flow);
-    }
-
-    private HFlowContainer ChipFlow()
-    {
-        var flow = new HFlowContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        flow.AddThemeConstantOverride("h_separation", 6);
-        flow.AddThemeConstantOverride("v_separation", 6);
-        return flow;
-    }
-
-    // A compact entity chip: name (BBCode) with a tier-colored border and tier-letter prefix.
-    private Control Chip(string text, string? tier)
-    {
-        var panel = new PanelContainer();
-        var box = new StyleBoxFlat { BgColor = BgSofter, BorderColor = tier != null ? TierColor(tier) : Border };
-        box.SetBorderWidthAll(1);
-        box.SetCornerRadiusAll(6);
-        box.ContentMarginLeft = 8; box.ContentMarginRight = 8;
-        box.ContentMarginTop = 3; box.ContentMarginBottom = 3;
-        panel.AddThemeStyleboxOverride("panel", box);
-
-        var rich = new RichTextLabel
-        {
-            BbcodeEnabled = true, FitContent = true, ScrollActive = false,
-            AutowrapMode = TextServer.AutowrapMode.Off,
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-        };
-        rich.AddThemeFontSizeOverride("normal_font_size", 12);
-        rich.AddThemeColorOverride("default_color", Text);
-        rich.Text = (tier != null ? $"[color=#{TierHex(tier)}][b]{tier}[/b][/color] " : "") + text;
-        panel.AddChild(rich);
-        return panel;
-    }
-
-    // Tier letter for an entity score (Elo tier for rated cards, else the Score tier), or null
-    // when the entity has too few picks to rate.
-    private static string? ScoreTier(EntityScore? sc) =>
-        sc is { Picks: > 0 } ? CodexScores.EloTier(sc.Elo) ?? Ranks.Tier(sc.Score) : null;
-
-    private static string TierHex(string tier) => tier switch
-    {
-        "S" => "ffd34d", "A" => "86e08a", "B" => "6bd3c7",
-        "C" => "e8e3d6", "D" => "e0b070", _ => "e08a86",
-    };
-
-    private static Color TierColor(string tier) => Hex(TierHex(tier));
-
-    // "16x2 · buff" - the enemy's upcoming intent(s).
-    private static string IntentText(List<IntentInfo> intents)
-    {
-        var parts = new List<string>();
-        foreach (var i in intents)
-            parts.Add(i.Damage is { } d
-                ? (i.Hits is { } h && h > 1 ? $"{d}x{h}" : d.ToString())
-                : i.Type);
-        return string.Join(" · ", parts);
     }
 
     // ---- Leaderboards tab -----------------------------------------------------------
@@ -778,14 +504,22 @@ public partial class DeckImagePanel : CanvasLayer
 
     private Control BuildLbSubNav()
     {
+        // Segmented sub-tabs: one clearly-clickable pill per board, the active one gold-bordered,
+        // so players click across the boards instead of scrolling. Number keys 1-3 still switch.
         var row = new HBoxContainer();
         row.AddThemeConstantOverride("separation", 6);
         for (var i = 0; i < LbSub.Length; i++)
         {
             var idx = i;
-            var b = new Button { Text = Loc.F("deck_lb_subnav_item", i + 1, Loc.T(LbSub[i])), Flat = true };
-            b.AddThemeFontSizeOverride("font_size", 12);
-            b.AddThemeColorOverride("font_color", i == _lbSub ? Accent : TextMuted);
+            var active = i == _lbSub;
+            var b = new Button { Text = Loc.F("deck_lb_subnav_item", i + 1, Loc.T(LbSub[i])) };
+            b.AddThemeFontSizeOverride("font_size", 13);
+            b.AddThemeColorOverride("font_color", active ? Accent : TextMuted);
+            b.AddThemeColorOverride("font_hover_color", AccentBright);
+            b.AddThemeStyleboxOverride("normal", ButtonBox(active ? Border : BgSofter, active ? Accent : Border));
+            b.AddThemeStyleboxOverride("hover", ButtonBox(Border, Accent));
+            b.AddThemeStyleboxOverride("pressed", ButtonBox(Border, Accent));
+            b.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
             b.Pressed += () => SetLbSub(idx);
             row.AddChild(b);
         }
@@ -810,7 +544,7 @@ public partial class DeckImagePanel : CanvasLayer
         _ = LoadAsync(fetch(), b =>
         {
             store(b);
-            if (_tab == 1 && token == _loadToken) { Clear(); BuildLeaderboard(); }
+            if (_tab == 0 && token == _loadToken) { Clear(); BuildLeaderboard(); }
         });
     }
 
@@ -848,7 +582,7 @@ public partial class DeckImagePanel : CanvasLayer
         _ = LoadAsync(RunFeeds.PlayerWinsAsync(Config.SteamId, 60), w =>
         {
             _wins = w;
-            if (_tab == 1 && _lbSub == 2 && token == _loadToken) { Clear(); BuildLeaderboard(); }
+            if (_tab == 0 && _lbSub == 2 && token == _loadToken) { Clear(); BuildLeaderboard(); }
         });
     }
 
@@ -905,7 +639,7 @@ public partial class DeckImagePanel : CanvasLayer
         _ = LoadAsync(RunFeeds.RecentRunsAsync(Config.SteamId, 20), runs =>
         {
             _runs = runs;
-            if (_tab == 2 && token == _loadToken) { Clear(); RenderRuns(runs); }
+            if (_tab == 1 && token == _loadToken) { Clear(); RenderRuns(runs); }
         });
     }
 
@@ -940,7 +674,7 @@ public partial class DeckImagePanel : CanvasLayer
                 : r.Win ? Loc.T("deck_result_victory")
                 : Loc.F("deck_result_death", EncName(r.KilledBy));
             line.Text =
-                $"[color=#e6e6e6][b]{CharName(r.Character)}[/b][/color]   A{r.Ascension}   {result}\n" +
+                $"[color=#e8e3d6][b]{CharName(r.Character)}[/b][/color]   A{r.Ascension}   {result}\n" +
                 Loc.F("deck_runs_meta", r.Floors, FmtTime(r.RunTime), FmtDate(r.Date));
             row.AddChild(line);
 
@@ -960,26 +694,41 @@ public partial class DeckImagePanel : CanvasLayer
     // it the same way (the auto-property setters don't save on their own).
     private void BuildSettings()
     {
+        _importButton = null;
+        _importArmed = false; // the tab is rebuilt from scratch, so never re-enter armed
+
+        // Community stat bracket.
         AboutHead(Loc.T("deck_settings_community_stats"));
         AboutText(Loc.T("deck_settings_community_stats_desc"));
         _content.AddChild(BuildBracketRow());
 
-        AboutHead(Loc.T("deck_settings_onscreen"));
-        _content.AddChild(SettingToggle(Loc.T("deck_toggle_damage_meter"), () => SpireCodexConfig.ShowDamageMeter, v => SpireCodexConfig.ShowDamageMeter = v));
-        _content.AddChild(SettingToggle(Loc.T("deck_toggle_card_reward_hints"), () => SpireCodexConfig.ShowCardRewardHints, v => SpireCodexConfig.ShowCardRewardHints = v));
-        _content.AddChild(SettingToggle(Loc.T("deck_toggle_hover_tips"), () => SpireCodexConfig.ShowHoverTips, v => SpireCodexConfig.ShowHoverTips = v));
-        _content.AddChild(SettingToggle(Loc.T("deck_toggle_map_guidance"), () => SpireCodexConfig.ShowMapDanger, v => SpireCodexConfig.ShowMapDanger = v));
-        _content.AddChild(SettingToggle(Loc.T("deck_toggle_upcoming_events"), () => SpireCodexConfig.ShowUpcomingEvents, v => SpireCodexConfig.ShowUpcomingEvents = v));
-        _content.AddChild(SettingToggle(Loc.T("deck_toggle_post_run_card"), () => SpireCodexConfig.ShowPostRunCard, v => SpireCodexConfig.ShowPostRunCard = v));
+        // Run tracking (privacy). Turning uploads on here re-triggers the consent disclosure when
+        // it was never granted, exactly as flipping it in the game's own options menu does.
+        AboutHead(Loc.T("deck_settings_run_tracking"));
+        AboutText(Loc.T("deck_settings_run_tracking_desc"));
+        _content.AddChild(SettingCheck(Loc.T("deck_toggle_upload_runs"), () => SpireCodexConfig.UploadRuns, v => SpireCodexConfig.UploadRuns = v));
+        _content.AddChild(SettingCheck(Loc.T("deck_toggle_live_status"), () => SpireCodexConfig.ShareLiveStatus, v => SpireCodexConfig.ShareLiveStatus = v));
+        _content.AddChild(BuildBackfillRow());
 
+        // On-screen surfaces.
+        AboutHead(Loc.T("deck_settings_onscreen"));
+        _content.AddChild(SettingCheck(Loc.T("deck_toggle_damage_meter"), () => SpireCodexConfig.ShowDamageMeter, v => SpireCodexConfig.ShowDamageMeter = v));
+        _content.AddChild(SettingCheck(Loc.T("deck_toggle_card_reward_hints"), () => SpireCodexConfig.ShowCardRewardHints, v => SpireCodexConfig.ShowCardRewardHints = v));
+        _content.AddChild(SettingCheck(Loc.T("deck_toggle_hover_tips"), () => SpireCodexConfig.ShowHoverTips, v => SpireCodexConfig.ShowHoverTips = v));
+        _content.AddChild(SettingCheck(Loc.T("deck_toggle_map_guidance"), () => SpireCodexConfig.ShowMapDanger, v => SpireCodexConfig.ShowMapDanger = v));
+        _content.AddChild(SettingCheck(Loc.T("deck_toggle_upcoming_events"), () => SpireCodexConfig.ShowUpcomingEvents, v => SpireCodexConfig.ShowUpcomingEvents = v));
+        _content.AddChild(SettingCheck(Loc.T("deck_toggle_post_run_card"), () => SpireCodexConfig.ShowPostRunCard, v => SpireCodexConfig.ShowPostRunCard = v));
         AboutText(Loc.T("deck_settings_onscreen_desc"));
 
+        // Controls: the overlay hotkey + controller button, now configurable right here instead of
+        // only in the game's mod options menu.
+        AboutHead(Loc.T("deck_settings_controls"));
+        _content.AddChild(BuildHotkeyRow());
+        _content.AddChild(BuildControllerRow());
+
+        // Replay the first-run welcome card.
         var replay = new Button { Text = Loc.T("deck_settings_show_welcome"), SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
-        replay.AddThemeFontSizeOverride("font_size", 13);
-        replay.AddThemeColorOverride("font_color", Accent);
-        replay.AddThemeStyleboxOverride("normal", ButtonBox(BgSofter, Border));
-        replay.AddThemeStyleboxOverride("hover", ButtonBox(Border, Accent));
-        replay.AddThemeStyleboxOverride("pressed", ButtonBox(Border, Accent));
+        StyleSecondary(replay);
         replay.Pressed += () => { Visible = false; WelcomeCard.ShowAgain(); };
         _content.AddChild(replay);
 
@@ -987,6 +736,23 @@ public partial class DeckImagePanel : CanvasLayer
         // language automatically), just a heads-up so players know the behaviour exists.
         AboutHead(Loc.T("deck_settings_localization"));
         AboutText(Loc.T("deck_settings_localization_desc"));
+    }
+
+    // ---- Import tab -----------------------------------------------------------------
+
+    // Bringing an unmodded save across. Modded STS2 writes to its own steam/<id>/modded/ tree, so
+    // first-time modders land on an empty account; this copies the vanilla one over. Its own tab
+    // rather than a Settings section: it is a one-off task people go looking for, not a toggle.
+    private void BuildImport()
+    {
+        AboutHead(Loc.T("deck_settings_import"));
+        AboutText(Loc.T("deck_settings_import_desc"));
+        _content.AddChild(BuildImportRow());
+
+        // Credit where it's due: Ind-E's ImportVanillaSaves worked this out first.
+        AboutHead(Loc.T("deck_import_credit_head"));
+        AboutText(Loc.T("deck_import_credit"));
+        _content.AddChild(LinkButton(Loc.T("deck_import_credit_link"), ImportCreditUrl));
     }
 
     // A row of selectable bracket buttons; the active one is gold. Clicking sets the config and
@@ -1020,32 +786,204 @@ public partial class DeckImagePanel : CanvasLayer
                 "font_color", BracketChoices[i].Bracket == SpireCodexConfig.Stats ? Accent : TextMuted);
     }
 
-    // A label + On/Off button bound to a bool config field. Clicking flips and persists it.
-    private Control SettingToggle(string label, Func<bool> get, Action<bool> set)
+    // A gold checkbox bound to a bool config field (the extractor mod's box style: a gold ring
+    // with a solid gold fill when on). Clicking flips and persists it immediately.
+    private Control SettingCheck(string label, Func<bool> get, Action<bool> set)
+    {
+        var cb = new CheckBox { Text = label, ButtonPressed = get() };
+        cb.AddThemeFontSizeOverride("font_size", 14);
+        cb.AddThemeColorOverride("font_color", Text);
+        cb.AddThemeColorOverride("font_hover_color", AccentBright);
+        cb.AddThemeColorOverride("font_pressed_color", Text);
+        cb.AddThemeConstantOverride("h_separation", 10);
+        cb.AddThemeIconOverride("unchecked", CheckIcon(false));
+        cb.AddThemeIconOverride("checked", CheckIcon(true));
+        cb.AddThemeIconOverride("unchecked_disabled", CheckIcon(false));
+        cb.AddThemeIconOverride("checked_disabled", CheckIcon(true));
+        cb.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
+        cb.Toggled += on => { set(on); PersistConfig(); };
+        return cb;
+    }
+
+    // Cached checkbox icons (built once): a gold-bordered square, dark interior, gold block when on.
+    private ImageTexture? _checkOn, _checkOff;
+    private ImageTexture CheckIcon(bool on) => on ? (_checkOn ??= MakeCheckIcon(true)) : (_checkOff ??= MakeCheckIcon(false));
+    private static ImageTexture MakeCheckIcon(bool check)
+    {
+        const int size = 22, border = 2, inset = 6;
+        var img = Image.CreateEmpty(size, size, false, Image.Format.Rgba8);
+        img.Fill(Accent);                                                                      // gold ring
+        img.FillRect(new Rect2I(border, border, size - 2 * border, size - 2 * border), Field); // dark interior
+        if (check)
+            img.FillRect(new Rect2I(inset, inset, size - 2 * inset, size - 2 * inset), Accent); // gold fill
+        return ImageTexture.CreateFromImage(img);
+    }
+
+    // Overlay hotkey picker (F5-F12, or None to unbind the key).
+    private Control BuildHotkeyRow()
+    {
+        var keys = new[] { HotKey.None, HotKey.F5, HotKey.F6, HotKey.F7, HotKey.F8, HotKey.F9, HotKey.F10, HotKey.F11, HotKey.F12 };
+        return SettingDropdown(Loc.T("deck_setting_hotkey"),
+            keys, k => k == HotKey.None ? Loc.T("deck_key_none") : k.ToString(),
+            SpireCodexConfig.OverlayKey,
+            k => { SpireCodexConfig.OverlayKey = k; PersistConfig(); UpdateHint(); });
+    }
+
+    // Controller-button picker for the same overlay toggle (Off / stick-click).
+    private Control BuildControllerRow()
+    {
+        var pads = new[] { ControllerToggle.Off, ControllerToggle.StickClick };
+        return SettingDropdown(Loc.T("deck_setting_controller"),
+            pads, p => p == ControllerToggle.StickClick ? Loc.T("deck_pad_stick") : Loc.T("deck_pad_off"),
+            SpireCodexConfig.OverlayPad,
+            p => { SpireCodexConfig.OverlayPad = p; PersistConfig(); UpdateHint(); });
+    }
+
+    // "Backfill past runs" action: manually upload the player's existing local run history now.
+    // No-op with a hint if uploads/consent aren't on yet; otherwise kicks the backfill (background).
+    private Control BuildBackfillRow()
+    {
+        var box = new VBoxContainer();
+        box.AddThemeConstantOverride("separation", 4);
+
+        var btn = new Button { Text = Loc.T("deck_backfill_button"), SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
+        StyleSecondary(btn);
+        box.AddChild(btn);
+
+        var status = new Label
+        {
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            Visible = false,
+        };
+        status.AddThemeFontSizeOverride("font_size", 12);
+        box.AddChild(status);
+        _backfillStatus = status; // _Process drives the live count/percentage from here
+
+        btn.Pressed += () =>
+        {
+            // On success the running count is taken over by _Process; here just show the kickoff
+            // line (or the "turn uploads on" hint when it's a no-op).
+            var ok = RunUploader.BackfillNow();
+            status.Text = Loc.T(ok ? "deck_backfill_started" : "deck_backfill_need_uploads");
+            status.AddThemeColorOverride("font_color", Accent);
+            status.Visible = true;
+        };
+        return box;
+    }
+
+    // "Import vanilla saves": pick a vanilla profile and a modded profile, then copy the first
+    // onto the second (unlocks, ancient stats, prefs, run history). Two-step confirm because it
+    // overwrites the target; the vanilla side is only ever read.
+    private Control BuildImportRow()
+    {
+        var box = new VBoxContainer();
+        box.AddThemeConstantOverride("separation", 6);
+
+        var profiles = new[] { 1, 2, 3 };
+        box.AddChild(SettingDropdown(Loc.T("deck_import_source"), profiles,
+            i => Loc.F("deck_import_profile", i), _importSource,
+            i => { _importSource = i; DisarmImport(); }));
+        box.AddChild(SettingDropdown(Loc.T("deck_import_target"), profiles,
+            i => Loc.F("deck_import_profile", i), _importTarget,
+            i => { _importTarget = i; DisarmImport(); }));
+
+        var btn = new Button { Text = Loc.T("deck_import_button"), SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
+        StyleSecondary(btn);
+        box.AddChild(btn);
+        _importButton = btn;
+
+        var status = new Label
+        {
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            Visible = false,
+        };
+        status.AddThemeFontSizeOverride("font_size", 12);
+        box.AddChild(status);
+
+        btn.Pressed += () =>
+        {
+            void Say(string text, Color color)
+            {
+                status.Text = text;
+                status.AddThemeColorOverride("font_color", color);
+                status.Visible = true;
+            }
+
+            if (Core.SaveImport.RunInProgress()) { DisarmImport(); Say(Loc.T("deck_import_in_run"), Danger); return; }
+            if (!Core.SaveImport.VanillaProfileHasData(_importSource))
+            {
+                DisarmImport();
+                Say(Loc.F("deck_import_no_source", _importSource), Danger);
+                return;
+            }
+
+            // First press arms and warns, second press does it.
+            if (!_importArmed)
+            {
+                _importArmed = true;
+                btn.Text = Loc.T("deck_import_confirm");
+                Say(Loc.F("deck_import_warn", _importTarget), Accent);
+                return;
+            }
+            DisarmImport();
+
+            var runs = Core.SaveImport.Import(_importSource, _importTarget);
+            if (runs < 0) { Say(Loc.T("deck_import_failed"), Danger); return; }
+
+            // The menu still shows the pre-import profile, so reload it. On a miss (game rename)
+            // the copy is still on disk and a restart picks it up.
+            if (Core.SaveImport.ReloadMainMenu())
+            {
+                Say(Loc.F("deck_import_done", _importSource, _importTarget, runs), Good);
+                Visible = false;
+            }
+            else
+            {
+                Say(Loc.F("deck_import_done_restart", _importSource, _importTarget, runs), Good);
+            }
+        };
+        return box;
+    }
+
+    // Back to the unarmed state after a profile change or a completed/aborted import.
+    private void DisarmImport()
+    {
+        _importArmed = false;
+        if (_importButton is { } b && GodotObject.IsInstanceValid(b)) b.Text = Loc.T("deck_import_button");
+    }
+
+    // A label + OptionButton bound to an enum config field, styled to match the panel chrome.
+    private Control SettingDropdown<T>(string label, T[] options, Func<T, string> name, T current, Action<T> set)
     {
         var row = new HBoxContainer();
         row.AddThemeConstantOverride("separation", 8);
 
-        var name = new Label { Text = label, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        name.AddThemeColorOverride("font_color", Text);
-        name.AddThemeFontSizeOverride("font_size", 13);
-        name.VerticalAlignment = VerticalAlignment.Center;
-        row.AddChild(name);
+        var nameLabel = new Label { Text = label, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        nameLabel.AddThemeColorOverride("font_color", Text);
+        nameLabel.AddThemeFontSizeOverride("font_size", 13);
+        nameLabel.VerticalAlignment = VerticalAlignment.Center;
+        row.AddChild(nameLabel);
 
-        var b = new Button { CustomMinimumSize = new Vector2(54, 0) };
-        b.AddThemeFontSizeOverride("font_size", 13);
-        b.AddThemeStyleboxOverride("normal", ButtonBox(BgSofter, Border));
-        b.AddThemeStyleboxOverride("hover", ButtonBox(Border, Accent));
-        b.AddThemeStyleboxOverride("pressed", ButtonBox(Border, Accent));
-        void Paint()
+        var opt = new OptionButton();
+        opt.AddThemeFontSizeOverride("font_size", 13);
+        opt.AddThemeColorOverride("font_color", Text);
+        opt.AddThemeColorOverride("font_hover_color", AccentBright);
+        opt.AddThemeColorOverride("font_focus_color", Text);
+        opt.AddThemeStyleboxOverride("normal", ButtonBox(BgSofter, Border));
+        opt.AddThemeStyleboxOverride("hover", ButtonBox(Border, Accent));
+        opt.AddThemeStyleboxOverride("pressed", ButtonBox(Border, Accent));
+        opt.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
+        var selected = 0;
+        for (var i = 0; i < options.Length; i++)
         {
-            var on = get();
-            b.Text = on ? Loc.T("deck_on") : Loc.T("deck_off");
-            b.AddThemeColorOverride("font_color", on ? Good : TextMuted);
+            opt.AddItem(name(options[i]), i);
+            if (EqualityComparer<T>.Default.Equals(options[i], current)) selected = i;
         }
-        b.Pressed += () => { set(!get()); PersistConfig(); Paint(); };
-        Paint();
-        row.AddChild(b);
+        opt.Select(selected);
+        opt.ItemSelected += idx => set(options[(int)idx]);
+        row.AddChild(opt);
         return row;
     }
 
@@ -1074,7 +1012,13 @@ public partial class DeckImagePanel : CanvasLayer
         var note = InfoLabel();
         note.Text = Loc.T("deck_about_companion");
         _content.AddChild(note);
-        _content.AddChild(LinkButton(Loc.T("deck_about_download_overlay"), OverlayUrl));
+
+        // Prominent gold CTA piping players to the Overwolf overlay for the live in-run dashboard
+        // (this panel no longer duplicates it), and a natural place to advertise the overlay.
+        var overlayCta = new Button { Text = Loc.T("deck_about_download_overlay"), SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
+        StylePrimary(overlayCta);
+        overlayCta.Pressed += () => OS.ShellOpen(OverlayUrl);
+        _content.AddChild(overlayCta);
 
         AboutHead(Loc.T("deck_about_whatitis"));
         AboutText(Loc.T("deck_about_whatitis_body"));
@@ -1205,15 +1149,16 @@ public partial class DeckImagePanel : CanvasLayer
         return b;
     }
 
-    private static StyleBoxFlat ButtonBox(Color bg, Color border)
-    {
-        var s = new StyleBoxFlat { BgColor = bg, BorderColor = border };
-        s.SetBorderWidthAll(1);
-        s.SetCornerRadiusAll(4);
-        s.ContentMarginLeft = 12; s.ContentMarginRight = 12;
-        s.ContentMarginTop = 4; s.ContentMarginBottom = 4;
-        return s;
-    }
+    private static StyleBoxFlat ButtonBox(Color bg, Color border) => Skin.ButtonBox(bg, border);
+
+    // Extractor-mod button kit (ported so the two mods read as one family). Primary = a filled
+    // gold pill with dark text, for the single main action on a view. Secondary = a dark pill with
+    // a gold border, for supporting actions.
+    private void StylePrimary(Button b) => Skin.Primary(b);
+
+    private void StyleSecondary(Button b) => Skin.Secondary(b);
+
+    private static StyleBoxFlat KitBox(Color bg, Color border) => Skin.KitBox(bg, border);
 
     private void AddEmpty(Control into, string text)
     {
@@ -1245,17 +1190,10 @@ public partial class DeckImagePanel : CanvasLayer
         => DateTimeOffset.TryParse(iso, out var d) ? d.ToString("MMM d") : "";
 
     // "THE_INSATIABLE_BOSS" -> "The Insatiable Boss"; null -> "?".
-    // Character display name in the player's language (the game's own translation), falling back
-    // to the prettified id if the game hasn't loaded that character's loc, or the id is unknown.
-    // Game terms resolve to the game's own localized name (via its loc tables); each falls back
-    // to a prettified id when the game has no entry, so a miss reads the same as before.
+    // Game terms resolve to the game's own localized name (via its loc tables), each falling back
+    // to a prettified id when the game has no entry, so a miss reads the same as before. Only the
+    // two the Leaderboard/Runs tabs need remain: the character and the encounter that ended a run.
     private static string CharName(string? id) => Loc.CharacterName(id) ?? Pretty(id);
-    private static string CardName(string? id) => Loc.CardName(id) ?? Pretty(id);
-    private static string RelicName(string? id) => Loc.RelicName(id) ?? Pretty(id);
-    private static string PotionName(string? id) => Loc.PotionName(id) ?? Pretty(id);
-    private static string PowerName(string? id) => Loc.PowerName(id) ?? Pretty(id);
-    private static string EnchName(string? id) => Loc.EnchantmentName(id) ?? Pretty(id);
-    private static string MonName(string? id) => Loc.MonsterName(id) ?? Pretty(id);
     private static string EncName(string? id) => Loc.EncounterName(id) ?? Pretty(id);
 
     private static string Pretty(string? id)
@@ -1268,8 +1206,5 @@ public partial class DeckImagePanel : CanvasLayer
         return string.Join(' ', parts);
     }
 
-    private static Color Hex(string rgb) => new(
-        System.Convert.ToInt32(rgb.Substring(0, 2), 16) / 255f,
-        System.Convert.ToInt32(rgb.Substring(2, 2), 16) / 255f,
-        System.Convert.ToInt32(rgb.Substring(4, 2), 16) / 255f);
+    private static Color Hex(string rgb) => Skin.Hex(rgb);
 }

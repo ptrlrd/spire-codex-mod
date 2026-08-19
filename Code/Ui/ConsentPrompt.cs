@@ -48,7 +48,7 @@ public partial class ConsentPrompt : CanvasLayer
         style.ContentMarginLeft = 22; style.ContentMarginRight = 22;
         style.ContentMarginTop = 16; style.ContentMarginBottom = 16;
         _panel.AddThemeStyleboxOverride("panel", style);
-        if (ThemeDB.GetProjectTheme() is { } theme) _panel.Theme = theme;
+        Skin.ApplyFont(_panel);
         AddChild(_panel);
 
         var vbox = new VBoxContainer();

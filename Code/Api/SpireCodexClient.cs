@@ -24,21 +24,57 @@ public sealed class SpireCodexClient
         if (!string.IsNullOrEmpty(steamId)) url += $"&steam_id={Uri.EscapeDataString(steamId)}";
         if (!string.IsNullOrEmpty(username)) url += $"&username={Uri.EscapeDataString(username)}";
 
-        try
+        // Retry on rate-limit (429) and transient server errors (502/503/504), honoring Retry-After,
+        // so a run isn't dropped when the API throttles a burst. Backfill also paces itself under the
+        // limit, so these retries are a safety net rather than the common path.
+        for (var attempt = 0; ; attempt++)
         {
-            using var content = new StringContent(runJson, Encoding.UTF8, "application/json");
-            using var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
-            // Authenticated upload when signed in; ?steam_id still attributes unauthenticated.
-            if (!string.IsNullOrEmpty(SteamAuth.Token))
-                req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", SteamAuth.Token);
-            using var resp = await Http.SendAsync(req).ConfigureAwait(false);
-            var body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            return new RunUploadResult(resp.IsSuccessStatusCode, (int)resp.StatusCode, body);
+            try
+            {
+                using var content = new StringContent(runJson, Encoding.UTF8, "application/json");
+                using var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
+                // Authenticated upload when signed in; ?steam_id still attributes unauthenticated.
+                if (!string.IsNullOrEmpty(SteamAuth.Token))
+                    req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", SteamAuth.Token);
+                using var resp = await Http.SendAsync(req).ConfigureAwait(false);
+                var body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+                var code = (int)resp.StatusCode;
+                if ((code == 429 || code == 502 || code == 503 || code == 504) && attempt < UploadMaxRetries)
+                {
+                    await Task.Delay(RetryDelay(resp, attempt)).ConfigureAwait(false);
+                    continue;
+                }
+                return new RunUploadResult(resp.IsSuccessStatusCode, code, body);
+            }
+            catch (Exception e)
+            {
+                if (attempt < UploadMaxRetries)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Min(15, 1 << attempt))).ConfigureAwait(false);
+                    continue;
+                }
+                return new RunUploadResult(false, 0, e.Message);
+            }
         }
-        catch (Exception e)
+    }
+
+    private const int UploadMaxRetries = 4;
+
+    // How long to wait before retrying a throttled/failed upload: the server's Retry-After when it
+    // sends one (capped so we never stall for a minute+), else exponential backoff (1,2,4,8s).
+    private static TimeSpan RetryDelay(HttpResponseMessage resp, int attempt)
+    {
+        var ra = resp.Headers.RetryAfter;
+        if (ra?.Delta is { } d && d > TimeSpan.Zero)
+            return d < TimeSpan.FromSeconds(60) ? d : TimeSpan.FromSeconds(60);
+        if (ra?.Date is { } date)
         {
-            return new RunUploadResult(false, 0, e.Message);
+            var wait = date - DateTimeOffset.UtcNow;
+            if (wait > TimeSpan.Zero)
+                return wait < TimeSpan.FromSeconds(60) ? wait : TimeSpan.FromSeconds(60);
         }
+        return TimeSpan.FromSeconds(Math.Min(30, 1 << attempt));
     }
 
     // GET /api/runs/scores/{entityType}[?character=] -> { "ENTITY_ID": {score, win_rate,
