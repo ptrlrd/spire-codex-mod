@@ -122,8 +122,7 @@ public sealed class RunUploader : IDisposable
     {
         try
         {
-            var appData = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData);
-            var steamDir = Path.Combine(appData, "SlayTheSpire2", "steam");
+            var steamDir = Path.Combine(Godot.OS.GetUserDataDir(), "steam");
             if (!Directory.Exists(steamDir)) return null;
 
             return Directory.GetDirectories(steamDir)
