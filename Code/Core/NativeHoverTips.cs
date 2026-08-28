@@ -329,8 +329,8 @@ internal static class NativeHoverTips
     //   Pick rate 5.0%
     private static string BuildStats(EntityScore sc, CardStats? full, bool isBest, bool showElo)
     {
-        // Elo-rated cards use the Elo tier (matches the plate); everything else the Score tier.
-        var tier = CodexScores.EloTier(sc.Elo) ?? Ranks.Tier(sc.Score);
+        // Tier letters grade Codex Score, matching both the website and the reward plate.
+        var tier = Ranks.Tier(sc.Score);
         var character = RewardContext.Character;
         var sb = new StringBuilder();
         sb.Append(Logo).Append('\n');

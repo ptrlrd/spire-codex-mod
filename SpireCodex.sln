@@ -4,6 +4,8 @@ VisualStudioVersion = 17.5.0.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SpireCodex", "SpireCodex.csproj", "{AD19A12B-15BD-489D-A47F-64ED5D6D5F40}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SpireCodex.Tests", "tests\SpireCodex.Tests\SpireCodex.Tests.csproj", "{2193974B-5FBF-481D-AE72-636E174C984F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -17,5 +19,11 @@ Global
 		{AD19A12B-15BD-489D-A47F-64ED5D6D5F40}.ExportDebug|Any CPU.Build.0 = ExportDebug|Any CPU
 		{AD19A12B-15BD-489D-A47F-64ED5D6D5F40}.ExportRelease|Any CPU.ActiveCfg = ExportRelease|Any CPU
 		{AD19A12B-15BD-489D-A47F-64ED5D6D5F40}.ExportRelease|Any CPU.Build.0 = ExportRelease|Any CPU
+		{2193974B-5FBF-481D-AE72-636E174C984F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2193974B-5FBF-481D-AE72-636E174C984F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2193974B-5FBF-481D-AE72-636E174C984F}.ExportDebug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2193974B-5FBF-481D-AE72-636E174C984F}.ExportDebug|Any CPU.Build.0 = Debug|Any CPU
+		{2193974B-5FBF-481D-AE72-636E174C984F}.ExportRelease|Any CPU.ActiveCfg = Debug|Any CPU
+		{2193974B-5FBF-481D-AE72-636E174C984F}.ExportRelease|Any CPU.Build.0 = Debug|Any CPU
 	EndGlobalSection
 EndGlobal

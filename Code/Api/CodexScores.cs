@@ -1,7 +1,7 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Threading.Tasks;
 
 namespace SpireCodex.Api;
@@ -30,14 +30,20 @@ public static class CodexScores
         public static readonly Sets Empty = new(new(), new(), new());
     }
 
-    private static Sets _global = Sets.Empty; // (no character, all runs): startup baseline + fallback
-    private static Sets _active = Sets.Empty; // the current (character, filter) set lookups serve
-    private static double[] _eloSorted = Array.Empty<double>();
+    // volatile: written by background fetch continuations, read every tick on the Godot thread.
+    // Without it the game thread can keep reading a stale set after a bracket swap.
+    private static volatile Sets _global = Sets.Empty; // (no character, all runs): startup baseline + fallback
+    private static volatile Sets _active = Sets.Empty; // the current (character, filter) set lookups serve
 
-    private static string? _charId;                        // current run character (null outside a run)
-    private static string _filter = StatFilter.DefaultKey; // active stat-filter key
-    private static readonly Dictionary<string, Sets> _cache = new(); // key: Key(char, filter)
-    private static string? _loadingKey;
+    private static volatile string? _charId;                        // current run character (null outside a run)
+    private static volatile string _filter = StatFilter.DefaultKey; // active stat-filter key
+    private static readonly ConcurrentDictionary<string, Sets> _cache = new(); // key: Key(char, filter)
+    // Keys with a fetch in flight. A SET, not a single slot: there are five brackets and the
+    // player can switch away and back before one lands. A single slot only remembered the most
+    // recent key, so returning to an earlier bracket re-issued its fetch (seen in the wild:
+    // three concurrent loads of the same key, which then blew through the 60/min scores limit
+    // and left a switch taking 30s+ instead of 0.3s).
+    private static readonly ConcurrentDictionary<string, byte> _inFlight = new();
     private static bool _loading;
 
     public static bool Loaded { get; private set; }
@@ -56,22 +62,6 @@ public static class CodexScores
 
     public static EntityScore? Potion(string id) =>
         _active.Potions.GetValueOrDefault(id) ?? _global.Potions.GetValueOrDefault(id);
-
-    // Sorted Codex Elo values across all rated cards, for percentile-based Elo tiers. Elo is
-    // global (neither the character slice nor the stat filter changes it), so the global
-    // distribution suffices.
-    public static string? EloTier(double? elo)
-    {
-        if (elo is not { } e || _eloSorted.Length < 20) return null;
-        var idx = Array.BinarySearch(_eloSorted, e);
-        if (idx < 0) idx = ~idx;
-        var topShare = 1.0 - (double)idx / _eloSorted.Length;
-        return topShare <= 0.05 ? "S"
-            : topShare <= 0.20 ? "A"
-            : topShare <= 0.40 ? "B"
-            : topShare <= 0.65 ? "C"
-            : topShare <= 0.85 ? "D" : "F";
-    }
 
     public static void EnsureLoaded()
     {
@@ -114,8 +104,9 @@ public static class CodexScores
         var charId = EffectiveChar();
         var key = Key(charId, _filter);
         if (_cache.TryGetValue(key, out var sets)) { _active = sets; return; }
-        if (_loadingKey == key) return;
-        _loadingKey = key;
+        // TryAdd is the claim: exactly one caller starts the fetch for a key, however many
+        // ticks or bracket flips ask for it while that fetch is running.
+        if (!_inFlight.TryAdd(key, 0)) return;
         _ = LoadSetAsync(charId, _filter, key);
     }
 
@@ -134,17 +125,20 @@ public static class CodexScores
         }
         finally
         {
-            if (_loadingKey == key) _loadingKey = null;
+            _inFlight.TryRemove(key, out _);
         }
     }
 
+    // The three entity types are independent, so fetch them together: one round trip's latency
+    // per bracket instead of three chained ones.
     private static async Task<Sets> FetchAsync(string? charId, string filter)
     {
         var client = new SpireCodexClient();
-        var cards = await client.GetScoresAsync("cards", charId, filter).ConfigureAwait(false);
-        var relics = await client.GetScoresAsync("relics", charId, filter).ConfigureAwait(false);
-        var potions = await client.GetScoresAsync("potions", charId, filter).ConfigureAwait(false);
-        return new Sets(cards, relics, potions);
+        var cards = client.GetScoresAsync("cards", charId, filter);
+        var relics = client.GetScoresAsync("relics", charId, filter);
+        var potions = client.GetScoresAsync("potions", charId, filter);
+        await Task.WhenAll(cards, relics, potions).ConfigureAwait(false);
+        return new Sets(cards.Result, relics.Result, potions.Result);
     }
 
     private static async Task LoadGlobalAsync()
@@ -170,9 +164,6 @@ public static class CodexScores
                     }
                     _global = sets;
                     _cache[Key(null, StatFilter.DefaultKey)] = sets;
-                    _eloSorted = sets.Cards.Values
-                        .Where(e => e.Elo != null).Select(e => e.Elo!.Value)
-                        .OrderBy(x => x).ToArray();
                     Loaded = true;
                     Activate(); // point _active at the right (char, filter) now that we have data
                     Diag($"global loaded OK: {sets.Cards.Count} cards, {sets.Relics.Count} relics, {sets.Potions.Count} potions");

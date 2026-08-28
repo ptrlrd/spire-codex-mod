@@ -155,10 +155,9 @@ public partial class CardRewardHints : Node
             return;
         }
 
-        // Elo-rated cards lead with the Elo tier + the Elo number; unrated ones fall back
-        // to the win-outcome Score tier (today's view).
-        var eloTier = CodexScores.EloTier(sc.Elo);
-        var tier = eloTier ?? Ranks.Tier(sc.Score);
+        // Tier letters are Codex Score grades, matching the website. Elo remains the
+        // preference signal used for Best Pick, but it has no S-F grade on the metrics table.
+        var tier = Ranks.Tier(sc.Score);
         var tierColor = isBest ? BestGold : TierColor(tier);
 
         if (!_badges.TryGetValue(key, out var badge) || !GodotObject.IsInstanceValid(badge))

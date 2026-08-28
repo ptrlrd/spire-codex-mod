@@ -11,14 +11,6 @@ public sealed record CardStats(
     string Id, double? Score, double WinRate, double PickRate,
     double BaselineWinRate, int Picks, IReadOnlyList<CharStat> ByCharacter);
 
-public static class Ranks
-{
-    // Codex Score (0-100) -> tier letter. Cutoffs are easy to retune to the site's Tier List.
-    public static string Tier(double score) =>
-        score >= 90 ? "S" : score >= 75 ? "A" : score >= 60 ? "B"
-        : score >= 45 ? "C" : score >= 30 ? "D" : "F";
-}
-
 // Lazily fetches and caches full per-entity stats. Get() returns null while loading; a fetch
 // is kicked off on first request and the result cached (including failures, to avoid retries).
 public sealed class StatsCache

@@ -77,6 +77,7 @@ jobs:
         shell: bash
         run: |
           printf '<Project><PropertyGroup><GodotPath>%s</GodotPath></PropertyGroup></Project>\n' "$GODOT_PATH" > Directory.Build.props
+          dotnet test tests/SpireCodex.Tests/SpireCodex.Tests.csproj --configuration Debug
           DOTNET=dotnet bash tools/package.sh
 
       - name: Upload artifact
