@@ -6,12 +6,12 @@
 
 # Spire Codex — Slay the Spire 2 mod
 
-The in-game companion for <a href="https://spire-codex.com" target="_blank">spire-codex.com</a>. It connects Slay the
+The in-game companion for [spire-codex.com](https://spire-codex.com). It connects Slay the
 Spire 2 to the Spire Codex ecosystem: automatic run tracking and a native companion panel, using
-the same <a href="https://github.com/ptrlrd/spire-codex" target="_blank">data and API</a> as the website and the <a href="https://www.overwolf.com/app/ptrlrd-spire_codex" target="_blank">Overwolf
-overlay</a>.
+the same [data and API](https://github.com/ptrlrd/spire-codex) as the website and the [Overwolf
+overlay](https://www.overwolf.com/app/ptrlrd-spire_codex).
 
-- **Run tracking** — uploads your finished runs so they land on <a href="https://spire-codex.com" target="_blank">spire-codex.com</a>
+- **Run tracking** — uploads your finished runs so they land on [spire-codex.com](https://spire-codex.com)
   and the leaderboards automatically. Off by default; you opt in.
 - **In-game companion (F5)** — a draggable panel with your live run, leaderboards, your recent
   runs, and an About tab. Plus on-map guidance: the recommended route with community danger,
@@ -21,20 +21,20 @@ overlay</a>.
   overlay</a>
 
 ## Install
-
-1. Install <a href="https://github.com/Alchyr/BaseLib-StS2" target="_blank">BaseLib</a> by <a href="https://steamcommunity.com/sharedfiles/filedetails/?id=3737335127" target="_blank">subscribing on the Steam Workshop</a>
-2. Download the <a href="https://github.com/ptrlrd/spire-codex-mod/releases/latest"  target="_blank">latest release</a> and extract it into the [Local Mods folder](#local-mods)
+You can subscribe to [Spire Codex on the Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3747536911), or you can manually install a specific release:
+1. Subscribe to [BaseLib on the Steam Workshop](https://steamcommunity.com/workshop/filedetails/?id=3737335127) and make sure Steam installs it into your [Workshop Mods folder](#workshop-mods)
+2. Download the desired [release](https://github.com/ptrlrd/spire-codex-mod/releases) and extract it into the [local Mods folder](#local-mods)
 3. Launch the game and press **F5** or **L3/R3** on your controller
 
 ## Build
 ### Build Prerequisites
-- Godot 4.5.1 .NET or equivalent - e.g. MegaCrit's customised <a href="https://megadot.megacrit.com">MegaDot</a>
-- The <a href="https://dotnet.microsoft.com/en-us/download" target="_blank">.NET SDK</a> (9.0 or higher)
+- Godot 4.5.1 .NET or equivalent - e.g. MegaCrit's customised [MegaDot](https://megadot.megacrit.com)
+- The [.NET SDK](https://dotnet.microsoft.com/en-us/download) (9.0 or higher)
 
 ### Runtime prequisites:
 - A local installation of Slay the Spire 2
-- BaseLib, preferably <a href="https://steamcommunity.com/workshop/filedetails/?id=3737335127" target="_blank">via Steam Workshop</a>
-  - Note: You can check to see if you already have it in your [Workshop Mods folder](#workshop-mods)
+- BaseLib, preferably by subscribing to [BaseLib on the Steam Workshop](https://steamcommunity.com/workshop/filedetails/?id=3737335127)
+  - Note: You can check to see if you already have it in your [Workshop folder](#workshop-mods)
 
 ### Instructions
 
@@ -50,19 +50,19 @@ overlay</a>.
    
     `dotnet publish SpireCodex.csproj -c Debug`
 
-Note: The <a href="https://github.com/Alchyr/ModTemplate-StS2/wiki/Setup" target="_blank">ModTemplate-StS2 wiki</a> also has additional information that may be useful if you run into issues, though this project is not setup identically.
+Note: The [ModTemplate-StS2 wiki](https://github.com/Alchyr/ModTemplate-StS2/wiki/Setup) also has additional information that may be useful if you run into issues, though this project is not setup identically.
 
 ## Links
 
-- Website: <a href="https://spire-codex.com" target="_blank">spire-codex.com</a>
-- Main project & API: <a href="https://github.com/ptrlrd/spire-codex" target="_blank">github.com/ptrlrd/spire-codex</a>
-- Discord: <a href="https://discord.gg/uged4qFufK" target="_blank">discord.gg/uged4qFufK</a>
-- Support: <a href="https://www.patreon.com/cw/SpireCodex" target="_blank">Patreon</a>
+- Website: [spire-codex.com](https://spire-codex.com)
+- Main project & API: [github.com/ptrlrd/spire-codex](https://github.com/ptrlrd/spire-codex)
+- Discord: [discord.gg/uged4qFufK](https://discord.gg/uged4qFufK)
+- Support: [Patreon](https://www.patreon.com/cw/SpireCodex)
 
 ## Credits
-The "Import vanilla saves" button is based on <a href="https://github.com/Ind-E/ImportVanillaSaves" target="_blank">ImportVanillaSaves</a> by <a href="https://github.com/Ind-E" target="_blank">Ind-E</a>, used with permission.
+The "Import vanilla saves" button is based on [ImportVanillaSaves](https://github.com/Ind-E/ImportVanillaSaves) by [Ind-E](https://github.com/Ind-E), used with permission.
 
-Full credits and licenses: <a href="./THIRD-PARTY.md" target="_blank">THIRD-PARTY.md</a>.
+For full credits and licenses see [THIRD-PARTY.md](./THIRD-PARTY.md).
 
 ## Useful Directory/Folder Information
 ## Steam Libraries
