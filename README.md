@@ -6,46 +6,43 @@
 
 # Spire Codex — Slay the Spire 2 mod
 
-The in-game companion for **[spire-codex.com](https://spire-codex.com)**. It connects Slay the
+The in-game companion for <a href="https://spire-codex.com" target="_blank">spire-codex.com</a>. It connects Slay the
 Spire 2 to the Spire Codex ecosystem: automatic run tracking and a native companion panel, using
-the same data and API as the [website](https://github.com/ptrlrd/spire-codex) and the Overwolf
-overlay.
+the same <a href="https://github.com/ptrlrd/spire-codex" target="_blank">data and API</a> as the website and the <a href="https://www.overwolf.com/app/ptrlrd-spire_codex" target="_blank">Overwolf
+overlay</a>.
 
-- **Run tracking** — uploads your finished runs so they land on [spire-codex.com](https://spire-codex.com)
+- **Run tracking** — uploads your finished runs so they land on <a href="https://spire-codex.com" target="_blank">spire-codex.com</a>
   and the leaderboards automatically. Off by default; you opt in.
 - **In-game companion (F5)** — a draggable panel with your live run, leaderboards, your recent
   runs, and an About tab. Plus on-map guidance: the recommended route with community danger,
   upcoming events, win-rate plates on card rewards and shops, and community stats inside the
-  game's own tooltips.
-- **Overwolf Overlay** — pairs perfectly with the Overwolf overlay. If you haven't downloaded it yet, get it at [spire-codex.com/overlay](https://www.overwolf.com/app/ptrlrd-spire_codex)
+  game's own tooltips
+- **Overwolf Overlay** — pairs perfectly with the Overwolf overlay. If you haven't downloaded it yet, get it at <a href="https://www.overwolf.com/app/ptrlrd-spire_codex" target="_blank">Overwolf
+  overlay</a>
 
 ## Install
 
-1. Install [BaseLib](https://www.nexusmods.com/slaythespire2/mods/103) (the required dependency)
-   into the game's `mods/` folder (paths below).
-2. Download the latest release and extract it into the same `mods/` folder, so you end up with
-   `mods/SpireCodex/` next to `mods/BaseLib/`.
-3. Launch the game and press **F5** or **L3/R3** on your controller.
+1. Install <a href="https://github.com/Alchyr/BaseLib-StS2" target="_blank">BaseLib</a> by <a href="https://steamcommunity.com/sharedfiles/filedetails/?id=3737335127" target="_blank">subscribing on the Steam Workshop</a>
+2. Download the <a href="https://github.com/ptrlrd/spire-codex-mod/releases/latest"  target="_blank">latest release</a> and extract it into the [Local Mods folder](#local-mods)
+3. Launch the game and press **F5** or **L3/R3** on your controller
 
 ## Build
-### Prerequisites
-- Godot 4.5.1 .NET or equivalent - e.g. MegaCrit's customised [MegaDot](https://megadot.megacrit.com/).
-- The [.NET SDK](https://dotnet.microsoft.com/en-us/download) (9.0 or higher)
-
-Note: On Windows, the scripts under `tools/` are configured to run WSL, but still target your Windows installation of .NET, etc.
-
+### Build Prerequisites
+- Godot 4.5.1 .NET or equivalent - e.g. MegaCrit's customised <a href="https://megadot.megacrit.com">MegaDot</a>
+- The <a href="https://dotnet.microsoft.com/en-us/download" target="_blank">.NET SDK</a> (9.0 or higher)
 
 ### Runtime prequisites:
-- A local installation of Slay the Spire 2 install (for `sts2.dll`)
-- BaseLib, installed [manaually](#install) or [via Steam Workshop](https://steamcommunity.com/workshop/filedetails/?id=3737335127)
-  - Note: You can check to see if you have it in your [Workshop Mods](#Workshop Mods) 
+- A local installation of Slay the Spire 2
+- BaseLib, preferably <a href="https://steamcommunity.com/workshop/filedetails/?id=3737335127" target="_blank">via Steam Workshop</a>
+  - Note: You can check to see if you already have it in your [Workshop Mods folder](#workshop-mods)
+
 ### Instructions
 
-1. Copy `Directory.Build.props.example` to `Directory.Build.props`
-    2. Set the path to your Godot executable, e.g.: 
+1. Copy `Directory.Build.props.example` to `Directory.Build.props` and set the appropriate paths
+   1. The path to your Godot executable is mandatory, e.g.: 
    
        `~/Downloads/megadot-4.5.1-m.14-linux-x86_64-editor-csharp/MegaDot_v4.5.1-stable_mono_linux.x86_64`
-    3. If you installed STS2 or BaseLib into a non-default [Steam Library](#Steam%20Library) location, set additional overrides in `Directory.Build.prop` sas needed. See [Sts2PathDiscovery.props](./Sts2PathDiscovery.props) for available props.
+   2. If you installed STS2 or BaseLib into a non-default [Steam Library](#steam-libraries) location, set additional overrides in `Directory.Build.props` sas needed. See <a href="./Sts2PathDiscovery.props" target="_blank">Sts2PathDiscovery.props</a> for available props.
 2. Run a dotnet build:
   
     `dotnet build SpireCodex.csproj -c Debug`
@@ -53,21 +50,19 @@ Note: On Windows, the scripts under `tools/` are configured to run WSL, but stil
    
     `dotnet publish SpireCodex.csproj -c Debug`
 
-Note: The [ModTemplate-StS2 wiki](https://github.com/Alchyr/ModTemplate-StS2/wiki/Setup) also has additional information that may be useful if you run into issues, though this project is not setup identically.
+Note: The <a href="https://github.com/Alchyr/ModTemplate-StS2/wiki/Setup" target="_blank">ModTemplate-StS2 wiki</a> also has additional information that may be useful if you run into issues, though this project is not setup identically.
 
 ## Links
 
-- Website: **[spire-codex.com](https://spire-codex.com)**
-- Main project & API: **[github.com/ptrlrd/spire-codex](https://github.com/ptrlrd/spire-codex)**
-- Discord: [discord.gg/uged4qFufK](https://discord.gg/uged4qFufK)
-- Support: [Patreon](https://www.patreon.com/cw/SpireCodex)
+- Website: <a href="https://spire-codex.com" target="_blank">spire-codex.com</a>
+- Main project & API: <a href="https://github.com/ptrlrd/spire-codex" target="_blank">github.com/ptrlrd/spire-codex</a>
+- Discord: <a href="https://discord.gg/uged4qFufK" target="_blank">discord.gg/uged4qFufK</a>
+- Support: <a href="https://www.patreon.com/cw/SpireCodex" target="_blank">Patreon</a>
 
 ## Credits
-- The "Import vanilla saves" button is based on
-[ImportVanillaSaves](https://github.com/Ind-E/ImportVanillaSaves) by Ind-E, used with permission.
-- The project was built with the [ModTemplate-StS2](https://github.com/Alchyr/ModTemplate-StS2) starter template.
+The "Import vanilla saves" button is based on <a href="https://github.com/Ind-E/ImportVanillaSaves" target="_blank">ImportVanillaSaves</a> by <a href="https://github.com/Ind-E" target="_blank">Ind-E</a>, used with permission.
 
-Full credits and licenses: [THIRD-PARTY.md](THIRD-PARTY.md).
+Full credits and licenses: <a href="./THIRD-PARTY.md" target="_blank">THIRD-PARTY.md</a>.
 
 ## Useful Directory/Folder Information
 ## Steam Libraries
