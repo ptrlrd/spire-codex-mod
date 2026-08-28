@@ -65,6 +65,9 @@
 
     <!-- Local dev only: install dll/pdb/manifest into the game's mods folder when one exists.
          Skipped on CI (no game), where the build only produces the dll/.pck for packaging. -->
+    <Target Name="CheckPaths" AfterTargets="PostBuildEvent">
+        <Warning Condition="!Exists('$(ModsPath)')" Text="Warning: Cannot copy build/publish to the mods folder: folder not found. You may need to create it or set your SteamLibraryPath in Directory.Build.props. Hint: Currently looking at: $(ModsPath)"/>
+    </Target>
     <Target Name="CopyToModsFolderOnBuild" AfterTargets="PostBuildEvent" Condition="Exists('$(ModsPath)')">
         <Message Text="Copying SpireCodex .dll .pdb .json to mods folder." Importance="high" />
         <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ModsPath)$(MSBuildProjectName)/" />
