@@ -5,9 +5,7 @@ because that license asks for it.
 
 ## ImportVanillaSaves
 
-The Settings tab's "Import vanilla saves" is based on the approach worked out by
-**[ImportVanillaSaves](https://github.com/Ind-E/ImportVanillaSaves)** by **Ind-E**, used with
-permission.
+The Settings tab's "Import vanilla saves" is based on the approach worked out by [ImportVanillaSaves](https://github.com/Ind-E/ImportVanillaSaves) by [Ind-E](https://github.com/Ind-E), used with permission.
 
 Slay the Spire 2 keeps modded progress in its own `modded/` save tree, and copying the files by
 hand does not survive the game's Steam Cloud sync. Ind-E's mod is where the working method comes
@@ -46,14 +44,13 @@ SOFTWARE.
 ## ModTemplate-StS2
 
 The project skeleton (`Godot.NET.Sdk` wiring, Harmony and BaseLib setup, the packaging scripts)
-started from **[ModTemplate-StS2](https://github.com/Alchyr/ModTemplate-StS2)** by **Alchyr**.
+started from [ModTemplate-StS2](https://github.com/Alchyr/ModTemplate-StS2) by [Alchyr](https://github.com/Alchyr).
 
 ## BaseLib
 
 Mod settings registration and the in-game options menu integration use
-**[Alchyr.Sts2.BaseLib](https://www.nuget.org/packages/Alchyr.Sts2.BaseLib)** by **Alchyr**.
+[BaseLib](https://github.com/Alchyr/BaseLib-StS2) by [Alchyr](https://github.com/Alchyr).
 
 ## Steamworks.NET
 
-Steam ticket authentication uses **[Steamworks.NET](https://github.com/rlabrecque/Steamworks.NET)**
-by Riley Labrecque, licensed MIT.
+Steam ticket authentication uses [Steamworks.NET](https://github.com/rlabrecque/Steamworks.NET) by [Riley Labrecque](https://github.com/rlabrecque), licensed MIT.
