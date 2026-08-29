@@ -10,6 +10,14 @@ internal static class RewardContext
     // screen is up (or none of the offered cards have community data).
     public static string? BestCardId;
 
+    // Same, for a relic-selection screen (the ancient 3-relic offer). Relics carry no Elo,
+    // so the winner is the highest Codex Score, which is what their plate shows.
+    public static string? BestRelicId;
+
+    // True when the community's skip rating beats every card currently offered, i.e. the
+    // advice is "take nothing". No card is flagged best in that case.
+    public static bool SkipWins;
+
     // The player's current character (bare id, e.g. "IRONCLAD"), published by the live-state
     // producer. Lets the hovertip show character-specific win rates. Null outside a run.
     public static string? Character;

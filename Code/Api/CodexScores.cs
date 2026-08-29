@@ -12,6 +12,33 @@ namespace SpireCodex.Api;
 public sealed record EntityScore(
     double Score, double WinRate, int Picks, string? Scope = null, double? Elo = null);
 
+// The reserved SKIP entrant from /api/runs/scores/cards?include_skip=1. Skipping competes
+// for the same decision as the cards on screen, so it is fitted in the same Bradley-Terry
+// pass and its Elo is directly comparable to a card's. It has no win rate or Codex Score
+// (there is no "winning with" a skip), so its sample is screens seen / screens skipped and
+// SkipRate is the community skip rate.
+public sealed record SkipScore(
+    double Elo, long Screens, long Skipped, double SkipRate,
+    long[]? ScreensByAct = null, long[]? SkippedByAct = null)
+{
+    // Skipping gets much more attractive as the deck fills up: 20% in Act 1, 32% in Act 2,
+    // 43% in Act 3+. A flat community average would understate the case for skipping late
+    // and overstate it early, so the plate quotes the rate for the act you're actually in.
+    // Falls back to the overall rate when the per-act arrays aren't served.
+    public double RateForAct(int act)
+    {
+        if (ScreensByAct is not { } off || SkippedByAct is not { } pick) return SkipRate;
+        var i = Math.Clamp(act - 1, 0, Math.Min(off.Length, pick.Length) - 1);
+        if (i < 0 || off[i] <= 0) return SkipRate;
+        return 100.0 * pick[i] / off[i];
+    }
+}
+
+// One /scores/{type} response: the entity table, plus the SKIP entrant when it was asked
+// for and the server had it. Skip is null on an older backend, or before the entity store
+// rebuilds after a deploy, and every consumer treats that as "no skip advice".
+public sealed record ScoreSet(Dictionary<string, EntityScore> Scores, SkipScore? Skip = null);
+
 // In-memory cache of community scores across two dimensions:
 //  - character: the current run's character (numbers AS this character when the sample is big
 //    enough; the server falls back per-entry to global so the set stays complete);
@@ -25,7 +52,8 @@ public static class CodexScores
     private sealed record Sets(
         Dictionary<string, EntityScore> Cards,
         Dictionary<string, EntityScore> Relics,
-        Dictionary<string, EntityScore> Potions)
+        Dictionary<string, EntityScore> Potions,
+        SkipScore? Skip = null)
     {
         public static readonly Sets Empty = new(new(), new(), new());
     }
@@ -62,6 +90,11 @@ public static class CodexScores
 
     public static EntityScore? Potion(string id) =>
         _active.Potions.GetValueOrDefault(id) ?? _global.Potions.GetValueOrDefault(id);
+
+    // The community's skip rating for card rewards, or null when the server hasn't got one
+    // yet. The rating is all-runs regardless of bracket (same policy as card Elo), so the
+    // global set is a fine fallback for a bracket that predates it.
+    public static SkipScore? Skip => _active.Skip ?? _global.Skip;
 
     public static void EnsureLoaded()
     {
@@ -134,11 +167,14 @@ public static class CodexScores
     private static async Task<Sets> FetchAsync(string? charId, string filter)
     {
         var client = new SpireCodexClient();
-        var cards = client.GetScoresAsync("cards", charId, filter);
+        // Only the card fetch asks for SKIP; it's a card-reward decision and the other two
+        // types have no skip to rate.
+        var cards = client.GetScoresAsync("cards", charId, filter, includeSkip: true);
         var relics = client.GetScoresAsync("relics", charId, filter);
         var potions = client.GetScoresAsync("potions", charId, filter);
         await Task.WhenAll(cards, relics, potions).ConfigureAwait(false);
-        return new Sets(cards.Result, relics.Result, potions.Result);
+        return new Sets(
+            cards.Result.Scores, relics.Result.Scores, potions.Result.Scores, cards.Result.Skip);
     }
 
     private static async Task LoadGlobalAsync()
@@ -181,6 +217,10 @@ public static class CodexScores
             _loading = false;
         }
     }
+
+    // Let other components write into the same log; it's the one diagnostic channel that
+    // stays on in release builds.
+    internal static void DiagPublic(string msg) => Diag(msg);
 
     // Godot drops GD.Print from background threads, so also write to a file we can read.
     private static void Diag(string msg)

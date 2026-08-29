@@ -66,7 +66,16 @@ public partial class CardRewardHints : Node
             return;
         }
 
-        var cards = CardScan.CollectSelectionCards(container);
+        var cards = CardScan.CollectSelectionCards(container, out var screenType);
+
+        // No cards on the topmost screen? It may be a relic choice (the ancient 3-relic offer).
+        // Plates there turn a hover-and-remember comparison into an at-a-glance one.
+        var relicScreen = false;
+        if (cards.Count == 0)
+        {
+            cards = CardScan.CollectSelectionRelics(container);
+            relicScreen = cards.Count > 0;
+        }
 
         // The shop is a room scene, not an overlay screen; scan it while we're in one so
         // shop cards get plates (and the best-buy flag) too — but not while an overlay
@@ -83,10 +92,26 @@ public partial class CardRewardHints : Node
             return;
         }
 
-        // Best pick = highest Codex Score among the offered cards with community data
-        // (tie-break by sample size). Published to RewardContext for the native hovertip.
-        var bestId = BestPick(cards);
-        RewardContext.BestCardId = bestId;
+        // A best pick only means anything when the screen is OFFERING cards. On a deck
+        // screen the same badge would be read as "remove this" or "upgrade this", and
+        // Codex Elo answers neither question: it's how good the card is, which on a removal
+        // screen is precisely backwards. Shop cards are a draft too (which to buy).
+        var isDraft = relicScreen || inShop || CardScan.IsDraftScreen(screenType);
+
+        var bestId = !isDraft ? null : relicScreen ? BestRelic(cards) : BestPick(cards);
+        if (!isDraft) ScreenDiag(screenType);
+
+        // Skipping competes for the same decision, and its Elo comes from the same fit, so
+        // it's compared directly against the best card on offer. When skip wins, nothing on
+        // screen is worth taking and no card is flagged best.
+        var skip = relicScreen || !isDraft ? null : CodexScores.Skip;
+        var skipWins = skip is { } sk && bestId != null
+            && CodexScores.Card(bestId)?.Elo is { } bestElo && sk.Elo > bestElo;
+        RewardContext.SkipWins = skipWins;
+        if (skipWins) bestId = null;
+
+        RewardContext.BestRelicId = relicScreen ? bestId : null;
+        RewardContext.BestCardId = relicScreen ? null : bestId;
 
         var mouse = GetViewport().GetMousePosition();
         var seen = new HashSet<ulong>();
@@ -100,19 +125,61 @@ public partial class CardRewardHints : Node
             var bounds = CardScan.CardBounds(found.Node);
             if (bounds is not { } rect) continue;
             bounded++;
-            if (CodexScores.Card(found.Id) is { Picks: > 0 }) withScore++;
+            if (Score(found) is { Picks: > 0 }) withScore++;
 
             // While this card is hovered its native hover-tip shows the full stats and the
             // enlarged card sits over the plate, so hide the plate to avoid it clipping
             // through the tip.
             var hovered = rect.HasPoint(mouse);
             seen.Add(found.Node.GetInstanceId());
-            UpdateBadge(found.Node.GetInstanceId(), found.Id, rect, hovered, found.Id == bestId, found.PlateAbove, tipRects);
+            UpdateBadge(found.Node.GetInstanceId(), found, rect, hovered, found.Id == bestId, found.PlateAbove, tipRects);
+        }
+
+        // The skip verdict hangs off the skip button itself, exactly like a card's plate,
+        // and is drawn EVERY time the button is on screen. Showing it only when skipping
+        // won made the advice look like it had appeared out of nowhere, and gave no way to
+        // tell "don't skip" from "the mod has no opinion".
+        if (isDraft && !relicScreen)
+        {
+            var skipBtn = CardScan.FindSkipButton(container);
+            if (skip != null && skipBtn != null)
+            {
+                var r = skipBtn.GetGlobalRect();
+                if (r.Size is not { X: > 4, Y: > 4 } && CardScan.CardBounds(skipBtn) is { } fb) r = fb;
+                if (r.Size is { X: > 4, Y: > 4 })
+                {
+                    UpdateSkipBadge(r, skip, skipWins, tipRects);
+                    seen.Add(SkipBadgeKey);
+                }
+            }
+            SkipDiag(skip != null, skipBtn, container, screenType);
         }
 
         DiagThrottled($"cards={cards.Count} bounded={bounded} withScore={withScore} badges={_badges.Count}"
             + (inShop ? $" ovl=[{CardScan.VisibleOverlayDescription(container)}]" : ""));
         PruneBadges(seen);
+    }
+
+    // The community numbers for one found item, from whichever score set it belongs to.
+    private static EntityScore? Score(CardScan.FoundCard f) =>
+        f.IsRelic ? CodexScores.Relic(f.Id) : CodexScores.Card(f.Id);
+
+    // Best relic on a relic-choice screen. Relics carry no Elo (they're never a card-reward
+    // draft), so this is the highest Codex Score, tie-broken by sample size — the same
+    // comparison a player makes by hovering each one in turn and remembering the win rates.
+    private static string? BestRelic(List<CardScan.FoundCard> relics)
+    {
+        string? best = null;
+        double bestScore = double.MinValue, bestPicks = -1;
+        foreach (var f in relics)
+        {
+            if (CodexScores.Relic(f.Id) is not { Picks: > 0 } sc) continue;
+            if (sc.Score > bestScore || (sc.Score == bestScore && sc.Picks > bestPicks))
+            {
+                best = f.Id; bestScore = sc.Score; bestPicks = sc.Picks;
+            }
+        }
+        return best;
     }
 
     // Best pick = highest Codex Elo among the offered cards (revealed community preference);
@@ -146,9 +213,108 @@ public partial class CardRewardHints : Node
 
     private static readonly Color BestGold = new(1.00f, 0.827f, 0.302f);
 
-    private void UpdateBadge(ulong key, string cardId, Rect2 cardRect, bool hovered, bool isBest, bool above, List<Rect2> tipRects)
+    // Reserved badge key for the skip banner, which hangs off the card row rather than any
+    // one node, so it has no instance id of its own.
+    private const ulong SkipBadgeKey = ulong.MaxValue;
+
+    // One line, only when the outcome changes, into the scores log (which is on in release,
+    // unlike DiagThrottled). Says which of the two halves is missing when no plate appears:
+    // the community data, or the button node itself.
+    // Names any screen we show plates on but withhold a best pick from. If a genuine draft
+    // screen ever turns up here, it just needs adding to CardScan.DraftScreens.
+    private static string _lastScreenDiag = "";
+    private static void ScreenDiag(string? screen)
     {
-        var sc = CodexScores.Card(cardId);
+        var msg = $"no best-pick on screen={screen ?? "?"} (not a reward draft)";
+        if (msg == _lastScreenDiag) return;
+        _lastScreenDiag = msg;
+        CodexScores.DiagPublic(msg);
+    }
+
+    private static string _lastSkipDiag = "";
+    private static void SkipDiag(bool hasData, Control? btn, Node container, string? screen)
+    {
+        var msg = $"skip plate: screen={screen ?? "?"} data={hasData} button={(btn != null ? btn.GetType().Name : "NOT FOUND")}";
+        if (btn == null) msg += $" | buttons on screen=[{CardScan.DescribeButtons(container)}]";
+        if (msg == _lastSkipDiag) return;
+        _lastSkipDiag = msg;
+        CodexScores.DiagPublic(msg);
+    }
+
+    // Left+right content margins on the plate stylebox (MakePlate uses 8 each), so the
+    // measured text width has room and the glyphs are not flush against the border.
+    private const float PlatePadding = 18f;
+
+    private static readonly Color SkipYes = new(0.525f, 0.878f, 0.541f); // A-tier green
+    private static readonly Color SkipNo = new(0.878f, 0.541f, 0.525f);  // F-tier red
+
+    // The plate under the skip button. Green with the community skip rate for this act when
+    // skipping beats everything offered, red "don't skip this round" when it doesn't.
+    private void UpdateSkipBadge(Rect2 row, SkipScore skip, bool skipWins, List<Rect2> tipRects)
+    {
+        if (!_badges.TryGetValue(SkipBadgeKey, out var badge) || !GodotObject.IsInstanceValid(badge))
+        {
+            badge = new RichTextLabel
+            {
+                BbcodeEnabled = true,
+                FitContent = true,
+                ScrollActive = false,
+                AutowrapMode = TextServer.AutowrapMode.Off,
+                MouseFilter = Control.MouseFilterEnum.Ignore,
+            };
+            badge.AddThemeStyleboxOverride("normal", MakePlate());
+            badge.AddThemeFontSizeOverride("normal_font_size", 19);
+            Skin.ApplyFont(badge);
+            _badgeLayer.AddChild(badge);
+            _badges[SkipBadgeKey] = badge;
+        }
+
+        var accent = skipWins ? SkipYes : SkipNo;
+        if (badge.GetThemeStylebox("normal") is StyleBoxFlat plate)
+        {
+            plate.BorderColor = accent;
+            plate.SetBorderWidthAll(skipWins ? 3 : 2);
+            plate.CornerRadiusTopLeft = 0; plate.CornerRadiusTopRight = 0;
+            plate.CornerRadiusBottomLeft = 7; plate.CornerRadiusBottomRight = 7;
+            plate.BorderWidthTop = 0; // merges into the button's bottom edge, like a card plate
+        }
+
+        // Act-specific rate: skipping runs 20% in Act 1 and 43% by Act 3, so the flat
+        // average would misrepresent the case at both ends.
+        var act = Producer.LiveStateProducer.Latest?.Act ?? 0;
+        var rate = act > 0 ? skip.RateForAct(act) : skip.SkipRate;
+        var hex = skipWins ? "#86e08a" : "#e08a86";
+        badge.Text = skipWins
+            ? $"[center][color={hex}][b]{Loc.F("plate_skip_rate", rate)}[/b][/color][/center]"
+            : $"[center][color={hex}][b]{Loc.T("plate_skip_dont")}[/b][/color][/center]";
+
+        // Size to the TEXT, not to the button: the skip affordance is a wide control and
+        // stretching the plate across it left a long empty box around a dozen characters.
+        //
+        // GetContentWidth() reflects the text we just set, whereas Size is still last
+        // frame's. That mismatch is what threw the centring off: the box was POSITIONED
+        // from one width and DRAWN at another, so it drifted whenever the verdict flipped
+        // between the short green label and the longer red one. Deriving the width once
+        // and using that same value for both the size and the position keeps it centred
+        // no matter which label is showing.
+        var content = badge.GetContentWidth() + PlatePadding;
+        var width = Mathf.Max(content, 110f);
+        badge.CustomMinimumSize = new Vector2(width, 0);
+        badge.Size = new Vector2(width, badge.Size.Y);
+        badge.Position = new Vector2(
+            Mathf.Round(row.Position.X + row.Size.X * 0.5f - width * 0.5f),
+            Mathf.Round(row.Position.Y + row.Size.Y - 2f));
+
+        var blocked = false;
+        var r = new Rect2(badge.Position, new Vector2(width, badge.Size.Y));
+        foreach (var t in tipRects)
+            if (t.Intersects(r)) { blocked = true; break; }
+        badge.Visible = !blocked;
+    }
+
+    private void UpdateBadge(ulong key, CardScan.FoundCard found, Rect2 cardRect, bool hovered, bool isBest, bool above, List<Rect2> tipRects)
+    {
+        var sc = Score(found);
         if (sc == null || sc.Picks == 0)
         {
             if (_badges.Remove(key, out var dead)) dead.QueueFree();
@@ -233,6 +399,12 @@ public partial class CardRewardHints : Node
 
     private void ClearBadges()
     {
+        // Also drop the best-pick ids: every "nothing to show" path comes through here, and a
+        // stale BestRelicId would put a Best Pick line on relics in the player's own inventory
+        // (the relic hovertip fires anywhere, not just on the ancient screen).
+        RewardContext.BestCardId = null;
+        RewardContext.BestRelicId = null;
+        RewardContext.SkipWins = false;
         foreach (var b in _badges.Values) if (GodotObject.IsInstanceValid(b)) b.QueueFree();
         _badges.Clear();
     }

@@ -81,8 +81,12 @@ public sealed class SpireCodexClient
     // picks, wins[, scope]}, ... }. With `character`, entries carry that character's slice
     // when its sample is big enough (scope="character"), else global (scope="global").
     // Older backends ignore the param and return global numbers with no scope.
-    public async Task<Dictionary<string, EntityScore>> GetScoresAsync(
-        string entityType, string? character = null, string? statFilter = null)
+    // The reserved key the server uses for the skip entrant under ?include_skip=1.
+    public const string SkipId = "SKIP";
+
+    public async Task<ScoreSet> GetScoresAsync(
+        string entityType, string? character = null, string? statFilter = null,
+        bool includeSkip = false)
     {
         var url = $"{Config.ApiBase}/runs/scores/{entityType}";
         var query = new List<string>();
@@ -90,6 +94,9 @@ public sealed class SpireCodexClient
         // "all" is the server default, so only the narrowed filters need the param.
         if (!string.IsNullOrEmpty(statFilter) && statFilter != StatFilter.DefaultKey)
             query.Add($"stat_filter={Uri.EscapeDataString(statFilter)}");
+        // Opt-in: without it the payload is exactly what it always was, so an older
+        // backend (or one whose entity store hasn't rebuilt yet) just omits SKIP.
+        if (includeSkip) query.Add("include_skip=1");
         if (query.Count > 0) url += "?" + string.Join("&", query);
         using var resp = await Http.GetAsync(url).ConfigureAwait(false);
         resp.EnsureSuccessStatusCode();
@@ -97,20 +104,47 @@ public sealed class SpireCodexClient
         var raw = await JsonSerializer
             .DeserializeAsync<Dictionary<string, ScoreDto>>(stream)
             .ConfigureAwait(false) ?? new();
-        return raw.ToDictionary(
-            kv => kv.Key,
-            kv => new EntityScore(kv.Value.Score ?? 0, kv.Value.WinRate, kv.Value.Picks, kv.Value.Scope, kv.Value.Elo));
+
+        SkipScore? skip = null;
+        if (raw.TryGetValue(SkipId, out var s) && s.Elo is { } skipElo)
+            skip = new SkipScore(
+                skipElo, s.Offered, s.Picked ?? s.Picks, s.PickRate, s.OffAct, s.PickAct);
+
+        var scores = new Dictionary<string, EntityScore>(raw.Count);
+        foreach (var (id, v) in raw)
+        {
+            if (id == SkipId) continue; // not a card; never goes in the entity table
+            scores[id] = new EntityScore(
+                v.Score ?? 0, v.WinRate ?? 0,
+                (int)Math.Min(v.Picks, int.MaxValue), v.Scope, v.Elo);
+        }
+        return new ScoreSet(scores, skip);
     }
 
     private sealed class ScoreDto
     {
         // score is null for entries with no data (0 picks); elo only exists for
         // reward-offered cards (null for relics/potions/starters).
+        // win_rate/wins are nullable because the reserved SKIP entry has no win outcome
+        // (you can't win "with" a skip). A non-nullable double there would throw on the
+        // null and take down the whole score set, not just that entry.
         [JsonPropertyName("score")] public double? Score { get; set; }
-        [JsonPropertyName("win_rate")] public double WinRate { get; set; }
-        [JsonPropertyName("picks")] public int Picks { get; set; }
+        [JsonPropertyName("win_rate")] public double? WinRate { get; set; }
+        // long, not int: this is a card's pick count for a card, but for SKIP it's the
+        // number of reward screens skipped (10.3M today) and `offered` is every reward
+        // screen ever shown (36.5M and climbing), which outgrows int.
+        [JsonPropertyName("picks")] public long Picks { get; set; }
         [JsonPropertyName("scope")] public string? Scope { get; set; }
         [JsonPropertyName("elo")] public double? Elo { get; set; }
+        // SKIP reports its sample as screens seen vs screens skipped, and pick_rate is then
+        // the community skip rate. The count arrives as `picks`; `picked` is accepted too
+        // because the contract was specified with that name and either may be served.
+        [JsonPropertyName("offered")] public long Offered { get; set; }
+        [JsonPropertyName("picked")] public long? Picked { get; set; }
+        [JsonPropertyName("pick_rate")] public double PickRate { get; set; }
+        // Per-act screen totals, so the plate can quote the rate for the act you're in.
+        [JsonPropertyName("off_act")] public long[]? OffAct { get; set; }
+        [JsonPropertyName("pick_act")] public long[]? PickAct { get; set; }
     }
 
     // GET /api/runs/community-stats -> headline community numbers. We only parse what the

@@ -17,7 +17,10 @@ internal static class CardScan
 
     // PlateAbove: render the rating plate on the card's TOP edge instead of the bottom
     // (shop cards show their gold price under the card, which the plate would cover).
-    public readonly record struct FoundCard(Control Node, string Id, bool PlateAbove = false);
+    // IsRelic: the node is an NRelic (ancient 3-relic offer), so its numbers come from the
+    // relic score set rather than the card one.
+    public readonly record struct FoundCard(
+        Control Node, string Id, bool PlateAbove = false, bool IsRelic = false);
 
     // The overlay-screens container under the Game node, or null outside a run.
     public static Node? FindOverlayContainer(ref Node? cachedGame)
@@ -37,16 +40,114 @@ internal static class CardScan
     // clip through whatever is stacked on top of it (e.g. an inspect view over a reward row).
     // Walked top-down; a visible but card-less child (backdrops etc.) doesn't blank the rest.
     public static List<FoundCard> CollectSelectionCards(Node overlayContainer)
+        => CollectSelectionCards(overlayContainer, out _);
+
+    // `screenType` is the type name of the overlay screen the cards were found under, so
+    // callers can tell a reward draft ("which should I take?") from a deck screen ("which
+    // should I remove / upgrade?"). Those ask opposite questions about the same cards.
+    public static List<FoundCard> CollectSelectionCards(Node overlayContainer, out string? screenType)
+    {
+        var result = new List<FoundCard>();
+        screenType = null;
+        var children = overlayContainer.GetChildren();
+        for (var i = children.Count - 1; i >= 0; i--)
+        {
+            if (children[i] is not Control { Visible: true } c) continue;
+            Walk(c, 0, result);
+            if (result.Count > 0) // topmost card-bearing screen wins
+            {
+                screenType = c.GetType().Name;
+                return result;
+            }
+        }
+        return result;
+    }
+
+    // Screens that offer NEW cards, where the best-rated card is the one to take. Everything
+    // else (deck removal, Smith upgrades, transform, enchant, pile and inspect views) is an
+    // ALLOWLIST miss on purpose: on those, "highest Codex Elo" is either the wrong metric or
+    // the exact opposite of the advice you want, and an unrecognised screen must never
+    // inherit reward semantics by default. That default is what put a gold BEST PICK badge
+    // on the strongest card in the deck while the player was choosing what to destroy.
+    private static readonly HashSet<string> DraftScreens = new()
+    {
+        "NCardRewardSelectionScreen",   // post-combat card reward
+        "NChooseACardSelectionScreen",  // choose a card
+        "NChooseABundleSelectionScreen" // Neow bundles
+    };
+
+    public static bool IsDraftScreen(string? screenType) =>
+        screenType != null && DraftScreens.Contains(screenType);
+
+    // Relics shown on a visible overlay screen: the ancient 3-relic offer, and any other
+    // screen that lays relics out for a choice. Same top-down "topmost screen wins" rule as
+    // the card scan. Callers only reach for this when the card scan came back empty, so a
+    // reward screen that shows both never turns into two competing plate sets.
+    public static List<FoundCard> CollectSelectionRelics(Node overlayContainer)
     {
         var result = new List<FoundCard>();
         var children = overlayContainer.GetChildren();
         for (var i = children.Count - 1; i >= 0; i--)
         {
             if (children[i] is not Control { Visible: true } c) continue;
-            Walk(c, 0, result);
-            if (result.Count > 0) return result; // topmost card-bearing screen wins
+            WalkRelics(c, 0, result);
+            if (result.Count > 0) return result;
         }
         return result;
+    }
+
+    private static void WalkRelics(Node node, int depth, List<FoundCard> result)
+    {
+        if (depth > 12) return;
+        foreach (var child in node.GetChildren())
+        {
+            if (child is Control c)
+            {
+                if (!c.Visible) continue;
+                if (IsTypeInChain(c, "NRelic"))
+                {
+                    var id = Ids.Bare(Reflect.GetString(Reflect.GetMember(c, "Model"), "Id"));
+                    if (id != null) result.Add(new FoundCard(c, id, IsRelic: true));
+                    continue;
+                }
+            }
+            WalkRelics(child, depth + 1, result);
+        }
+    }
+
+    // The skip button on a card-reward or relic-choice screen
+    // (NChoiceSelectionSkipButton, used by NChooseACardSelectionScreen and
+    // NChooseARelicSelection). Unlike NCard it's a real sized Control, so its own rect is
+    // usable directly. Null when the current screen has no skip option, which is how a
+    // forced choice (Neow, event grants) correctly gets no skip advice.
+    public static Control? FindSkipButton(Node overlayContainer)
+    {
+        var children = overlayContainer.GetChildren();
+        for (var i = children.Count - 1; i >= 0; i--)
+        {
+            if (children[i] is not Control { Visible: true } c) continue;
+            if (FindSkipIn(c, 0) is { } btn) return btn;
+        }
+        return null;
+    }
+
+    private static Control? FindSkipIn(Node node, int depth)
+    {
+        if (depth > 12) return null;
+        foreach (var child in node.GetChildren())
+        {
+            if (child is Control c)
+            {
+                if (!c.Visible) continue;
+                // Match on the SUFFIX, not the exact type: the decompile we read the name
+                // from is a few patches behind the live game, and a rename to some other
+                // *SkipButton should keep working rather than silently drawing nothing.
+                if (IsSkipButtonType(c)) return c;
+                if (FindSkipIn(c, depth + 1) is { } found) return found;
+            }
+            else if (FindSkipIn(child, depth + 1) is { } found) return found;
+        }
+        return null;
     }
 
     // Whether an overlay SCREEN is stacked over the room scene (used to hide the shop's
@@ -145,6 +246,51 @@ internal static class CardScan
             }
             UnionDescendants(child, ref union, ref any);
         }
+    }
+
+    // Skipping is presented two different ways depending on the screen:
+    //   - NChoiceSelectionSkipButton, a dedicated button (choose-a-card, ancient relics);
+    //   - NCardRewardAlternativeButton, one of the CardRewardAlternative options, on the
+    //     ordinary post-combat card reward. That list also holds REROLL, so the type alone
+    //     is not enough: `_optionName` carries the option id and only "Skip" is ours.
+    private static bool IsSkipButtonType(object o)
+    {
+        var isSkipType = false;
+        var isAlternative = false;
+        for (var t = o.GetType(); t != null; t = t.BaseType)
+        {
+            if (t.Name.EndsWith("SkipButton", StringComparison.Ordinal)) isSkipType = true;
+            if (t.Name.EndsWith("AlternativeButton", StringComparison.Ordinal)) isAlternative = true;
+        }
+        if (isSkipType) return true;
+        if (!isAlternative) return false;
+        var option = Reflect.GetString(o, "_optionName") ?? Reflect.GetString(o, "OptionId");
+        return string.Equals(option, "Skip", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Every Control type name under the visible overlay screens, for diagnosing a skip
+    // button we failed to find (is it absent, renamed, or somewhere we don't walk?).
+    public static string DescribeButtons(Node overlayContainer)
+    {
+        var names = new HashSet<string>();
+        void Walk(Node n, int d)
+        {
+            if (d > 12) return;
+            foreach (var child in n.GetChildren())
+            {
+                if (child is Control { Visible: true } c)
+                {
+                    var name = c.GetType().Name;
+                    if (name.EndsWith("AlternativeButton", StringComparison.Ordinal))
+                        name += $"({Reflect.GetString(c, "_optionName") ?? "?"})";
+                    if (name.Contains("Button") || name.Contains("Skip")) names.Add(name);
+                    Walk(c, d + 1);
+                }
+                else Walk(child, d + 1);
+            }
+        }
+        Walk(overlayContainer, 0);
+        return names.Count == 0 ? "none" : string.Join(",", names);
     }
 
     private static bool IsTypeInChain(object o, string typeName)

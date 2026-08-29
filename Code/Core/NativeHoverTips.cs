@@ -30,7 +30,8 @@ internal static class NativeHoverTips
     private static Type? _relicType;      // MegaCrit.Sts2.Core.Nodes.Relics.NRelic
     private static Type? _hoverTipSetType;// MegaCrit.Sts2.Core.Nodes.HoverTips.NHoverTipSet
     private static Type? _portraitTipType;// NTopBarPortraitTip (note: lowercase "sts2" namespace)
-    private static Type? _restButtonType; // NRestSiteButton (campfire options; no game tip)
+    private static Type? _restButtonType;  // NRestSiteButton (campfire options; no game tip)
+    private static Type? _skipButtonType;  // NChoiceSelectionSkipButton (card/relic skip)
     private static MethodBase? _createAndShowSingle; // CreateAndShow(Control, IHoverTip, alignment)
     private static MethodBase? _hoverTipRemove;      // NHoverTipSet.Remove(Control)
     private static bool _resolved;
@@ -231,6 +232,8 @@ internal static class NativeHoverTips
         _portraitTipType = sts2?.GetType("MegaCrit.sts2.Core.Nodes.TopBar.NTopBarPortraitTip")
             ?? sts2?.GetType("MegaCrit.Sts2.Core.Nodes.TopBar.NTopBarPortraitTip");
         _restButtonType = sts2?.GetType("MegaCrit.Sts2.Core.Nodes.RestSite.NRestSiteButton");
+        _skipButtonType = sts2?.GetType(
+            "MegaCrit.Sts2.Core.Nodes.Screens.CardSelection.NChoiceSelectionSkipButton");
     }
 
     // NHoverTipSet.CreateAndShow(Control, IEnumerable<IHoverTip>, HoverTipAlignment)
@@ -275,6 +278,12 @@ internal static class NativeHoverTips
     {
         PersonalStats.EnsureLoaded(); // warm the player's own pick rates once a token lands
 
+        // The skip button: the full case for taking nothing, which the plate under it only
+        // summarises. Shown whether or not skipping wins, so the numbers are always there
+        // to check rather than appearing only when the mod has an opinion.
+        if (_skipButtonType?.IsInstanceOfType(owner) == true && CodexScores.Skip is { } sk)
+            return BuildSkipTip(sk);
+
         var model = ResolveCardModel(owner);
         if (model != null)
         {
@@ -291,7 +300,7 @@ internal static class NativeHoverTips
         {
             var id = Bare(Reflect.GetString(model, "Id"));
             if (id == null || CodexScores.Relic(id) is not { Picks: > 0 } sc) return null;
-            var text = BuildStats(sc, RelicStatsCache.Get(id), isBest: false, showElo: false);
+            var text = BuildStats(sc, RelicStatsCache.Get(id), id == RewardContext.BestRelicId, showElo: false);
             // How coveted this relic is at Ancient 3-relic offers (the informed-decision
             // line for the ancient screen; harmless context elsewhere), plus the player's own
             // take rate when signed in.
@@ -327,6 +336,25 @@ internal static class NativeHoverTips
     //   Codex Score 71
     //   Win rate 63.9% (+3.2% vs base)   <- current character's number when known
     //   Pick rate 5.0%
+    // Codex Elo for skipping, the act's community skip rate, and the sample behind it.
+    // Elo is comparable to a card's because both come out of the same fit.
+    private static string BuildSkipTip(SkipScore sk)
+    {
+        var act = Producer.LiveStateProducer.Latest?.Act ?? 0;
+        var rate = act > 0 ? sk.RateForAct(act) : sk.SkipRate;
+        var sb = new StringBuilder();
+        sb.Append($"{Logo}\n");
+        sb.Append(RewardContext.SkipWins
+            ? $"[color=#86e08a][b]{Loc.T("hover_skip_yes")}[/b][/color]\n"
+            : $"[color=#e08a86][b]{Loc.T("hover_skip_no")}[/b][/color]\n");
+        sb.Append(Loc.F("hover_codex_elo", sk.Elo));
+        sb.Append(act > 0
+            ? Loc.F("hover_skip_rate_act", rate, act)
+            : Loc.F("hover_skip_rate", rate));
+        sb.Append(Loc.F("hover_skip_sample", sk.Skipped, sk.Screens));
+        return sb.ToString();
+    }
+
     private static string BuildStats(EntityScore sc, CardStats? full, bool isBest, bool showElo)
     {
         // Tier letters grade Codex Score, matching both the website and the reward plate.

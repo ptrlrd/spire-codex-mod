@@ -201,7 +201,14 @@
     "deck_about_join_discord": "Join the Discord",
     "deck_view": "View",
     "deck_settings_localization": "Language",
-    "deck_settings_localization_desc": "Spire Codex automatically matches your game's language. Change the game's language and the mod's text changes with it."
+    "deck_settings_localization_desc": "Spire Codex automatically matches your game's language. Change the game's language and the mod's text changes with it.",
+    "plate_skip_rate": "{0:0}% skip this",
+    "plate_skip_dont": "Don't Skip",
+    "hover_skip_yes": "Skipping beats every card here",
+    "hover_skip_no": "One of these beats skipping",
+    "hover_skip_rate": "Players skip [b]{0:0}%[/b] of rewards\n",
+    "hover_skip_rate_act": "Players skip [b]{0:0}%[/b] of Act {1} rewards\n",
+    "hover_skip_sample": "[color=#9aa3ab]({0:N0} of {1:N0} screens)[/color]"
   },
   "deu": {
     "welcome_body": "[color=#ffd34d][b]Willkommen bei Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color]\nDrücke jederzeit [color=#ffd34d][b]{0}[/b][/color], um das Overlay zu öffnen: Bestenlisten, deine Runs und [b]Einstellungen[/b].\n\n- Community-Siegraten und Codex-Tiers auf jedem Tooltip für Karten, Relikte und Ereignisse\n- Ein Live-Schadenszähler sowie Routen- und Gefahren-Hinweise auf der Karte während des Kampfes\n- Öffne die [b]Einstellungen[/b] im Overlay, um beliebige Einblendungen umzuschalten oder einen Statistik-Bereich zu wählen\n\n[color=#c8ccd5]Controller: Stick drücken zum Öffnen, Schultertasten zum Tab-Wechsel.[/color]",
@@ -405,7 +412,14 @@
     "deck_about_join_discord": "Tritt dem Discord bei",
     "deck_view": "Ansehen",
     "deck_settings_localization": "Sprache",
-    "deck_settings_localization_desc": "Spire Codex passt sich automatisch an die Sprache deines Spiels an. Ändere die Sprache des Spiels, und der Text der Mod ändert sich mit."
+    "deck_settings_localization_desc": "Spire Codex passt sich automatisch an die Sprache deines Spiels an. Ändere die Sprache des Spiels, und der Text der Mod ändert sich mit.",
+    "plate_skip_rate": "{0:0}% überspringen",
+    "plate_skip_dont": "Nicht überspringen",
+    "hover_skip_yes": "Überspringen schlägt jede Karte hier",
+    "hover_skip_no": "Eine dieser Karten schlägt Überspringen",
+    "hover_skip_rate": "Spieler überspringen [b]{0:0}%[/b] der Belohnungen\n",
+    "hover_skip_rate_act": "Spieler überspringen [b]{0:0}%[/b] der Belohnungen in Akt {1}\n",
+    "hover_skip_sample": "[color=#9aa3ab]({0:N0} von {1:N0} Angeboten)[/color]"
   },
   "fra": {
     "welcome_body": "[color=#ffd34d][b]Bienvenue sur Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color]\nAppuyez sur [color=#ffd34d][b]{0}[/b][/color] à tout moment pour ouvrir la superposition : les classements, vos parties et les [b]Paramètres[/b].\n\n- Taux de victoire de la communauté et paliers Codex sur chaque infobulle de carte, relique et événement\n- Un compteur de dégâts en direct, ainsi qu'un guidage sur l'itinéraire et les dangers de la carte, pendant le combat\n- Ouvrez les [b]Paramètres[/b] dans la superposition pour activer chaque élément ou choisir une tranche de stats\n\n[color=#c8ccd5]Manette : cliquez sur un stick pour ouvrir, les boutons L1/R1 pour changer d'onglet.[/color]",
@@ -609,7 +623,14 @@
     "deck_about_join_discord": "Rejoindre le Discord",
     "deck_view": "Voir",
     "deck_settings_localization": "Langue",
-    "deck_settings_localization_desc": "Spire Codex s'adapte automatiquement à la langue de votre jeu. Changez la langue du jeu et le texte du mod change avec elle."
+    "deck_settings_localization_desc": "Spire Codex s'adapte automatiquement à la langue de votre jeu. Changez la langue du jeu et le texte du mod change avec elle.",
+    "plate_skip_rate": "{0:0}% passent",
+    "plate_skip_dont": "Ne pas passer",
+    "hover_skip_yes": "Passer vaut mieux que ces cartes",
+    "hover_skip_no": "Une de ces cartes vaut mieux que passer",
+    "hover_skip_rate": "Les joueurs passent [b]{0:0}%[/b] des récompenses\n",
+    "hover_skip_rate_act": "Les joueurs passent [b]{0:0}%[/b] des récompenses de l'acte {1}\n",
+    "hover_skip_sample": "[color=#9aa3ab]({0:N0} sur {1:N0} offres)[/color]"
   },
   "ita": {
     "welcome_body": "[color=#ffd34d][b]Benvenuto in Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color]\nPremi [color=#ffd34d][b]{0}[/b][/color] in qualsiasi momento per aprire l'overlay: le classifiche, le tue partite e le [b]Impostazioni[/b].\n\n- Percentuali di vittoria della comunità e gradi Codex su ogni descrizione di carta, reliquia ed evento\n- Un misuratore di danni in tempo reale, oltre a indicazioni sul percorso della mappa e sui pericoli, durante il combattimento\n- Apri le [b]Impostazioni[/b] nell'overlay per attivare qualsiasi elemento o scegliere una fascia di statistiche\n\n[color=#c8ccd5]Controller: premi una levetta per aprire, i dorsali per cambiare scheda.[/color]",
@@ -813,7 +834,14 @@
     "deck_about_join_discord": "Entra nel Discord",
     "deck_view": "Visualizza",
     "deck_settings_localization": "Lingua",
-    "deck_settings_localization_desc": "Spire Codex si adatta automaticamente alla lingua del tuo gioco. Cambia la lingua del gioco e il testo della mod cambierà di conseguenza."
+    "deck_settings_localization_desc": "Spire Codex si adatta automaticamente alla lingua del tuo gioco. Cambia la lingua del gioco e il testo della mod cambierà di conseguenza.",
+    "plate_skip_rate": "{0:0}% salta",
+    "plate_skip_dont": "Non saltare",
+    "hover_skip_yes": "Saltare batte ogni carta qui",
+    "hover_skip_no": "Una di queste batte il salto",
+    "hover_skip_rate": "I giocatori saltano il [b]{0:0}%[/b] delle ricompense\n",
+    "hover_skip_rate_act": "I giocatori saltano il [b]{0:0}%[/b] delle ricompense dell'Atto {1}\n",
+    "hover_skip_sample": "[color=#9aa3ab]({0:N0} su {1:N0} offerte)[/color]"
   },
   "spa": {
     "welcome_body": "[color=#ffd34d][b]Bienvenido a Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color]\nPulsa [color=#ffd34d][b]{0}[/b][/color] en cualquier momento para abrir la superposición: las clasificaciones, tus partidas y los [b]Ajustes[/b].\n\n- Tasas de victorias de la comunidad y niveles de Codex en cada consejo de carta, reliquia y evento\n- Un medidor de daño en directo, además de guía de ruta y de peligro en el mapa, durante el combate\n- Abre los [b]Ajustes[/b] en la superposición para activar o desactivar cualquier elemento o elegir un tramo de estadísticas\n\n[color=#c8ccd5]Mando: pulsa un stick para abrir y los botones superiores para cambiar de pestaña.[/color]",
@@ -1017,7 +1045,14 @@
     "deck_about_join_discord": "Únete al Discord",
     "deck_view": "Ver",
     "deck_settings_localization": "Idioma",
-    "deck_settings_localization_desc": "Spire Codex se adapta automáticamente al idioma de tu juego. Cambia el idioma del juego y el texto del mod cambiará con él."
+    "deck_settings_localization_desc": "Spire Codex se adapta automáticamente al idioma de tu juego. Cambia el idioma del juego y el texto del mod cambiará con él.",
+    "plate_skip_rate": "{0:0} % la saltan",
+    "plate_skip_dont": "No saltar",
+    "hover_skip_yes": "Saltar supera a todas estas cartas",
+    "hover_skip_no": "Una de estas supera a saltar",
+    "hover_skip_rate": "Los jugadores saltan el [b]{0:0} %[/b] de las recompensas\n",
+    "hover_skip_rate_act": "Los jugadores saltan el [b]{0:0} %[/b] de las recompensas del Acto {1}\n",
+    "hover_skip_sample": "[color=#9aa3ab]({0:N0} de {1:N0} ofertas)[/color]"
   },
   "esp": {
     "welcome_body": "[color=#ffd34d][b]Te damos la bienvenida a Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color]\nPresiona [color=#ffd34d][b]{0}[/b][/color] en cualquier momento para abrir el overlay: las clasificaciones, tus partidas y los [b]Ajustes[/b].\n\n- Tasas de victorias de la comunidad y niveles Codex en cada texto de ayuda de cartas, reliquias y eventos\n- Un medidor de daño en vivo, además de la ruta del mapa y la guía de peligro, durante el combate\n- Abre los [b]Ajustes[/b] en el overlay para activar o desactivar cualquier elemento o elegir un grupo de estadísticas\n\n[color=#c8ccd5]Control: presiona una palanca para abrir; usa L1/R1 para cambiar de pestaña.[/color]",
@@ -1221,7 +1256,14 @@
     "deck_about_join_discord": "Unirse al Discord",
     "deck_view": "Ver",
     "deck_settings_localization": "Idioma",
-    "deck_settings_localization_desc": "Spire Codex se ajusta automáticamente al idioma de tu juego. Cambia el idioma del juego y el texto del mod cambiará con él."
+    "deck_settings_localization_desc": "Spire Codex se ajusta automáticamente al idioma de tu juego. Cambia el idioma del juego y el texto del mod cambiará con él.",
+    "plate_skip_rate": "{0:0}% la salta",
+    "plate_skip_dont": "No saltar",
+    "hover_skip_yes": "Saltar supera a todas estas cartas",
+    "hover_skip_no": "Una de estas supera a saltar",
+    "hover_skip_rate": "Los jugadores saltan el [b]{0:0}%[/b] de las recompensas\n",
+    "hover_skip_rate_act": "Los jugadores saltan el [b]{0:0}%[/b] de las recompensas del Acto {1}\n",
+    "hover_skip_sample": "[color=#9aa3ab]({0:N0} de {1:N0} ofertas)[/color]"
   },
   "ptb": {
     "welcome_body": "[color=#ffd34d][b]Bem-vindo ao Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color]\nPressione [color=#ffd34d][b]{0}[/b][/color] a qualquer momento para abrir a sobreposição: as tabelas de classificação, suas partidas e as [b]Configurações[/b].\n\n- Taxas de vitória da comunidade e níveis Codex em cada descrição de carta, relíquia e evento\n- Um medidor de dano ao vivo, além de orientação de rota no mapa e de perigo, durante o combate\n- Abra as [b]Configurações[/b] na sobreposição para alternar qualquer recurso ou escolher uma faixa de estatísticas\n\n[color=#c8ccd5]Controle: clique num analógico para abrir, botões de ombro para trocar de aba.[/color]",
@@ -1425,7 +1467,14 @@
     "deck_about_join_discord": "Entre no Discord",
     "deck_view": "Ver",
     "deck_settings_localization": "Idioma",
-    "deck_settings_localization_desc": "O Spire Codex corresponde automaticamente ao idioma do seu jogo. Mude o idioma do jogo e o texto do mod muda junto."
+    "deck_settings_localization_desc": "O Spire Codex corresponde automaticamente ao idioma do seu jogo. Mude o idioma do jogo e o texto do mod muda junto.",
+    "plate_skip_rate": "{0:0}% pulam",
+    "plate_skip_dont": "Não pular",
+    "hover_skip_yes": "Pular supera todas estas cartas",
+    "hover_skip_no": "Uma destas supera pular",
+    "hover_skip_rate": "Os jogadores pulam [b]{0:0}%[/b] das recompensas\n",
+    "hover_skip_rate_act": "Os jogadores pulam [b]{0:0}%[/b] das recompensas do Ato {1}\n",
+    "hover_skip_sample": "[color=#9aa3ab]({0:N0} de {1:N0} ofertas)[/color]"
   },
   "rus": {
     "welcome_body": "[color=#ffd34d][b]Добро пожаловать в Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color]\nНажмите [color=#ffd34d][b]{0}[/b][/color] в любой момент, чтобы открыть оверлей: таблицы лидеров, свои вылазки и [b]Настройки[/b].\n\n- Проценты побед сообщества и уровни Codex в подсказках каждой карты, реликвии и события\n- Счетчик урона в реальном времени, а также подсказки по маршруту и опасности на карте во время боя\n- Откройте [b]Настройки[/b] в оверлее, чтобы включить любой элемент или выбрать срез статистики\n\n[color=#c8ccd5]Контроллер: нажмите стик, чтобы открыть, бамперы — для переключения вкладок.[/color]",
@@ -1629,7 +1678,14 @@
     "deck_about_join_discord": "Присоединиться к Discord",
     "deck_view": "Смотреть",
     "deck_settings_localization": "Язык",
-    "deck_settings_localization_desc": "Spire Codex автоматически подстраивается под язык вашей игры. Смените язык игры — и текст мода изменится вместе с ним."
+    "deck_settings_localization_desc": "Spire Codex автоматически подстраивается под язык вашей игры. Смените язык игры — и текст мода изменится вместе с ним.",
+    "plate_skip_rate": "{0:0}% пропускают",
+    "plate_skip_dont": "Не пропускать",
+    "hover_skip_yes": "Пропуск лучше любой из этих карт",
+    "hover_skip_no": "Одна из этих карт лучше пропуска",
+    "hover_skip_rate": "Игроки пропускают [b]{0:0}%[/b] наград\n",
+    "hover_skip_rate_act": "Игроки пропускают [b]{0:0}%[/b] наград в акте {1}\n",
+    "hover_skip_sample": "[color=#9aa3ab]({0:N0} из {1:N0} предложений)[/color]"
   },
   "pol": {
     "welcome_body": "[color=#ffd34d][b]Witaj w Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color]\nNaciśnij [color=#ffd34d][b]{0}[/b][/color] w dowolnym momencie, aby otworzyć nakładkę: rankingi, swoje wyprawy i [b]Ustawienia[/b].\n\n- Wskaźniki zwycięstw społeczności i poziomy Codex w podpowiedziach każdej karty, artefaktu i wydarzenia\n- Licznik obrażeń na żywo oraz wskazówki dotyczące trasy i zagrożeń na mapie podczas walki\n- Otwórz [b]Ustawienia[/b] w nakładce, aby przełączyć dowolny element lub wybrać przedział statystyk\n\n[color=#c8ccd5]Kontroler: kliknij gałkę, aby otworzyć, bocznymi przyciskami przełączasz zakładki.[/color]",
@@ -1833,7 +1889,14 @@
     "deck_about_join_discord": "Dołącz do serwera Discord",
     "deck_view": "Zobacz",
     "deck_settings_localization": "Język",
-    "deck_settings_localization_desc": "Spire Codex automatycznie dopasowuje się do języka gry. Zmień język gry, a tekst moda zmieni się razem z nim."
+    "deck_settings_localization_desc": "Spire Codex automatycznie dopasowuje się do języka gry. Zmień język gry, a tekst moda zmieni się razem z nim.",
+    "plate_skip_rate": "{0:0}% pomija",
+    "plate_skip_dont": "Nie pomijaj",
+    "hover_skip_yes": "Pominięcie bije każdą z tych kart",
+    "hover_skip_no": "Jedna z tych kart bije pominięcie",
+    "hover_skip_rate": "Gracze pomijają [b]{0:0}%[/b] nagród\n",
+    "hover_skip_rate_act": "Gracze pomijają [b]{0:0}%[/b] nagród w akcie {1}\n",
+    "hover_skip_sample": "[color=#9aa3ab]({0:N0} z {1:N0} ofert)[/color]"
   },
   "tur": {
     "welcome_body": "[color=#ffd34d][b]Spire[/b][/color] [color=#ffffff][b]Codex'e Hoş Geldin[/b][/color]\nBindirmeyi, lider tablolarını, oyunlarını ve [b]Ayarlar[/b]'ı açmak için istediğin zaman [color=#ffd34d][b]{0}[/b][/color] tuşuna bas.\n\n- Her kart, kalıntı ve etkinlik ipucunda topluluk galibiyet oranları ve Codex kademeleri\n- Savaş sırasında canlı bir hasar ölçer, ayrıca harita rotası ve tehlike rehberi\n- Herhangi bir öğeyi açıp kapatmak veya bir istatistik dilimi seçmek için bindirmedeki [b]Ayarlar[/b]'ı aç\n\n[color=#c8ccd5]Oyun kumandası: açmak için analog çubuğa bas, sekmeleri değiştirmek için tampon tuşları kullan.[/color]",
@@ -2037,7 +2100,14 @@
     "deck_about_join_discord": "Discord'a katıl",
     "deck_view": "Görüntüle",
     "deck_settings_localization": "Dil",
-    "deck_settings_localization_desc": "Spire Codex otomatik olarak oyununuzun diline uyum sağlar. Oyunun dilini değiştirin, modun metni de onunla birlikte değişir."
+    "deck_settings_localization_desc": "Spire Codex otomatik olarak oyununuzun diline uyum sağlar. Oyunun dilini değiştirin, modun metni de onunla birlikte değişir.",
+    "plate_skip_rate": "%{0:0} atlıyor",
+    "plate_skip_dont": "Atlama",
+    "hover_skip_yes": "Atlamak buradaki her kartı geçiyor",
+    "hover_skip_no": "Bunlardan biri atlamayı geçiyor",
+    "hover_skip_rate": "Oyuncular ödüllerin [b]%{0:0}[/b] kadarını atlıyor\n",
+    "hover_skip_rate_act": "Oyuncular {1}. Perde ödüllerinin [b]%{0:0}[/b] kadarını atlıyor\n",
+    "hover_skip_sample": "[color=#9aa3ab]({1:N0} içinden {0:N0} teklif)[/color]"
   },
   "jpn": {
     "welcome_body": "[color=#ffd34d][b]ようこそ、Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color]へ\n[color=#ffd34d][b]{0}[/b][/color]をいつでも押すと、オーバーレイ、ランキング、プレイ履歴、[b]設定[/b]を開けます。\n\n- すべてのカード、レリック、イベントのツールチップにコミュニティの勝率とCodexティアを表示\n- 戦闘中はライブのダメージメーターに加え、マップのルートと危険度のガイドを表示\n- オーバーレイの[b]設定[/b]から各表示の切り替えや統計区分の選択ができます\n\n[color=#c8ccd5]コントローラー: スティックを押し込んで開き、バンパーでタブを切り替え。[/color]",
@@ -2241,7 +2311,14 @@
     "deck_about_join_discord": "Discordに参加する",
     "deck_view": "表示",
     "deck_settings_localization": "言語",
-    "deck_settings_localization_desc": "Spire Codex はゲームの言語に自動的に合わせます。ゲームの言語を変更すると、Mod のテキストもそれに合わせて変わります。"
+    "deck_settings_localization_desc": "Spire Codex はゲームの言語に自動的に合わせます。ゲームの言語を変更すると、Mod のテキストもそれに合わせて変わります。",
+    "plate_skip_rate": "{0:0}%がスキップ",
+    "plate_skip_dont": "スキップしない",
+    "hover_skip_yes": "スキップがここのどのカードより有利",
+    "hover_skip_no": "この中の1枚がスキップより有利",
+    "hover_skip_rate": "プレイヤーは報酬の[b]{0:0}%[/b]をスキップ\n",
+    "hover_skip_rate_act": "プレイヤーは第{1}幕の報酬の[b]{0:0}%[/b]をスキップ\n",
+    "hover_skip_sample": "[color=#9aa3ab]（{1:N0}回中{0:N0}回）[/color]"
   },
   "kor": {
     "welcome_body": "[color=#ffd34d][b]Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color]에 오신 것을 환영합니다\n언제든 [color=#ffd34d][b]{0}[/b][/color]을(를) 눌러 오버레이, 리더보드, 도전 기록, [b]설정[/b]을 열 수 있습니다.\n\n- 모든 카드, 유물, 이벤트 툴팁에 커뮤니티 승률과 Codex 등급 표시\n- 전투 중 실시간 피해량 측정기와 지도 경로 및 위험 안내\n- 오버레이에서 [b]설정[/b]을 열어 각 요소를 켜고 끄거나 통계 구간을 선택\n\n[color=#c8ccd5]컨트롤러: 스틱을 눌러 열고, 범퍼로 탭을 전환합니다.[/color]",
@@ -2445,7 +2522,14 @@
     "deck_about_join_discord": "Discord 참여하기",
     "deck_view": "보기",
     "deck_settings_localization": "언어",
-    "deck_settings_localization_desc": "Spire Codex는 게임의 언어에 자동으로 맞춰집니다. 게임 언어를 바꾸면 모드의 텍스트도 함께 바뀝니다."
+    "deck_settings_localization_desc": "Spire Codex는 게임의 언어에 자동으로 맞춰집니다. 게임 언어를 바꾸면 모드의 텍스트도 함께 바뀝니다.",
+    "plate_skip_rate": "{0:0}% 건너뜀",
+    "plate_skip_dont": "건너뛰지 않기",
+    "hover_skip_yes": "건너뛰기가 여기 모든 카드보다 낫습니다",
+    "hover_skip_no": "이 중 하나가 건너뛰기보다 낫습니다",
+    "hover_skip_rate": "플레이어가 보상의 [b]{0:0}%[/b]를 건너뜀\n",
+    "hover_skip_rate_act": "플레이어가 {1}막 보상의 [b]{0:0}%[/b]를 건너뜀\n",
+    "hover_skip_sample": "[color=#9aa3ab]({1:N0} 중 {0:N0})[/color]"
   },
   "zhs": {
     "welcome_body": "[color=#ffd34d][b]欢迎使用 Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color]\n随时按 [color=#ffd34d][b]{0}[/b][/color] 即可打开覆盖层、排行榜、你的对局以及 [b]设置[/b]。\n\n- 每张卡牌、遗物和事件的提示框中都会显示社区胜率与 Codex 评级\n- 战斗中提供实时伤害计量器，以及地图路线和危险指引\n- 在覆盖层中打开 [b]设置[/b]，即可切换任意界面或选择统计区间\n\n[color=#c8ccd5]控制器：按下摇杆打开，用肩键切换标签页。[/color]",
@@ -2649,7 +2733,14 @@
     "deck_about_join_discord": "加入 Discord",
     "deck_view": "查看",
     "deck_settings_localization": "语言选项",
-    "deck_settings_localization_desc": "Spire Codex 会自动匹配你游戏的语言。更改游戏语言，模组的文字也会随之改变。"
+    "deck_settings_localization_desc": "Spire Codex 会自动匹配你游戏的语言。更改游戏语言，模组的文字也会随之改变。",
+    "plate_skip_rate": "{0:0}% 跳过",
+    "plate_skip_dont": "不要跳过",
+    "hover_skip_yes": "跳过优于这里的每张牌",
+    "hover_skip_no": "其中一张优于跳过",
+    "hover_skip_rate": "玩家跳过 [b]{0:0}%[/b] 的奖励\n",
+    "hover_skip_rate_act": "玩家跳过第 {1} 幕 [b]{0:0}%[/b] 的奖励\n",
+    "hover_skip_sample": "[color=#9aa3ab]（{1:N0} 中的 {0:N0}）[/color]"
   },
   "tha": {
     "welcome_body": "[color=#ffd34d][b]ยินดีต้อนรับสู่ Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color]\nกด [color=#ffd34d][b]{0}[/b][/color] เมื่อใดก็ได้เพื่อเปิดโอเวอร์เลย์ ตารางอันดับ การเดินทางของคุณ และ[b]การตั้งค่า[/b]\n\n- อัตราชนะจากชุมชนและระดับ Codex บนคำแนะนำของการ์ด เครื่องราง และเหตุการณ์ทุกอย่าง\n- มาตรวัดความเสียหายแบบสด พร้อมคำแนะนำเส้นทางบนแผนที่และอันตราย ระหว่างการต่อสู้\n- เปิด[b]การตั้งค่า[/b]ในโอเวอร์เลย์เพื่อสลับการแสดงผลใดๆ หรือเลือกกลุ่มสถิติ\n\n[color=#c8ccd5]คอนโทรลเลอร์: คลิกก้านเพื่อเปิด กดปุ่มบัมเปอร์เพื่อสลับแท็บ[/color]",
@@ -2853,7 +2944,14 @@
     "deck_about_join_discord": "เข้าร่วม Discord",
     "deck_view": "ดู",
     "deck_settings_localization": "ภาษา",
-    "deck_settings_localization_desc": "Spire Codex จะปรับให้ตรงกับภาษาของเกมโดยอัตโนมัติ เปลี่ยนภาษาของเกมแล้วข้อความของม็อดจะเปลี่ยนตามไปด้วย"
+    "deck_settings_localization_desc": "Spire Codex จะปรับให้ตรงกับภาษาของเกมโดยอัตโนมัติ เปลี่ยนภาษาของเกมแล้วข้อความของม็อดจะเปลี่ยนตามไปด้วย",
+    "plate_skip_rate": "{0:0}% ข้าม",
+    "plate_skip_dont": "อย่าข้าม",
+    "hover_skip_yes": "การข้ามดีกว่าทุกใบที่นี่",
+    "hover_skip_no": "หนึ่งในนี้ดีกว่าการข้าม",
+    "hover_skip_rate": "ผู้เล่นข้ามรางวัล [b]{0:0}%[/b]\n",
+    "hover_skip_rate_act": "ผู้เล่นข้ามรางวัลองก์ {1} [b]{0:0}%[/b]\n",
+    "hover_skip_sample": "[color=#9aa3ab]({0:N0} จาก {1:N0} ครั้ง)[/color]"
   },
   "zht": {
     "welcome_body": "[color=#ffd34d][b]歡迎使用 Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color]\n隨時按 [color=#ffd34d][b]{0}[/b][/color] 即可開啟覆蓋層、排行榜、你的對局以及 [b]設定[/b]。\n\n- 每張卡牌、遺物和事件的提示框中都會顯示社群勝率與 Codex 評級\n- 戰鬥中提供即時傷害計量器，以及地圖路線和危險指引\n- 在覆蓋層中開啟 [b]設定[/b]，即可切換任意介面或選擇統計區間\n\n[color=#c8ccd5]手把：按下搖桿開啟，用肩鍵切換分頁。[/color]",
@@ -3057,6 +3155,13 @@
     "deck_about_join_discord": "加入 Discord",
     "deck_view": "查看",
     "deck_settings_localization": "語言",
-    "deck_settings_localization_desc": "Spire Codex 會自動配合你遊戲的語言。變更遊戲語言，模組的文字也會隨之改變。"
+    "deck_settings_localization_desc": "Spire Codex 會自動配合你遊戲的語言。變更遊戲語言，模組的文字也會隨之改變。",
+    "plate_skip_rate": "{0:0}% 跳過",
+    "plate_skip_dont": "不要跳過",
+    "hover_skip_yes": "跳過優於這裡的每張牌",
+    "hover_skip_no": "其中一張優於跳過",
+    "hover_skip_rate": "玩家跳過 [b]{0:0}%[/b] 的獎勵\n",
+    "hover_skip_rate_act": "玩家跳過第 {1} 幕 [b]{0:0}%[/b] 的獎勵\n",
+    "hover_skip_sample": "[color=#9aa3ab]（{1:N0} 中的 {0:N0}）[/color]"
   }
 }
