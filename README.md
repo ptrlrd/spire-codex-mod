@@ -20,8 +20,7 @@ overlay](https://www.overwolf.com/app/ptrlrd-spire_codex).
 - **Run replays** — every run you upload also records what you did, decision by
   decision, so the run page can play it back. Recording is local until you turn
   uploads on.
-- **Overwolf Overlay** — pairs perfectly with the Overwolf overlay. If you haven't downloaded it yet, get it at <a href="https://www.overwolf.com/app/ptrlrd-spire_codex" target="_blank">Overwolf
-  overlay</a>
+- **Overwolf Overlay** — pairs perfectly with the Overwolf overlay. If you haven't downloaded it yet, get it at [Overwolf overlay](https://www.overwolf.com/app/ptrlrd-spire_codex)
 
 ## Install
 You can subscribe to [Spire Codex on the Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3747536911), or you can manually install a specific release:
@@ -45,13 +44,28 @@ You can subscribe to [Spire Codex on the Steam Workshop](https://steamcommunity.
    1. The path to your Godot executable is mandatory, e.g.: 
    
        `~/Downloads/megadot-4.5.1-m.14-linux-x86_64-editor-csharp/MegaDot_v4.5.1-stable_mono_linux.x86_64`
-   2. If you installed STS2 or BaseLib into a non-default [Steam Library](#steam-libraries) location, set additional overrides in `Directory.Build.props` sas needed. See <a href="./Sts2PathDiscovery.props" target="_blank">Sts2PathDiscovery.props</a> for available props.
+   2. If you installed STS2 or BaseLib into a non-default [Steam Library](#steam-libraries) location, set additional overrides in `Directory.Build.props` as needed. See [Sts2PathDiscovery.props](./Sts2PathDiscovery.props) for available props.
 2. Run a dotnet build:
   
     `dotnet build SpireCodex.csproj -c Debug`
 3. On the first build (and when updating assets), you will also need to publish:
    
     `dotnet publish SpireCodex.csproj -c Debug`
+
+### Packaging a release zip
+
+`tools/package.sh` builds the dll, exports the `.pck` through Godot and writes a zip a player
+can extract straight into their `mods/` folder.
+
+    bash tools/package.sh
+
+Run it from **WSL** on Windows. The script assumes it, and Git Bash resolves `python3` to the
+Microsoft Store stub on a normal Windows Python install. Native Linux and macOS are fine.
+
+It needs Godot 4.5.1 .NET (or MegaDot) installed with `GodotPath` set in
+`Directory.Build.props`. A plain `dotnet build` does not, so you only hit this when packaging.
+
+Close the game first: the publish step also copies into your live `mods/` folder.
 
 Note: The [ModTemplate-StS2 wiki](https://github.com/Alchyr/ModTemplate-StS2/wiki/Setup) also has additional information that may be useful if you run into issues, though this project is not setup identically.
 

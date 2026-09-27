@@ -15,7 +15,22 @@ if [ -z "${DOTNET:-}" ] && command -v wslinfo >/dev/null 2>&1; then
 fi
 DOTNET="${DOTNET:-dotnet}"
 
-VERSION=$(python3 -c "import json; print(json.load(open('SpireCodex.json'))['version'])")
+# Git Bash on Windows resolves python3 to the Microsoft Store stub, which prints an advert
+# and exits 49 without running anything. So each candidate is actually EXECUTED rather than
+# just looked up, because the stub passes a `command -v` test.
+PYTHON=""
+for candidate in python3 python py; do
+  if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c "import json" >/dev/null 2>&1; then
+    PYTHON="$candidate"
+    break
+  fi
+done
+if [ -z "$PYTHON" ]; then
+  echo "need python3, python or py on PATH" >&2
+  exit 1
+fi
+
+VERSION=$("$PYTHON" -c "import json; print(json.load(open('SpireCodex.json'))['version'])")
 echo "Packaging SpireCodex $VERSION"
 
 # Keep Godot from scanning the build/staging dir when it exports the .pck.
@@ -39,7 +54,7 @@ cp "$OUT/SpireCodex.pck" "$STAGE/"
 
 OUT="dist/SpireCodex-$VERSION.zip"
 rm -f "$OUT"
-python3 - "$OUT" <<'EOF'
+"$PYTHON" - "$OUT" <<'EOF'
 import sys, zipfile, os
 with zipfile.ZipFile(sys.argv[1], "w", zipfile.ZIP_DEFLATED) as z:
     for root, _, files in os.walk("dist/SpireCodex"):
