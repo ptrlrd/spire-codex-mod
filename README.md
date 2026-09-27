@@ -17,6 +17,9 @@ overlay](https://www.overwolf.com/app/ptrlrd-spire_codex).
   runs, and an About tab. Plus on-map guidance: the recommended route with community danger,
   upcoming events, win-rate plates on card rewards and shops, and community stats inside the
   game's own tooltips
+- **Run replays** — every run you upload also records what you did, decision by
+  decision, so the run page can play it back. Recording is local until you turn
+  uploads on.
 - **Overwolf Overlay** — pairs perfectly with the Overwolf overlay. If you haven't downloaded it yet, get it at <a href="https://www.overwolf.com/app/ptrlrd-spire_codex" target="_blank">Overwolf
   overlay</a>
 
@@ -65,7 +68,7 @@ The "Import vanilla saves" button is based on [ImportVanillaSaves](https://githu
 For full credits and licenses see [THIRD-PARTY.md](./THIRD-PARTY.md).
 
 ## Useful Directory/Folder Information
-## Steam Libraries
+### Steam Libraries
 A Steam Library generally maps to a `steamapps/` folder and is where games and mods are installed. You can have multiple Steam Libraries in custom locations, but the defaults are as follows:
 
 | OS | `steamapps/` folder |
@@ -73,15 +76,15 @@ A Steam Library generally maps to a `steamapps/` folder and is where games and m
 | Windows | `C:\Program Files (x86)\Steam\steamapps` |
 | Linux | `~/.steam/steam/steamapps` |
 | Linux (Snap) | `~/snap/steam/common/.steam/steam/steamapps` |
-| macOS | `~/Library/"Application Support"/Steam/steamapps/common/"Slay the Spire 2"/SlayTheSpire2.app/Contents/MacOS/mods/`|
+| macOS | `~/Library/"Application Support"/Steam/steamapps` |
 
-## Workshop Mods
+### Workshop Mods
 Mods you install via the Steam Workshop will be installed under `steamapps/workshop/content` in folders with numeric names up to two levels deep, e.g.:
 `C:\Program Files (x86)\Steam\steamapps\workshop\content\2868840\3737335127\BaseLib`
 
 Generally you don't need to touch these directly but it can help to check that they are present.
 
-## Local Mods
+### Local Mods
 The `mods/` folder contains manually installed mods for local development. Mods found in this folder will override matching workshop mods
 The `mods/` folder lives inside your Slay the Spire 2 install. The location varies depending on your OS:
 

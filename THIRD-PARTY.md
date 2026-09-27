@@ -49,7 +49,7 @@ started from [ModTemplate-StS2](https://github.com/Alchyr/ModTemplate-StS2) by [
 ## BaseLib
 
 Mod settings registration and the in-game options menu integration use
-[BaseLib](https://github.com/Alchyr/BaseLib-StS2) by [Alchyr](https://github.com/Alchyr).
+[Alchyr.Sts2.BaseLib](https://www.nuget.org/packages/Alchyr.Sts2.BaseLib) by [Alchyr](https://github.com/Alchyr), the NuGet package this project references.
 
 ## Steamworks.NET
 

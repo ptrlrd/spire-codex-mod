@@ -7,12 +7,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-if command -v wslinfo >/dev/null 2>&1
-then
-  # WSL dev uses the Windows dotnet (dotnet.exe); CI on a native runner sets DOTNET=dotnet.
-  alias dotnet=dotnet.exe
-  echo "setting WSL-specific environment"
+# WSL dev uses the Windows dotnet (dotnet.exe); CI on a native runner sets DOTNET=dotnet.
+# Bash does not expand aliases in a non-interactive shell, so this has to be a variable.
+if [ -z "${DOTNET:-}" ] && command -v wslinfo >/dev/null 2>&1; then
+  DOTNET=dotnet.exe
+  echo "WSL detected, using $DOTNET"
 fi
+DOTNET="${DOTNET:-dotnet}"
 
 VERSION=$(python3 -c "import json; print(json.load(open('SpireCodex.json'))['version'])")
 echo "Packaging SpireCodex $VERSION"
@@ -21,7 +22,7 @@ echo "Packaging SpireCodex $VERSION"
 mkdir -p dist && : > dist/.gdignore
 
 # Build the dll and export the .pck (both land in the build output dir).
-dotnet publish SpireCodex.csproj -c ExportRelease
+"$DOTNET" publish SpireCodex.csproj -c ExportRelease
 
 OUT=.godot/mono/temp/bin/ExportRelease
 if [ ! -f "$OUT/SpireCodex.pck" ]; then
