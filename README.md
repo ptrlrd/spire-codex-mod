@@ -65,6 +65,10 @@ Microsoft Store stub on a normal Windows Python install. Native Linux and macOS 
 It needs Godot 4.5.1 .NET (or MegaDot) installed with `GodotPath` set in
 `Directory.Build.props`. A plain `dotnet build` does not, so you only hit this when packaging.
 
+On Windows point `GodotPath` at the `_console.exe` next to the normal one, for example
+`Godot_v4.5.1-stable_mono_win64_console.exe`. The windowed exe writes the same pck but exits
+-1 when it is done, which shows up as an MSB3073 warning on every publish.
+
 Close the game first: the publish step also copies into your live `mods/` folder.
 
 Note: The [ModTemplate-StS2 wiki](https://github.com/Alchyr/ModTemplate-StS2/wiki/Setup) also has additional information that may be useful if you run into issues, though this project is not setup identically.

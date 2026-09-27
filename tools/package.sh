@@ -37,9 +37,17 @@ echo "Packaging SpireCodex $VERSION"
 mkdir -p dist && : > dist/.gdignore
 
 # Build the dll and export the .pck (both land in the build output dir).
+OUT=.godot/mono/temp/bin/ExportRelease
+
+# Delete the previous pck FIRST, so the check below tests this run's export rather than
+# whatever was left lying around. The Godot GUI exe on Windows exits -1 even when the export
+# succeeded, and the Exec that runs it is ContinueOnError, so a genuinely failed export does
+# not stop the build. Without this the script would find the stale pck from the last run,
+# zip it, and exit 0 with a release that silently ships the wrong file.
+rm -f "$OUT/SpireCodex.pck"
+
 "$DOTNET" publish SpireCodex.csproj -c ExportRelease
 
-OUT=.godot/mono/temp/bin/ExportRelease
 if [ ! -f "$OUT/SpireCodex.pck" ]; then
     echo "ERROR: $OUT/SpireCodex.pck not found. Did the Godot export run? Check GodotPath in Directory.Build.props." >&2
     exit 1
