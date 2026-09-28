@@ -124,7 +124,7 @@ public partial class SandboxExport : Node
             var energy = Required(card, "EnergyCost");
             var cost = Reflect.Call(energy, "GetAmountToSpend") ?? throw new InvalidOperationException("Card cost unavailable");
             var enchantment = Reflect.GetMember(card, "Enchantment");
-            return (object)new { instance_id = instanceId, id = Id(card), extra_damage = DamageIncrease(card), upgraded = (bool)Required(card, "IsUpgraded"), cost = Convert.ToInt32(cost), costs_x = (bool)Required(energy, "CostsX"), energy_cost = new {
+            return (object)new { instance_id = instanceId, id = Id(card), extra_damage = DamageIncrease(card), exhaust_on_next_play = (bool)Required(card, "ExhaustOnNextPlay"), upgraded = (bool)Required(card, "IsUpgraded"), cost = Convert.ToInt32(cost), costs_x = (bool)Required(energy, "CostsX"), energy_cost = new {
                 base_cost = Number(energy, "_base"), captured_x = (bool)Required(energy, "CostsX") ? (int?)Number(energy, "CapturedXValue") : null,
                 modifiers = Items(Required(energy, "_localModifiers")).Select(modifier => new { amount = Number(modifier, "Amount"), type = Required(modifier, "Type").ToString()!.ToLowerInvariant(), expiration = Number(modifier, "Expiration"), reduce_only = (bool)Required(modifier, "IsReduceOnly") }).ToArray()
             }, enchantment = enchantment is null ? null : Id(enchantment) };
@@ -181,7 +181,10 @@ public partial class SandboxExport : Node
             foreach (var pile in new[] { "hand", "draw_pile", "discard_pile", "exhaust_pile", "play_pile" })
                 if (player![pile] is System.Text.Json.Nodes.JsonArray cards)
                     foreach (var card in cards)
+                    {
+                        if (card!["exhaust_on_next_play"]?.GetValue<bool>() == false) card.AsObject().Remove("exhaust_on_next_play");
                         if (card!["extra_damage"] is null) card.AsObject().Remove("extra_damage");
+                    }
         foreach (var creature in node["players"]!.AsArray().Concat(node["enemies"]!.AsArray()))
             foreach (var power in creature!["powers"]!.AsArray())
             {
