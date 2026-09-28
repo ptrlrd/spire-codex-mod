@@ -51,7 +51,7 @@ public partial class SandboxExport : Node
     private static string Snake(string name) => string.Concat(name.Select((ch, index) => index > 0 && char.IsUpper(ch) ? "_" + char.ToLowerInvariant(ch) : char.ToLowerInvariant(ch).ToString()));
 
     private static object[] Powers(object creature) => Items(Required(creature, "Powers"))
-        .Select(power => (object)new { id = Id(power), amount = Number(power, "Amount") }).ToArray();
+        .Select(power => (object)new { id = Id(power), amount = Number(power, "Amount"), skip_next_duration_tick = (Id(power) is "WEAK_POWER" or "VULNERABLE_POWER" or "FRAIL_POWER") && (bool)Required(power, "SkipNextDurationTick") }).ToArray();
 
     public static string Capture()
     {
@@ -84,6 +84,9 @@ public partial class SandboxExport : Node
             capturedCombat = combat;
             cardIds.Clear();
         }
+        if (cardIds.Count > 0)
+            foreach (var card in Items(Required(combat, "_allCards")))
+                if (!cardIds.ContainsKey(card!)) cardIds.Add(card!, cardIds.Count);
         object[] Cards(object pcs, string pile) => Items(Required(Required(pcs, pile), "Cards")).Select(card =>
         {
             if (!cardIds.TryGetValue(card!, out var instanceId))
@@ -132,11 +135,15 @@ public partial class SandboxExport : Node
         if (streams.Count != 12 + players.Length * 3) throw new InvalidOperationException("Incomplete RNG stream set");
         var active = Array.FindIndex(players, player => ReferenceEquals(player, Sts2Access.LivePlayer));
         if (active < 0) throw new InvalidOperationException("Local player unavailable");
-        return JsonSerializer.Serialize(new
+        var node = JsonSerializer.SerializeToNode(new
         {
             schema = "sandbox_position/1", build_id = Sts2Version.Current.Split('+')[0], seed = Required(Required(run, "Rng"), "StringSeed").ToString(), ascension = Number(run, "AscensionLevel"),
             act = Number(run, "CurrentActIndex") + 1, total_floor = Number(run, "TotalFloor"), turn = Number(combat, "RoundNumber"), turn_side = "player", active_player = active,
-            players = exportedPlayers, enemies, counters = streams
-        }, new JsonSerializerOptions { WriteIndented = true });
+            players = exportedPlayers, enemies, counters = streams, next_card_instance_id = cardIds.Count
+        }, new JsonSerializerOptions { WriteIndented = true })!.AsObject();
+        foreach (var creature in node["players"]!.AsArray().Concat(node["enemies"]!.AsArray()))
+            foreach (var power in creature!["powers"]!.AsArray())
+                if (!power!["skip_next_duration_tick"]!.GetValue<bool>()) power.AsObject().Remove("skip_next_duration_tick");
+        return node.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
     }
 }
