@@ -85,7 +85,7 @@ public partial class SandboxExport : Node
     }
 
     private static object[] Powers(object creature, object?[] players, object?[] enemies) => Items(Required(creature, "Powers"))
-        .Select(power => (object)new { id = Id(power), amount = Number(power, "Amount"), self_damage = SelfDamage(power), slow_count = SlowCount(power), applier = PowerSource(power, players, enemies), skip_next_duration_tick = (Id(power) is "WEAK_POWER" or "VULNERABLE_POWER" or "FRAIL_POWER") && (bool)Required(power, "SkipNextDurationTick") }).ToArray();
+        .Select(power => (object)new { id = Id(power), amount = Number(power, "Amount"), self_damage = SelfDamage(power), slow_count = SlowCount(power), ritual_just_applied = Id(power) == "RITUAL_POWER" ? (bool?)Required(power, "WasJustAppliedByEnemy") : null, applier = PowerSource(power, players, enemies), skip_next_duration_tick = (Id(power) is "WEAK_POWER" or "VULNERABLE_POWER" or "FRAIL_POWER") && (bool)Required(power, "SkipNextDurationTick") }).ToArray();
 
     public static string Capture()
     {
@@ -168,7 +168,7 @@ public partial class SandboxExport : Node
             var move = Required(monster, "NextMove");
             return new
             {
-                slot, slot_name = Id(monster) == "WRIGGLER" ? Required(creature, "SlotName")?.ToString() : null, id = Id(monster), current_hp = Number(creature, "CurrentHp"), max_hp = Number(creature, "MaxHp"), block = Number(creature, "Block"), powers = Powers(creature!, players, enemyCreatures),
+                slot, slot_name = (Id(monster) is "WRIGGLER" or "TWO_TAILED_RAT") ? Required(creature, "SlotName")?.ToString() : null, id = Id(monster), summon_turns = Id(monster) == "TWO_TAILED_RAT" ? (int?)Number(monster, "TurnsUntilSummonable") : null, summon_count = Id(monster) == "TWO_TAILED_RAT" ? (int?)Number(monster, "CallForBackupCount") : null, current_hp = Number(creature, "CurrentHp"), max_hp = Number(creature, "MaxHp"), block = Number(creature, "Block"), powers = Powers(creature!, players, enemyCreatures),
                 move_id = Required(move, "Id").ToString(), move_history = Items(Required(Required(monster, "MoveStateMachine"), "StateLog")).Select(state => Required(state, "Id").ToString()).ToArray(),
                 intents = Items(Required(move, "Intents")).Select(intent =>
                 {
@@ -196,11 +196,16 @@ public partial class SandboxExport : Node
                         if (card!["extra_damage"] is null) card.AsObject().Remove("extra_damage");
                     }
         foreach (var enemy in node["enemies"]!.AsArray())
+        {
             if (enemy!["slot_name"] is null) enemy.AsObject().Remove("slot_name");
+            if (enemy["summon_turns"] is null) enemy.AsObject().Remove("summon_turns");
+            if (enemy["summon_count"] is null) enemy.AsObject().Remove("summon_count");
+        }
         foreach (var creature in node["players"]!.AsArray().Concat(node["enemies"]!.AsArray()))
             foreach (var power in creature!["powers"]!.AsArray())
             {
                 if (!power!["skip_next_duration_tick"]!.GetValue<bool>()) power.AsObject().Remove("skip_next_duration_tick");
+                if (power["ritual_just_applied"] is null) power.AsObject().Remove("ritual_just_applied");
                 if (power["slow_count"] is null) power.AsObject().Remove("slow_count");
                 if (power["self_damage"] is null) power.AsObject().Remove("self_damage");
                 if (power["applier"] is null) power.AsObject().Remove("applier");
