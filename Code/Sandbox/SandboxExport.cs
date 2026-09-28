@@ -167,7 +167,7 @@ public partial class SandboxExport : Node
             var move = Required(monster, "NextMove");
             return new
             {
-                slot, id = Id(monster), current_hp = Number(creature, "CurrentHp"), max_hp = Number(creature, "MaxHp"), block = Number(creature, "Block"), powers = Powers(creature!, players, enemyCreatures),
+                slot, slot_name = Id(monster) == "WRIGGLER" ? Required(creature, "SlotName")?.ToString() : null, id = Id(monster), current_hp = Number(creature, "CurrentHp"), max_hp = Number(creature, "MaxHp"), block = Number(creature, "Block"), powers = Powers(creature!, players, enemyCreatures),
                 move_id = Required(move, "Id").ToString(), move_history = Items(Required(Required(monster, "MoveStateMachine"), "StateLog")).Select(state => Required(state, "Id").ToString()).ToArray(),
                 intents = Items(Required(move, "Intents")).Select(intent =>
                 {
@@ -194,6 +194,8 @@ public partial class SandboxExport : Node
                         if (card!["exhaust_on_next_play"]?.GetValue<bool>() == false) card.AsObject().Remove("exhaust_on_next_play");
                         if (card!["extra_damage"] is null) card.AsObject().Remove("extra_damage");
                     }
+        foreach (var enemy in node["enemies"]!.AsArray())
+            if (enemy!["slot_name"] is null) enemy.AsObject().Remove("slot_name");
         foreach (var creature in node["players"]!.AsArray().Concat(node["enemies"]!.AsArray()))
             foreach (var power in creature!["powers"]!.AsArray())
             {
