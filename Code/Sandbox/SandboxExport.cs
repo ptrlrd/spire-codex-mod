@@ -58,6 +58,13 @@ public partial class SandboxExport : Node
         return member is null ? null : Convert.ToDecimal(Required(card, member), CultureInfo.InvariantCulture).ToString("G29", CultureInfo.InvariantCulture);
     }
 
+    private static bool AddedSly(object? card) => Items(Required(card, "Keywords")).Any(keyword => keyword?.ToString() == "Sly")
+        && !Items(Required(Required(card, "CanonicalInstance"), "Keywords")).Any(keyword => keyword?.ToString() == "Sly");
+
+    private static bool TemporaryKeyword(object? card, string member) => (bool)(typeof(MegaCrit.Sts2.Core.Models.CardModel)
+        .GetProperty(member, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.GetValue(card)
+        ?? throw new InvalidOperationException($"Missing card keyword state {member}"));
+
     private static bool? ShivRetained(object? card) => Id(card) == "SHIV" ? Items(Required(card, "Keywords")).Any(keyword => keyword?.ToString() == "Retain") : null;
 
     private static object? CardHistory(object? card)
@@ -165,9 +172,8 @@ public partial class SandboxExport : Node
             capturedCombat = combat;
             cardIds.Clear();
         }
-        if (cardIds.Count > 0)
-            foreach (var card in Items(Required(combat, "_allCards")))
-                if (!cardIds.ContainsKey(card!)) cardIds.Add(card!, cardIds.Count);
+        foreach (var card in Items(Required(combat, "_allCards")))
+            if (!cardIds.ContainsKey(card!)) cardIds.Add(card!, cardIds.Count);
         object[] Cards(object pcs, string pile) => Items(Required(Required(pcs, pile), "Cards")).Select(card =>
         {
             if (!cardIds.TryGetValue(card!, out var instanceId))
@@ -179,7 +185,7 @@ public partial class SandboxExport : Node
             var cost = Reflect.Call(energy, "GetAmountToSpend") ?? throw new InvalidOperationException("Card cost unavailable");
             var enchantment = Reflect.GetMember(card, "Enchantment");
             var affliction = Reflect.GetMember(card, "Affliction");
-            return (object)new { instance_id = instanceId, id = Id(card), extra_damage = DamageIncrease(card), play_history = CardHistory(card), retained = ShivRetained(card), base_replay_count = Number(card, "BaseReplayCount"), exhaust_on_next_play = (bool)Required(card, "ExhaustOnNextPlay"), upgraded = (bool)Required(card, "IsUpgraded"), cost = Convert.ToInt32(cost), costs_x = (bool)Required(energy, "CostsX"), energy_cost = new {
+            return (object)new { instance_id = instanceId, id = Id(card), extra_damage = DamageIncrease(card), play_history = CardHistory(card), retained = ShivRetained(card), added_sly = AddedSly(card), single_turn_sly = TemporaryKeyword(card, "HasSingleTurnSly"), single_turn_retain = TemporaryKeyword(card, "HasSingleTurnRetain"), base_replay_count = Number(card, "BaseReplayCount"), exhaust_on_next_play = (bool)Required(card, "ExhaustOnNextPlay"), upgraded = (bool)Required(card, "IsUpgraded"), cost = Convert.ToInt32(cost), costs_x = (bool)Required(energy, "CostsX"), energy_cost = new {
                 base_cost = Number(energy, "_base"), captured_x = (bool)Required(energy, "CostsX") ? (int?)Number(energy, "CapturedXValue") : null,
                 modifiers = Items(Required(energy, "_localModifiers")).Select(modifier => new { amount = Number(modifier, "Amount"), type = Required(modifier, "Type").ToString()!.ToLowerInvariant(), expiration = Number(modifier, "Expiration"), reduce_only = (bool)Required(modifier, "IsReduceOnly") }).ToArray()
             }, affliction = affliction is null ? null : new { id = Id(affliction), amount = Number(affliction, "Amount") }, enchantment = enchantment is null ? null : Id(enchantment) };
@@ -248,6 +254,8 @@ public partial class SandboxExport : Node
                         if (card!["exhaust_on_next_play"]?.GetValue<bool>() == false) card.AsObject().Remove("exhaust_on_next_play");
                         if (card!["base_replay_count"]!.GetValue<int>() == 0) card.AsObject().Remove("base_replay_count");
                         if (card!["retained"] is null) card.AsObject().Remove("retained");
+                        foreach (var keyword in new[] { "added_sly", "single_turn_sly", "single_turn_retain" })
+                            if (card![keyword]!.GetValue<bool>() == false) card.AsObject().Remove(keyword);
                         if (card!["play_history"] is null) card.AsObject().Remove("play_history");
                         if (card!["extra_damage"] is null) card.AsObject().Remove("extra_damage");
                     }
