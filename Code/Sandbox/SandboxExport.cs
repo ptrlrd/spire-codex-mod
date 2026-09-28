@@ -152,6 +152,7 @@ public partial class SandboxExport : Node
                 character = Id(Required(player, "Character")), current_hp = Number(creature, "CurrentHp"), max_hp = Number(creature, "MaxHp"), block = Number(creature, "Block"),
                 cards_exhausted_this_turn = manager.History.Entries.OfType<CardExhaustedEntry>().Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature)),
                 hp_loss_this_turn = manager.History.Entries.OfType<DamageReceivedEntry>().Any(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Receiver, creature) && entry.Result.UnblockedDamage > 0),
+                cards_played_this_turn = manager.History.CardPlaysStarted.Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature)),
                 attacks_played_this_turn = manager.History.CardPlaysStarted.Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.CardPlay.Card.Type == MegaCrit.Sts2.Core.Entities.Cards.CardType.Attack),
                 powered_block_gains_this_turn = manager.History.Entries.OfType<BlockGainedEntry>().Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.Props.IsCardOrMonsterMove()),
                 hp_loss_count = manager.History.Entries.OfType<DamageReceivedEntry>().Count(entry => ReferenceEquals(entry.Receiver, creature) && entry.Result.UnblockedDamage > 0),
