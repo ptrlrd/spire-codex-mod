@@ -67,7 +67,7 @@ public partial class SandboxExport : Node
 
     private static string? PowerSource(object? power, object?[] players, object?[] enemies)
     {
-        if (Id(power) != "SHRINK_POWER") return null;
+        if (Id(power) is not ("SHRINK_POWER" or "CONSTRICT_POWER")) return null;
         var applier = Reflect.GetMember(power, "Applier");
         if (applier is null) return "none";
         var player = Array.FindIndex(players, value => ReferenceEquals(Required(value, "Creature"), applier));
@@ -124,10 +124,11 @@ public partial class SandboxExport : Node
             var energy = Required(card, "EnergyCost");
             var cost = Reflect.Call(energy, "GetAmountToSpend") ?? throw new InvalidOperationException("Card cost unavailable");
             var enchantment = Reflect.GetMember(card, "Enchantment");
+            var affliction = Reflect.GetMember(card, "Affliction");
             return (object)new { instance_id = instanceId, id = Id(card), extra_damage = DamageIncrease(card), exhaust_on_next_play = (bool)Required(card, "ExhaustOnNextPlay"), upgraded = (bool)Required(card, "IsUpgraded"), cost = Convert.ToInt32(cost), costs_x = (bool)Required(energy, "CostsX"), energy_cost = new {
                 base_cost = Number(energy, "_base"), captured_x = (bool)Required(energy, "CostsX") ? (int?)Number(energy, "CapturedXValue") : null,
                 modifiers = Items(Required(energy, "_localModifiers")).Select(modifier => new { amount = Number(modifier, "Amount"), type = Required(modifier, "Type").ToString()!.ToLowerInvariant(), expiration = Number(modifier, "Expiration"), reduce_only = (bool)Required(modifier, "IsReduceOnly") }).ToArray()
-            }, enchantment = enchantment is null ? null : Id(enchantment) };
+            }, affliction = affliction is null ? null : new { id = Id(affliction), amount = Number(affliction, "Amount") }, enchantment = enchantment is null ? null : Id(enchantment) };
         }).ToArray();
         var enemyCreatures = Items(Required(room, "Enemies"));
         var exportedPlayers = players.Select((player, slot) =>
@@ -182,6 +183,7 @@ public partial class SandboxExport : Node
                 if (player![pile] is System.Text.Json.Nodes.JsonArray cards)
                     foreach (var card in cards)
                     {
+                        if (card!["affliction"] is null) card.AsObject().Remove("affliction");
                         if (card!["exhaust_on_next_play"]?.GetValue<bool>() == false) card.AsObject().Remove("exhaust_on_next_play");
                         if (card!["extra_damage"] is null) card.AsObject().Remove("extra_damage");
                     }
