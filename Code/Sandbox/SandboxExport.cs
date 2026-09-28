@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using Godot;
 using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.ValueProps;
 using MegaCrit.Sts2.Core.Combat.History.Entries;
 using SpireCodex.Core;
 
@@ -51,8 +52,33 @@ public partial class SandboxExport : Node
         : throw new InvalidOperationException("Missing sandbox collection");
     private static string Snake(string name) => string.Concat(name.Select((ch, index) => index > 0 && char.IsUpper(ch) ? "_" + char.ToLowerInvariant(ch) : char.ToLowerInvariant(ch).ToString()));
 
-    private static object[] Powers(object creature) => Items(Required(creature, "Powers"))
-        .Select(power => (object)new { id = Id(power), amount = Number(power, "Amount"), skip_next_duration_tick = (Id(power) is "WEAK_POWER" or "VULNERABLE_POWER" or "FRAIL_POWER") && (bool)Required(power, "SkipNextDurationTick") }).ToArray();
+    private static string? DamageIncrease(object? card)
+    {
+        var member = Id(card) switch { "RAMPAGE" => "_extraDamageFromPlays", "THRASH" => "_extraDamage", _ => null };
+        return member is null ? null : Convert.ToDecimal(Required(card, member), CultureInfo.InvariantCulture).ToString("G29", CultureInfo.InvariantCulture);
+    }
+
+    private static int? SelfDamage(object? power)
+    {
+        if (Id(power) is not ("INFERNO_POWER" or "CRIMSON_MANTLE_POWER")) return null;
+        var vars = Required(power, "DynamicVars");
+        return Number(vars.GetType().GetProperty("Item")!.GetValue(vars, ["SelfDamage"]), "BaseValue");
+    }
+
+    private static string? PowerSource(object? power, object?[] players, object?[] enemies)
+    {
+        if (Id(power) != "SHRINK_POWER") return null;
+        var applier = Reflect.GetMember(power, "Applier");
+        if (applier is null) return "none";
+        var player = Array.FindIndex(players, value => ReferenceEquals(Required(value, "Creature"), applier));
+        if (player >= 0) return $"player:{player}";
+        var enemy = Array.FindIndex(enemies, value => ReferenceEquals(value, applier));
+        if (enemy >= 0) return $"enemy:{enemy}";
+        throw new InvalidOperationException("Power source is outside combat");
+    }
+
+    private static object[] Powers(object creature, object?[] players, object?[] enemies) => Items(Required(creature, "Powers"))
+        .Select(power => (object)new { id = Id(power), amount = Number(power, "Amount"), self_damage = SelfDamage(power), applier = PowerSource(power, players, enemies), skip_next_duration_tick = (Id(power) is "WEAK_POWER" or "VULNERABLE_POWER" or "FRAIL_POWER") && (bool)Required(power, "SkipNextDurationTick") }).ToArray();
 
     public static string Capture()
     {
@@ -98,11 +124,12 @@ public partial class SandboxExport : Node
             var energy = Required(card, "EnergyCost");
             var cost = Reflect.Call(energy, "GetAmountToSpend") ?? throw new InvalidOperationException("Card cost unavailable");
             var enchantment = Reflect.GetMember(card, "Enchantment");
-            return (object)new { instance_id = instanceId, id = Id(card), upgraded = (bool)Required(card, "IsUpgraded"), cost = Convert.ToInt32(cost), costs_x = (bool)Required(energy, "CostsX"), energy_cost = new {
+            return (object)new { instance_id = instanceId, id = Id(card), extra_damage = DamageIncrease(card), upgraded = (bool)Required(card, "IsUpgraded"), cost = Convert.ToInt32(cost), costs_x = (bool)Required(energy, "CostsX"), energy_cost = new {
                 base_cost = Number(energy, "_base"), captured_x = (bool)Required(energy, "CostsX") ? (int?)Number(energy, "CapturedXValue") : null,
                 modifiers = Items(Required(energy, "_localModifiers")).Select(modifier => new { amount = Number(modifier, "Amount"), type = Required(modifier, "Type").ToString()!.ToLowerInvariant(), expiration = Number(modifier, "Expiration"), reduce_only = (bool)Required(modifier, "IsReduceOnly") }).ToArray()
             }, enchantment = enchantment is null ? null : Id(enchantment) };
         }).ToArray();
+        var enemyCreatures = Items(Required(room, "Enemies"));
         var exportedPlayers = players.Select((player, slot) =>
         {
             if (Reflect.CallWith(manager, "IsExecutingCardOrPotionEffect", player) is not false)
@@ -116,19 +143,23 @@ public partial class SandboxExport : Node
             {
                 character = Id(Required(player, "Character")), current_hp = Number(creature, "CurrentHp"), max_hp = Number(creature, "MaxHp"), block = Number(creature, "Block"),
                 cards_exhausted_this_turn = manager.History.Entries.OfType<CardExhaustedEntry>().Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature)),
+                hp_loss_this_turn = manager.History.Entries.OfType<DamageReceivedEntry>().Any(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Receiver, creature) && entry.Result.UnblockedDamage > 0),
+                attacks_played_this_turn = manager.History.CardPlaysStarted.Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.CardPlay.Card.Type == MegaCrit.Sts2.Core.Entities.Cards.CardType.Attack),
+                powered_block_gains_this_turn = manager.History.Entries.OfType<BlockGainedEntry>().Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.Props.IsCardOrMonsterMove()),
+                hp_loss_count = manager.History.Entries.OfType<DamageReceivedEntry>().Count(entry => ReferenceEquals(entry.Receiver, creature) && entry.Result.UnblockedDamage > 0),
                 energy = Number(pcs, "Energy"), max_energy = Number(pcs, "MaxEnergy"), gold = Number(player, "Gold"),
-                hand = Cards(pcs, "Hand"), draw_pile = Cards(pcs, "DrawPile"), discard_pile = Cards(pcs, "DiscardPile"), exhaust_pile = Cards(pcs, "ExhaustPile"), powers = Powers(creature),
+                hand = Cards(pcs, "Hand"), draw_pile = Cards(pcs, "DrawPile"), discard_pile = Cards(pcs, "DiscardPile"), exhaust_pile = Cards(pcs, "ExhaustPile"), powers = Powers(creature, players, enemyCreatures),
                 relics = Items(Required(player, "Relics")).Select(relic => new { id = Id(relic), counter = Number(relic, "DisplayAmount") }).ToArray(),
                 potions = Items(Required(player, "PotionSlots")).Select(potion => potion is null ? null : new { id = Id(potion) }).ToArray()
             };
         }).ToArray();
-        var enemies = Items(Required(room, "Enemies")).Select((creature, slot) =>
+        var enemies = enemyCreatures.Select((creature, slot) =>
         {
             var monster = Required(creature, "Monster");
             var move = Required(monster, "NextMove");
             return new
             {
-                slot, id = Id(monster), current_hp = Number(creature, "CurrentHp"), max_hp = Number(creature, "MaxHp"), block = Number(creature, "Block"), powers = Powers(creature!),
+                slot, id = Id(monster), current_hp = Number(creature, "CurrentHp"), max_hp = Number(creature, "MaxHp"), block = Number(creature, "Block"), powers = Powers(creature!, players, enemyCreatures),
                 move_id = Required(move, "Id").ToString(), move_history = Items(Required(Required(monster, "MoveStateMachine"), "StateLog")).Select(state => Required(state, "Id").ToString()).ToArray(),
                 intents = Items(Required(move, "Intents")).Select(intent =>
                 {
@@ -142,13 +173,22 @@ public partial class SandboxExport : Node
         if (active < 0) throw new InvalidOperationException("Local player unavailable");
         var node = JsonSerializer.SerializeToNode(new
         {
-            schema = "sandbox_position/2", build_id = Sts2Version.Current.Split('+')[0], seed = Required(Required(run, "Rng"), "StringSeed").ToString(), ascension = Number(run, "AscensionLevel"),
+            schema = "sandbox_position/3", build_id = Sts2Version.Current.Split('+')[0], seed = Required(Required(run, "Rng"), "StringSeed").ToString(), ascension = Number(run, "AscensionLevel"),
             act = Number(run, "CurrentActIndex") + 1, total_floor = Number(run, "TotalFloor"), turn = Number(combat, "RoundNumber"), turn_side = "player", active_player = active,
             players = exportedPlayers, enemies, counters = streams, next_card_instance_id = cardIds.Count
         }, new JsonSerializerOptions { WriteIndented = true })!.AsObject();
+        foreach (var player in node["players"]!.AsArray())
+            foreach (var pile in new[] { "hand", "draw_pile", "discard_pile", "exhaust_pile", "play_pile" })
+                if (player![pile] is System.Text.Json.Nodes.JsonArray cards)
+                    foreach (var card in cards)
+                        if (card!["extra_damage"] is null) card.AsObject().Remove("extra_damage");
         foreach (var creature in node["players"]!.AsArray().Concat(node["enemies"]!.AsArray()))
             foreach (var power in creature!["powers"]!.AsArray())
+            {
                 if (!power!["skip_next_duration_tick"]!.GetValue<bool>()) power.AsObject().Remove("skip_next_duration_tick");
+                if (power["self_damage"] is null) power.AsObject().Remove("self_damage");
+                if (power["applier"] is null) power.AsObject().Remove("applier");
+            }
         return node.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
     }
 }
