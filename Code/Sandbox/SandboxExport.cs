@@ -100,7 +100,7 @@ public partial class SandboxExport : Node
     }
 
     private static object[] Powers(object creature, object?[] players, object?[] enemies) => Items(Required(creature, "Powers"))
-        .Select(power => (object)new { id = Id(power), amount = Number(power, "Amount"), self_damage = SelfDamage(power), slow_count = SlowCount(power), target_player = PowerTarget(power, players), stolen_gold = StolenGold(power), ritual_just_applied = Id(power) == "RITUAL_POWER" ? (bool?)Required(power, "WasJustAppliedByEnemy") : null, applier = PowerSource(power, players, enemies), skip_next_duration_tick = (Id(power) is "WEAK_POWER" or "VULNERABLE_POWER" or "FRAIL_POWER") && (bool)Required(power, "SkipNextDurationTick") }).ToArray();
+        .Select(power => (object)new { id = Id(power), amount = Number(power, "Amount"), self_damage = SelfDamage(power), slow_count = SlowCount(power), skittish_used = Id(power) == "SKITTISH_POWER" ? (bool?)Required(power, "HasGainedBlockThisTurn") : null, shell_remaining = Id(power) == "HARDENED_SHELL_POWER" ? (int?)Number(power, "DisplayAmount") : null, target_player = PowerTarget(power, players), stolen_gold = StolenGold(power), ritual_just_applied = Id(power) == "RITUAL_POWER" ? (bool?)Required(power, "WasJustAppliedByEnemy") : null, applier = PowerSource(power, players, enemies), skip_next_duration_tick = (Id(power) is "WEAK_POWER" or "VULNERABLE_POWER" or "FRAIL_POWER") && (bool)Required(power, "SkipNextDurationTick") }).ToArray();
 
     public static string Capture()
     {
@@ -224,6 +224,8 @@ public partial class SandboxExport : Node
                 if (power["target_player"] is null) power.AsObject().Remove("target_player");
                 if (power["stolen_gold"] is null) power.AsObject().Remove("stolen_gold");
                 if (power["ritual_just_applied"] is null) power.AsObject().Remove("ritual_just_applied");
+                if (power["skittish_used"] is null) power.AsObject().Remove("skittish_used");
+                if (power["shell_remaining"] is null) power.AsObject().Remove("shell_remaining");
                 if (power["slow_count"] is null) power.AsObject().Remove("slow_count");
                 if (power["self_damage"] is null) power.AsObject().Remove("self_damage");
                 if (power["applier"] is null) power.AsObject().Remove("applier");
