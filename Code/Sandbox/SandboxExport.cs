@@ -121,7 +121,7 @@ public partial class SandboxExport : Node
 
     private static string? PowerSource(object? power, object?[] players, object?[] enemies)
     {
-        if (Id(power) is not ("SHRINK_POWER" or "CONSTRICT_POWER")) return null;
+        if (Id(power) is not ("SHRINK_POWER" or "CONSTRICT_POWER" or "STRANGLE_POWER")) return null;
         var applier = Reflect.GetMember(power, "Applier");
         if (applier is null) return "none";
         var player = Array.FindIndex(players, value => ReferenceEquals(Required(value, "Creature"), applier));
@@ -202,6 +202,10 @@ public partial class SandboxExport : Node
                 skills_played_this_turn = manager.History.CardPlaysStarted.Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.CardPlay.Card.Type == MegaCrit.Sts2.Core.Entities.Cards.CardType.Skill),
                 cards_played_this_turn = manager.History.CardPlaysStarted.Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature)),
                 shivs_played_this_turn = manager.History.CardPlaysFinished.Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.CardPlay.Card.Id.Entry == "SHIV"),
+                finished_attacks_this_turn = manager.History.CardPlaysFinished.Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.CardPlay.Card.Type == MegaCrit.Sts2.Core.Entities.Cards.CardType.Attack),
+                finished_skills_this_turn = manager.History.CardPlaysFinished.Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.CardPlay.Card.Type == MegaCrit.Sts2.Core.Entities.Cards.CardType.Skill),
+                cards_discarded_this_turn = manager.History.Entries.OfType<CardDiscardedEntry>().Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature)),
+                cards_drawn_in_combat = manager.History.Entries.OfType<CardDrawnEntry>().Count(entry => ReferenceEquals(entry.Actor, creature)),
                 attacks_played_this_turn = manager.History.CardPlaysStarted.Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.CardPlay.Card.Type == MegaCrit.Sts2.Core.Entities.Cards.CardType.Attack),
                 powered_block_gains_this_turn = manager.History.Entries.OfType<BlockGainedEntry>().Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.Props.IsCardOrMonsterMove()),
                 hp_loss_count = manager.History.Entries.OfType<DamageReceivedEntry>().Count(entry => ReferenceEquals(entry.Receiver, creature) && entry.Result.UnblockedDamage > 0),
