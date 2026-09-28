@@ -66,6 +66,8 @@ public sealed class SpireCodexConfig : SimpleModConfig
     [ConfigSection("Hotkeys")]
     // The single overlay hotkey (the companion panel; was two keys before consolidation).
     public static HotKey OverlayKey { get; set; } = HotKey.F5;
+    public static HotKey SandboxKey { get; set; } = HotKey.F7;
+    public static Key SandboxKeycode => KeyOf(SandboxKey);
 
     // Controller binding for the same overlay toggle. STS2 feeds the controller through Steam
     // Input as synthetic game ACTIONS (not raw joypad buttons), so the binding is the game's
