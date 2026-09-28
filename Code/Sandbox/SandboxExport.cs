@@ -72,6 +72,21 @@ public partial class SandboxExport : Node
         return Number(vars.GetType().GetProperty("Item")!.GetValue(vars, ["SlowAmount"]), "BaseValue");
     }
 
+    private static int? PowerTarget(object? power, object?[] players)
+    {
+        if (Id(power) is not ("THIEVERY_POWER" or "HEIST_POWER")) return null;
+        var target = Required(power, "Target");
+        var slot = Array.FindIndex(players, player => ReferenceEquals(Required(player, "Creature"), target));
+        if (slot < 0) throw new InvalidOperationException("Power target is outside the party");
+        return slot;
+    }
+
+    private static int? StolenGold(object? power)
+    {
+        if (Id(power) != "THIEVERY_POWER") return null;
+        return Number(Required(Required(power, "DynamicVars"), "Gold"), "BaseValue");
+    }
+
     private static string? PowerSource(object? power, object?[] players, object?[] enemies)
     {
         if (Id(power) is not ("SHRINK_POWER" or "CONSTRICT_POWER")) return null;
@@ -85,7 +100,7 @@ public partial class SandboxExport : Node
     }
 
     private static object[] Powers(object creature, object?[] players, object?[] enemies) => Items(Required(creature, "Powers"))
-        .Select(power => (object)new { id = Id(power), amount = Number(power, "Amount"), self_damage = SelfDamage(power), slow_count = SlowCount(power), ritual_just_applied = Id(power) == "RITUAL_POWER" ? (bool?)Required(power, "WasJustAppliedByEnemy") : null, applier = PowerSource(power, players, enemies), skip_next_duration_tick = (Id(power) is "WEAK_POWER" or "VULNERABLE_POWER" or "FRAIL_POWER") && (bool)Required(power, "SkipNextDurationTick") }).ToArray();
+        .Select(power => (object)new { id = Id(power), amount = Number(power, "Amount"), self_damage = SelfDamage(power), slow_count = SlowCount(power), target_player = PowerTarget(power, players), stolen_gold = StolenGold(power), ritual_just_applied = Id(power) == "RITUAL_POWER" ? (bool?)Required(power, "WasJustAppliedByEnemy") : null, applier = PowerSource(power, players, enemies), skip_next_duration_tick = (Id(power) is "WEAK_POWER" or "VULNERABLE_POWER" or "FRAIL_POWER") && (bool)Required(power, "SkipNextDurationTick") }).ToArray();
 
     public static string Capture()
     {
@@ -152,6 +167,7 @@ public partial class SandboxExport : Node
                 character = Id(Required(player, "Character")), current_hp = Number(creature, "CurrentHp"), max_hp = Number(creature, "MaxHp"), block = Number(creature, "Block"),
                 cards_exhausted_this_turn = manager.History.Entries.OfType<CardExhaustedEntry>().Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature)),
                 hp_loss_this_turn = manager.History.Entries.OfType<DamageReceivedEntry>().Any(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Receiver, creature) && entry.Result.UnblockedDamage > 0),
+                skills_played_this_turn = manager.History.CardPlaysStarted.Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.CardPlay.Card.Type == MegaCrit.Sts2.Core.Entities.Cards.CardType.Skill),
                 cards_played_this_turn = manager.History.CardPlaysStarted.Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature)),
                 attacks_played_this_turn = manager.History.CardPlaysStarted.Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.CardPlay.Card.Type == MegaCrit.Sts2.Core.Entities.Cards.CardType.Attack),
                 powered_block_gains_this_turn = manager.History.Entries.OfType<BlockGainedEntry>().Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.Props.IsCardOrMonsterMove()),
@@ -168,7 +184,7 @@ public partial class SandboxExport : Node
             var move = Required(monster, "NextMove");
             return new
             {
-                slot, slot_name = (Id(monster) is "WRIGGLER" or "TWO_TAILED_RAT") ? Required(creature, "SlotName")?.ToString() : null, id = Id(monster), summon_turns = Id(monster) == "TWO_TAILED_RAT" ? (int?)Number(monster, "TurnsUntilSummonable") : null, summon_count = Id(monster) == "TWO_TAILED_RAT" ? (int?)Number(monster, "CallForBackupCount") : null, current_hp = Number(creature, "CurrentHp"), max_hp = Number(creature, "MaxHp"), block = Number(creature, "Block"), powers = Powers(creature!, players, enemyCreatures),
+                slot, slot_name = (Id(monster) is "WRIGGLER" or "TWO_TAILED_RAT" or "LIVING_FOG" or "GAS_BOMB" or "GREMLIN_MERC" or "SNEAKY_GREMLIN" or "FAT_GREMLIN") ? Required(creature, "SlotName")?.ToString() : null, id = Id(monster), summon_turns = Id(monster) == "TWO_TAILED_RAT" ? (int?)Number(monster, "TurnsUntilSummonable") : null, summon_count = Id(monster) == "TWO_TAILED_RAT" ? (int?)Number(monster, "CallForBackupCount") : null, current_hp = Number(creature, "CurrentHp"), max_hp = Number(creature, "MaxHp"), block = Number(creature, "Block"), powers = Powers(creature!, players, enemyCreatures),
                 move_id = Required(move, "Id").ToString(), move_history = Items(Required(Required(monster, "MoveStateMachine"), "StateLog")).Select(state => Required(state, "Id").ToString()).ToArray(),
                 intents = Items(Required(move, "Intents")).Select(intent =>
                 {
@@ -205,6 +221,8 @@ public partial class SandboxExport : Node
             foreach (var power in creature!["powers"]!.AsArray())
             {
                 if (!power!["skip_next_duration_tick"]!.GetValue<bool>()) power.AsObject().Remove("skip_next_duration_tick");
+                if (power["target_player"] is null) power.AsObject().Remove("target_player");
+                if (power["stolen_gold"] is null) power.AsObject().Remove("stolen_gold");
                 if (power["ritual_just_applied"] is null) power.AsObject().Remove("ritual_just_applied");
                 if (power["slow_count"] is null) power.AsObject().Remove("slow_count");
                 if (power["self_damage"] is null) power.AsObject().Remove("self_damage");
