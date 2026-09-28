@@ -108,7 +108,7 @@ public partial class SandboxExport : Node
             return new
             {
                 character = Id(Required(player, "Character")), current_hp = Number(creature, "CurrentHp"), max_hp = Number(creature, "MaxHp"), block = Number(creature, "Block"),
-                energy = Number(pcs, "Energy"), max_energy = Number(player, "MaxEnergy"), gold = Number(player, "Gold"),
+                energy = Number(pcs, "Energy"), max_energy = Number(pcs, "MaxEnergy"), gold = Number(player, "Gold"),
                 hand = Cards(pcs, "Hand"), draw_pile = Cards(pcs, "DrawPile"), discard_pile = Cards(pcs, "DiscardPile"), exhaust_pile = Cards(pcs, "ExhaustPile"), powers = Powers(creature),
                 relics = Items(Required(player, "Relics")).Select(relic => new { id = Id(relic), counter = Number(relic, "DisplayAmount") }).ToArray(),
                 potions = Items(Required(player, "PotionSlots")).Select(potion => potion is null ? null : new { id = Id(potion) }).ToArray()
