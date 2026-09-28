@@ -147,7 +147,7 @@ public partial class SandboxExport : Node
             var cost = Reflect.Call(energy, "GetAmountToSpend") ?? throw new InvalidOperationException("Card cost unavailable");
             var enchantment = Reflect.GetMember(card, "Enchantment");
             var affliction = Reflect.GetMember(card, "Affliction");
-            return (object)new { instance_id = instanceId, id = Id(card), extra_damage = DamageIncrease(card), exhaust_on_next_play = (bool)Required(card, "ExhaustOnNextPlay"), upgraded = (bool)Required(card, "IsUpgraded"), cost = Convert.ToInt32(cost), costs_x = (bool)Required(energy, "CostsX"), energy_cost = new {
+            return (object)new { instance_id = instanceId, id = Id(card), extra_damage = DamageIncrease(card), base_replay_count = Number(card, "BaseReplayCount"), exhaust_on_next_play = (bool)Required(card, "ExhaustOnNextPlay"), upgraded = (bool)Required(card, "IsUpgraded"), cost = Convert.ToInt32(cost), costs_x = (bool)Required(energy, "CostsX"), energy_cost = new {
                 base_cost = Number(energy, "_base"), captured_x = (bool)Required(energy, "CostsX") ? (int?)Number(energy, "CapturedXValue") : null,
                 modifiers = Items(Required(energy, "_localModifiers")).Select(modifier => new { amount = Number(modifier, "Amount"), type = Required(modifier, "Type").ToString()!.ToLowerInvariant(), expiration = Number(modifier, "Expiration"), reduce_only = (bool)Required(modifier, "IsReduceOnly") }).ToArray()
             }, affliction = affliction is null ? null : new { id = Id(affliction), amount = Number(affliction, "Amount") }, enchantment = enchantment is null ? null : Id(enchantment) };
@@ -209,6 +209,7 @@ public partial class SandboxExport : Node
                     {
                         if (card!["affliction"] is null) card.AsObject().Remove("affliction");
                         if (card!["exhaust_on_next_play"]?.GetValue<bool>() == false) card.AsObject().Remove("exhaust_on_next_play");
+                        if (card!["base_replay_count"]!.GetValue<int>() == 0) card.AsObject().Remove("base_replay_count");
                         if (card!["extra_damage"] is null) card.AsObject().Remove("extra_damage");
                     }
         foreach (var enemy in node["enemies"]!.AsArray())
