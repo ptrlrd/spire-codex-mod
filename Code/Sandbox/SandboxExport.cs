@@ -141,6 +141,7 @@ public partial class SandboxExport : Node
     private static void NormalizeCard(System.Text.Json.Nodes.JsonNode card)
     {
         if (card!["affliction"] is null) card.AsObject().Remove("affliction");
+        if (card["star_cost"] is null) card.AsObject().Remove("star_cost");
         if (card!["exhaust_on_next_play"]?.GetValue<bool>() == false) card.AsObject().Remove("exhaust_on_next_play");
         if (card!["base_replay_count"]!.GetValue<int>() == 0) card.AsObject().Remove("base_replay_count");
         if (card!["retained"] is null) card.AsObject().Remove("retained");
@@ -148,6 +149,15 @@ public partial class SandboxExport : Node
             if (card![keyword]!.GetValue<bool>() == false) card.AsObject().Remove(keyword);
         if (card!["play_history"] is null) card.AsObject().Remove("play_history");
         if (card!["extra_damage"] is null) card.AsObject().Remove("extra_damage");
+    }
+
+    private static object? StarCost(object? card)
+    {
+        var x = (bool)Required(card, "HasStarCostX");
+        if (Number(card, "CanonicalStarCost") < 0 && !x) return null;
+        var field = typeof(MegaCrit.Sts2.Core.Models.CardModel).GetField("_temporaryStarCosts", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var modifiers = Items(field.GetValue(card));
+        return new { base_cost = Number(card, "BaseStarCost"), cost = Convert.ToInt32(Reflect.Call(card!, "GetStarCostWithModifiers")), costs_x = x, last_spent = Number(card, "LastStarsSpent"), modifiers = modifiers.Select(modifier => new { amount = Number(modifier, "Cost"), expiration = ((bool)Required(modifier, "ClearsWhenTurnEnds") ? 2 : 0) | ((bool)Required(modifier, "ClearsWhenCardIsPlayed") ? 4 : 0) }).ToArray() };
     }
 
     private static object CardValue(object? card)
@@ -161,7 +171,7 @@ public partial class SandboxExport : Node
         var cost = Reflect.Call(energy, "GetAmountToSpend") ?? throw new InvalidOperationException("Card cost unavailable");
         var enchantment = Reflect.GetMember(card, "Enchantment");
         var affliction = Reflect.GetMember(card, "Affliction");
-        return (object)new { instance_id = instanceId, id = Id(card), extra_damage = DamageIncrease(card), play_history = CardHistory(card), retained = ShivRetained(card), added_sly = AddedSly(card), single_turn_sly = TemporaryKeyword(card, "HasSingleTurnSly"), single_turn_retain = TemporaryKeyword(card, "HasSingleTurnRetain"), base_replay_count = Number(card, "BaseReplayCount"), exhaust_on_next_play = (bool)Required(card, "ExhaustOnNextPlay"), upgraded = (bool)Required(card, "IsUpgraded"), cost = Convert.ToInt32(cost), costs_x = (bool)Required(energy, "CostsX"), energy_cost = new {
+        return (object)new { instance_id = instanceId, id = Id(card), star_cost = StarCost(card), extra_damage = DamageIncrease(card), play_history = CardHistory(card), retained = ShivRetained(card), added_sly = AddedSly(card), single_turn_sly = TemporaryKeyword(card, "HasSingleTurnSly"), single_turn_retain = TemporaryKeyword(card, "HasSingleTurnRetain"), base_replay_count = Number(card, "BaseReplayCount"), exhaust_on_next_play = (bool)Required(card, "ExhaustOnNextPlay"), upgraded = (bool)Required(card, "IsUpgraded"), cost = Convert.ToInt32(cost), costs_x = (bool)Required(energy, "CostsX"), energy_cost = new {
             base_cost = Number(energy, "_base"), captured_x = (bool)Required(energy, "CostsX") ? (int?)Number(energy, "CapturedXValue") : null,
             modifiers = Items(Required(energy, "_localModifiers")).Select(modifier => new { amount = Number(modifier, "Amount"), type = Required(modifier, "Type").ToString()!.ToLowerInvariant(), expiration = Number(modifier, "Expiration"), reduce_only = (bool)Required(modifier, "IsReduceOnly") }).ToArray()
         }, affliction = affliction is null ? null : new { id = Id(affliction), amount = Number(affliction, "Amount") }, enchantment = enchantment is null ? null : Id(enchantment) };
@@ -236,7 +246,7 @@ public partial class SandboxExport : Node
                 attacks_played_this_turn = manager.History.CardPlaysStarted.Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.CardPlay.Card.Type == MegaCrit.Sts2.Core.Entities.Cards.CardType.Attack),
                 powered_block_gains_this_turn = manager.History.Entries.OfType<BlockGainedEntry>().Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.Props.IsCardOrMonsterMove()),
                 hp_loss_count = manager.History.Entries.OfType<DamageReceivedEntry>().Count(entry => ReferenceEquals(entry.Receiver, creature) && entry.Result.UnblockedDamage > 0),
-                energy = Number(pcs, "Energy"), max_energy = Number(pcs, "MaxEnergy"), gold = Number(player, "Gold"),
+                energy = Number(pcs, "Energy"), stars = Number(pcs, "Stars"), max_energy = Number(pcs, "MaxEnergy"), gold = Number(player, "Gold"),
                 hand = Cards(pcs, "Hand"), draw_pile = Cards(pcs, "DrawPile"), discard_pile = Cards(pcs, "DiscardPile"), exhaust_pile = Cards(pcs, "ExhaustPile"), powers = Powers(creature, players, enemyCreatures),
                 relics = Items(Required(player, "Relics")).Select(relic => new { id = Id(relic), counter = Number(relic, "DisplayAmount") }).ToArray(),
                 potions = Items(Required(player, "PotionSlots")).Select(potion => potion is null ? null : new { id = Id(potion) }).ToArray()
