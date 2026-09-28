@@ -85,6 +85,13 @@ public partial class SandboxExport : Node
 
     private static int? PowerCardsLeft(object? power) => Id(power) is "AUTOMATION_POWER" or "PANACHE_POWER" ? Number(power, "DisplayAmount") : null;
 
+    private static bool? PaleActivated(object? power)
+    {
+        if (Id(power) != "PALE_BLUE_DOT_POWER") return null;
+        var field = typeof(MegaCrit.Sts2.Core.Models.PowerModel).GetField("_internalData", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        return Reflect.GetMember(field.GetValue(power), "alreadyActivatedThisTurn") as bool? ?? false;
+    }
+
     private static bool? PanacheActive(object? power)
     {
         if (Id(power) != "PANACHE_POWER") return null;
@@ -186,7 +193,7 @@ public partial class SandboxExport : Node
     }
 
     private static object[] Powers(object creature, object?[] players, object?[] enemies) => Items(Required(creature, "Powers"))
-        .Select(power => (object)new { id = Id(power), amount = Number(power, "Amount"), energy_left = Id(power) == "ORBIT_POWER" ? (int?)Number(power, "DisplayAmount") : null, strength_gain = Id(power) == "MONOLOGUE_POWER" ? (int?)Number(Required(Required(power, "DynamicVars"), "Strength"), "BaseValue") : null, strength_applied = Id(power) == "MONOLOGUE_POWER" ? (int?)Number(power, "DisplayAmount") : null, poison_count = Id(power) == "OUTBREAK_POWER" ? (int?)Number(power, "DisplayAmount") : null, selected_card = NightmareCard(power), self_damage = SelfDamage(power), cards_left = PowerCardsLeft(power), panache_active = PanacheActive(power), damage = PowerDamage(power), slow_count = SlowCount(power), skittish_used = Id(power) == "SKITTISH_POWER" ? (bool?)Required(power, "HasGainedBlockThisTurn") : null, shell_remaining = Id(power) == "HARDENED_SHELL_POWER" ? (int?)Number(power, "DisplayAmount") : null, target_player = PowerTarget(power, players), stolen_gold = StolenGold(power), ritual_just_applied = Id(power) == "RITUAL_POWER" ? (bool?)Required(power, "WasJustAppliedByEnemy") : null, applier = PowerSource(power, players, enemies), skip_next_duration_tick = (Id(power) is "WEAK_POWER" or "VULNERABLE_POWER" or "FRAIL_POWER") && (bool)Required(power, "SkipNextDurationTick") }).ToArray();
+        .Select(power => (object)new { id = Id(power), amount = Number(power, "Amount"), energy_left = Id(power) == "ORBIT_POWER" ? (int?)Number(power, "DisplayAmount") : null, pale_activated = PaleActivated(power), strength_gain = Id(power) == "MONOLOGUE_POWER" ? (int?)Number(Required(Required(power, "DynamicVars"), "Strength"), "BaseValue") : null, strength_applied = Id(power) == "MONOLOGUE_POWER" ? (int?)Number(power, "DisplayAmount") : null, poison_count = Id(power) == "OUTBREAK_POWER" ? (int?)Number(power, "DisplayAmount") : null, selected_card = NightmareCard(power), self_damage = SelfDamage(power), cards_left = PowerCardsLeft(power), panache_active = PanacheActive(power), damage = PowerDamage(power), slow_count = SlowCount(power), skittish_used = Id(power) == "SKITTISH_POWER" ? (bool?)Required(power, "HasGainedBlockThisTurn") : null, shell_remaining = Id(power) == "HARDENED_SHELL_POWER" ? (int?)Number(power, "DisplayAmount") : null, target_player = PowerTarget(power, players), stolen_gold = StolenGold(power), ritual_just_applied = Id(power) == "RITUAL_POWER" ? (bool?)Required(power, "WasJustAppliedByEnemy") : null, applier = PowerSource(power, players, enemies), skip_next_duration_tick = (Id(power) is "WEAK_POWER" or "VULNERABLE_POWER" or "FRAIL_POWER") && (bool)Required(power, "SkipNextDurationTick") }).ToArray();
 
     public static string Capture()
     {
@@ -242,6 +249,9 @@ public partial class SandboxExport : Node
                 shivs_played_this_turn = manager.History.CardPlaysFinished.Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.CardPlay.Card.Id.Entry == "SHIV"),
                 finished_attacks_this_turn = manager.History.CardPlaysFinished.Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.CardPlay.Card.Type == MegaCrit.Sts2.Core.Entities.Cards.CardType.Attack),
                 finished_skills_this_turn = manager.History.CardPlaysFinished.Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.CardPlay.Card.Type == MegaCrit.Sts2.Core.Entities.Cards.CardType.Skill),
+                attack_hits_this_turn = enemyCreatures.Select((enemy, index) => new { index, count = manager.History.Entries.OfType<DamageReceivedEntry>().Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Dealer, creature) && ReferenceEquals(entry.Receiver, enemy) && entry.Result.Props.IsPoweredAttack()) }).Where(value => value.count > 0).ToDictionary(value => value.index.ToString(CultureInfo.InvariantCulture), value => value.count),
+                finished_cards_this_turn = manager.History.CardPlaysFinished.Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature)),
+                previous_turn_finished_cards = manager.History.CardPlaysFinished.Count(entry => entry.HappenedLastPlayerTurn((MegaCrit.Sts2.Core.Entities.Players.Player)player!) && ReferenceEquals(entry.Actor, creature)),
                 stars_gained_this_turn = manager.History.Entries.OfType<StarsModifiedEntry>().Where(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.Amount > 0).Sum(entry => entry.Amount),
                 cards_generated_in_combat = manager.History.Entries.OfType<CardGeneratedEntry>().Count(entry => ReferenceEquals(entry.Creator, player)),
                 cards_discarded_this_turn = manager.History.Entries.OfType<CardDiscardedEntry>().Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature)),
@@ -304,6 +314,7 @@ public partial class SandboxExport : Node
                 if (power["cards_left"] is null) power.AsObject().Remove("cards_left");
                 if (power["poison_count"] is null) power.AsObject().Remove("poison_count");
                 if (power["energy_left"] is null) power.AsObject().Remove("energy_left");
+                if (power["pale_activated"] is null) power.AsObject().Remove("pale_activated");
                 if (power["strength_gain"] is null) power.AsObject().Remove("strength_gain");
                 if (power["strength_applied"] is null) power.AsObject().Remove("strength_applied");
                 if (power["selected_card"] is System.Text.Json.Nodes.JsonNode selectedCard) NormalizeCard(selectedCard);
