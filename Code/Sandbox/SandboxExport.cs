@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using Godot;
 using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Combat.History.Entries;
 using SpireCodex.Core;
 
 namespace SpireCodex.Sandbox;
@@ -97,7 +98,10 @@ public partial class SandboxExport : Node
             var energy = Required(card, "EnergyCost");
             var cost = Reflect.Call(energy, "GetAmountToSpend") ?? throw new InvalidOperationException("Card cost unavailable");
             var enchantment = Reflect.GetMember(card, "Enchantment");
-            return (object)new { instance_id = instanceId, id = Id(card), upgraded = (bool)Required(card, "IsUpgraded"), cost = Convert.ToInt32(cost), costs_x = (bool)Required(energy, "CostsX"), enchantment = enchantment is null ? null : Id(enchantment) };
+            return (object)new { instance_id = instanceId, id = Id(card), upgraded = (bool)Required(card, "IsUpgraded"), cost = Convert.ToInt32(cost), costs_x = (bool)Required(energy, "CostsX"), energy_cost = new {
+                base_cost = Number(energy, "_base"), captured_x = (bool)Required(energy, "CostsX") ? (int?)Number(energy, "CapturedXValue") : null,
+                modifiers = Items(Required(energy, "_localModifiers")).Select(modifier => new { amount = Number(modifier, "Amount"), type = Required(modifier, "Type").ToString()!.ToLowerInvariant(), expiration = Number(modifier, "Expiration"), reduce_only = (bool)Required(modifier, "IsReduceOnly") }).ToArray()
+            }, enchantment = enchantment is null ? null : Id(enchantment) };
         }).ToArray();
         var exportedPlayers = players.Select((player, slot) =>
         {
@@ -111,6 +115,7 @@ public partial class SandboxExport : Node
             return new
             {
                 character = Id(Required(player, "Character")), current_hp = Number(creature, "CurrentHp"), max_hp = Number(creature, "MaxHp"), block = Number(creature, "Block"),
+                cards_exhausted_this_turn = manager.History.Entries.OfType<CardExhaustedEntry>().Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature)),
                 energy = Number(pcs, "Energy"), max_energy = Number(pcs, "MaxEnergy"), gold = Number(player, "Gold"),
                 hand = Cards(pcs, "Hand"), draw_pile = Cards(pcs, "DrawPile"), discard_pile = Cards(pcs, "DiscardPile"), exhaust_pile = Cards(pcs, "ExhaustPile"), powers = Powers(creature),
                 relics = Items(Required(player, "Relics")).Select(relic => new { id = Id(relic), counter = Number(relic, "DisplayAmount") }).ToArray(),
@@ -137,7 +142,7 @@ public partial class SandboxExport : Node
         if (active < 0) throw new InvalidOperationException("Local player unavailable");
         var node = JsonSerializer.SerializeToNode(new
         {
-            schema = "sandbox_position/1", build_id = Sts2Version.Current.Split('+')[0], seed = Required(Required(run, "Rng"), "StringSeed").ToString(), ascension = Number(run, "AscensionLevel"),
+            schema = "sandbox_position/2", build_id = Sts2Version.Current.Split('+')[0], seed = Required(Required(run, "Rng"), "StringSeed").ToString(), ascension = Number(run, "AscensionLevel"),
             act = Number(run, "CurrentActIndex") + 1, total_floor = Number(run, "TotalFloor"), turn = Number(combat, "RoundNumber"), turn_side = "player", active_player = active,
             players = exportedPlayers, enemies, counters = streams, next_card_instance_id = cardIds.Count
         }, new JsonSerializerOptions { WriteIndented = true })!.AsObject();
