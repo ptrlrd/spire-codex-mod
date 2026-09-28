@@ -65,6 +65,13 @@ public partial class SandboxExport : Node
         return Number(vars.GetType().GetProperty("Item")!.GetValue(vars, ["SelfDamage"]), "BaseValue");
     }
 
+    private static int? SlowCount(object? power)
+    {
+        if (Id(power) != "SLOW_POWER") return null;
+        var vars = Required(power, "DynamicVars");
+        return Number(vars.GetType().GetProperty("Item")!.GetValue(vars, ["SlowAmount"]), "BaseValue");
+    }
+
     private static string? PowerSource(object? power, object?[] players, object?[] enemies)
     {
         if (Id(power) is not ("SHRINK_POWER" or "CONSTRICT_POWER")) return null;
@@ -78,7 +85,7 @@ public partial class SandboxExport : Node
     }
 
     private static object[] Powers(object creature, object?[] players, object?[] enemies) => Items(Required(creature, "Powers"))
-        .Select(power => (object)new { id = Id(power), amount = Number(power, "Amount"), self_damage = SelfDamage(power), applier = PowerSource(power, players, enemies), skip_next_duration_tick = (Id(power) is "WEAK_POWER" or "VULNERABLE_POWER" or "FRAIL_POWER") && (bool)Required(power, "SkipNextDurationTick") }).ToArray();
+        .Select(power => (object)new { id = Id(power), amount = Number(power, "Amount"), self_damage = SelfDamage(power), slow_count = SlowCount(power), applier = PowerSource(power, players, enemies), skip_next_duration_tick = (Id(power) is "WEAK_POWER" or "VULNERABLE_POWER" or "FRAIL_POWER") && (bool)Required(power, "SkipNextDurationTick") }).ToArray();
 
     public static string Capture()
     {
@@ -191,6 +198,7 @@ public partial class SandboxExport : Node
             foreach (var power in creature!["powers"]!.AsArray())
             {
                 if (!power!["skip_next_duration_tick"]!.GetValue<bool>()) power.AsObject().Remove("skip_next_duration_tick");
+                if (power["slow_count"] is null) power.AsObject().Remove("slow_count");
                 if (power["self_damage"] is null) power.AsObject().Remove("self_damage");
                 if (power["applier"] is null) power.AsObject().Remove("applier");
             }
