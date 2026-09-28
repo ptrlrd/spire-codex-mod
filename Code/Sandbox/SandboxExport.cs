@@ -58,6 +58,8 @@ public partial class SandboxExport : Node
         return member is null ? null : Convert.ToDecimal(Required(card, member), CultureInfo.InvariantCulture).ToString("G29", CultureInfo.InvariantCulture);
     }
 
+    private static bool? ShivRetained(object? card) => Id(card) == "SHIV" ? Items(Required(card, "Keywords")).Any(keyword => keyword?.ToString() == "Retain") : null;
+
     private static object? CardHistory(object? card)
     {
         if (Id(card) is not ("BOLAS" or "THRUMMING_HATCHET")) return null;
@@ -177,7 +179,7 @@ public partial class SandboxExport : Node
             var cost = Reflect.Call(energy, "GetAmountToSpend") ?? throw new InvalidOperationException("Card cost unavailable");
             var enchantment = Reflect.GetMember(card, "Enchantment");
             var affliction = Reflect.GetMember(card, "Affliction");
-            return (object)new { instance_id = instanceId, id = Id(card), extra_damage = DamageIncrease(card), play_history = CardHistory(card), base_replay_count = Number(card, "BaseReplayCount"), exhaust_on_next_play = (bool)Required(card, "ExhaustOnNextPlay"), upgraded = (bool)Required(card, "IsUpgraded"), cost = Convert.ToInt32(cost), costs_x = (bool)Required(energy, "CostsX"), energy_cost = new {
+            return (object)new { instance_id = instanceId, id = Id(card), extra_damage = DamageIncrease(card), play_history = CardHistory(card), retained = ShivRetained(card), base_replay_count = Number(card, "BaseReplayCount"), exhaust_on_next_play = (bool)Required(card, "ExhaustOnNextPlay"), upgraded = (bool)Required(card, "IsUpgraded"), cost = Convert.ToInt32(cost), costs_x = (bool)Required(energy, "CostsX"), energy_cost = new {
                 base_cost = Number(energy, "_base"), captured_x = (bool)Required(energy, "CostsX") ? (int?)Number(energy, "CapturedXValue") : null,
                 modifiers = Items(Required(energy, "_localModifiers")).Select(modifier => new { amount = Number(modifier, "Amount"), type = Required(modifier, "Type").ToString()!.ToLowerInvariant(), expiration = Number(modifier, "Expiration"), reduce_only = (bool)Required(modifier, "IsReduceOnly") }).ToArray()
             }, affliction = affliction is null ? null : new { id = Id(affliction), amount = Number(affliction, "Amount") }, enchantment = enchantment is null ? null : Id(enchantment) };
@@ -199,6 +201,7 @@ public partial class SandboxExport : Node
                 hp_loss_this_turn = manager.History.Entries.OfType<DamageReceivedEntry>().Any(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Receiver, creature) && entry.Result.UnblockedDamage > 0),
                 skills_played_this_turn = manager.History.CardPlaysStarted.Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.CardPlay.Card.Type == MegaCrit.Sts2.Core.Entities.Cards.CardType.Skill),
                 cards_played_this_turn = manager.History.CardPlaysStarted.Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature)),
+                shivs_played_this_turn = manager.History.CardPlaysFinished.Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.CardPlay.Card.Id.Entry == "SHIV"),
                 attacks_played_this_turn = manager.History.CardPlaysStarted.Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.CardPlay.Card.Type == MegaCrit.Sts2.Core.Entities.Cards.CardType.Attack),
                 powered_block_gains_this_turn = manager.History.Entries.OfType<BlockGainedEntry>().Count(entry => entry.HappenedThisTurn((ICombatState)combat) && ReferenceEquals(entry.Actor, creature) && entry.Props.IsCardOrMonsterMove()),
                 hp_loss_count = manager.History.Entries.OfType<DamageReceivedEntry>().Count(entry => ReferenceEquals(entry.Receiver, creature) && entry.Result.UnblockedDamage > 0),
@@ -240,6 +243,7 @@ public partial class SandboxExport : Node
                         if (card!["affliction"] is null) card.AsObject().Remove("affliction");
                         if (card!["exhaust_on_next_play"]?.GetValue<bool>() == false) card.AsObject().Remove("exhaust_on_next_play");
                         if (card!["base_replay_count"]!.GetValue<int>() == 0) card.AsObject().Remove("base_replay_count");
+                        if (card!["retained"] is null) card.AsObject().Remove("retained");
                         if (card!["play_history"] is null) card.AsObject().Remove("play_history");
                         if (card!["extra_damage"] is null) card.AsObject().Remove("extra_damage");
                     }
