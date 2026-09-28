@@ -55,7 +55,7 @@ public partial class SandboxExport : Node
     private static string? DamageIncrease(object? card)
     {
         if (Id(card) == "SOVEREIGN_BLADE") return (Convert.ToDecimal(Required(Required(Required(card, "DynamicVars"), "Damage"), "BaseValue"), CultureInfo.InvariantCulture) - 10m).ToString("G29", CultureInfo.InvariantCulture);
-        var member = Id(card) switch { "RAMPAGE" => "_extraDamageFromPlays", "THRASH" => "_extraDamage", _ => null };
+        var member = Id(card) switch { "RAMPAGE" => "_extraDamageFromPlays", "THRASH" or "KINGLY_PUNCH" => "_extraDamage", _ => null };
         return member is null ? null : Convert.ToDecimal(Required(card, member), CultureInfo.InvariantCulture).ToString("G29", CultureInfo.InvariantCulture);
     }
 
