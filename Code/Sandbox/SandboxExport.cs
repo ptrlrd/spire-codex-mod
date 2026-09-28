@@ -58,6 +58,36 @@ public partial class SandboxExport : Node
         return member is null ? null : Convert.ToDecimal(Required(card, member), CultureInfo.InvariantCulture).ToString("G29", CultureInfo.InvariantCulture);
     }
 
+    private static object? CardHistory(object? card)
+    {
+        if (Id(card) is not ("BOLAS" or "THRUMMING_HATCHET")) return null;
+        var owner = Required(card, "Owner");
+        var turn = Number(Required(owner, "PlayerCombatState"), "TurnNumber");
+        var field = typeof(MegaCrit.Sts2.Core.Combat.History.CombatHistoryEntry).GetField("_playerTurnNumbers", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var turns = new HashSet<int>();
+        foreach (var entry in CombatManager.Instance.History.CardPlaysFinished.Where(value => ReferenceEquals(value.CardPlay.Card, card)))
+        {
+            var captured = (IDictionary)field.GetValue(entry)!;
+            turns.Add(Convert.ToInt32(captured[Required(owner, "NetId")] ?? throw new InvalidOperationException("Card history is missing its owner"), CultureInfo.InvariantCulture));
+        }
+        return new { current_turn = turns.Contains(turn), previous_turn = turns.Contains(turn - 1) };
+    }
+
+    private static int? PowerCardsLeft(object? power) => Id(power) is "AUTOMATION_POWER" or "PANACHE_POWER" ? Number(power, "DisplayAmount") : null;
+
+    private static bool? PanacheActive(object? power)
+    {
+        if (Id(power) != "PANACHE_POWER") return null;
+        var field = typeof(MegaCrit.Sts2.Core.Models.PowerModel).GetField("_internalData", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        return (bool)Required(field.GetValue(power), "alreadyApplied");
+    }
+
+    private static int? PowerDamage(object? power)
+    {
+        if (Id(power) != "THE_BOMB_POWER") return null;
+        return Number(Required(Required(power, "DynamicVars"), "Damage"), "BaseValue");
+    }
+
     private static int? SelfDamage(object? power)
     {
         if (Id(power) is not ("INFERNO_POWER" or "CRIMSON_MANTLE_POWER")) return null;
@@ -100,7 +130,7 @@ public partial class SandboxExport : Node
     }
 
     private static object[] Powers(object creature, object?[] players, object?[] enemies) => Items(Required(creature, "Powers"))
-        .Select(power => (object)new { id = Id(power), amount = Number(power, "Amount"), self_damage = SelfDamage(power), slow_count = SlowCount(power), skittish_used = Id(power) == "SKITTISH_POWER" ? (bool?)Required(power, "HasGainedBlockThisTurn") : null, shell_remaining = Id(power) == "HARDENED_SHELL_POWER" ? (int?)Number(power, "DisplayAmount") : null, target_player = PowerTarget(power, players), stolen_gold = StolenGold(power), ritual_just_applied = Id(power) == "RITUAL_POWER" ? (bool?)Required(power, "WasJustAppliedByEnemy") : null, applier = PowerSource(power, players, enemies), skip_next_duration_tick = (Id(power) is "WEAK_POWER" or "VULNERABLE_POWER" or "FRAIL_POWER") && (bool)Required(power, "SkipNextDurationTick") }).ToArray();
+        .Select(power => (object)new { id = Id(power), amount = Number(power, "Amount"), self_damage = SelfDamage(power), cards_left = PowerCardsLeft(power), panache_active = PanacheActive(power), damage = PowerDamage(power), slow_count = SlowCount(power), skittish_used = Id(power) == "SKITTISH_POWER" ? (bool?)Required(power, "HasGainedBlockThisTurn") : null, shell_remaining = Id(power) == "HARDENED_SHELL_POWER" ? (int?)Number(power, "DisplayAmount") : null, target_player = PowerTarget(power, players), stolen_gold = StolenGold(power), ritual_just_applied = Id(power) == "RITUAL_POWER" ? (bool?)Required(power, "WasJustAppliedByEnemy") : null, applier = PowerSource(power, players, enemies), skip_next_duration_tick = (Id(power) is "WEAK_POWER" or "VULNERABLE_POWER" or "FRAIL_POWER") && (bool)Required(power, "SkipNextDurationTick") }).ToArray();
 
     public static string Capture()
     {
@@ -147,7 +177,7 @@ public partial class SandboxExport : Node
             var cost = Reflect.Call(energy, "GetAmountToSpend") ?? throw new InvalidOperationException("Card cost unavailable");
             var enchantment = Reflect.GetMember(card, "Enchantment");
             var affliction = Reflect.GetMember(card, "Affliction");
-            return (object)new { instance_id = instanceId, id = Id(card), extra_damage = DamageIncrease(card), base_replay_count = Number(card, "BaseReplayCount"), exhaust_on_next_play = (bool)Required(card, "ExhaustOnNextPlay"), upgraded = (bool)Required(card, "IsUpgraded"), cost = Convert.ToInt32(cost), costs_x = (bool)Required(energy, "CostsX"), energy_cost = new {
+            return (object)new { instance_id = instanceId, id = Id(card), extra_damage = DamageIncrease(card), play_history = CardHistory(card), base_replay_count = Number(card, "BaseReplayCount"), exhaust_on_next_play = (bool)Required(card, "ExhaustOnNextPlay"), upgraded = (bool)Required(card, "IsUpgraded"), cost = Convert.ToInt32(cost), costs_x = (bool)Required(energy, "CostsX"), energy_cost = new {
                 base_cost = Number(energy, "_base"), captured_x = (bool)Required(energy, "CostsX") ? (int?)Number(energy, "CapturedXValue") : null,
                 modifiers = Items(Required(energy, "_localModifiers")).Select(modifier => new { amount = Number(modifier, "Amount"), type = Required(modifier, "Type").ToString()!.ToLowerInvariant(), expiration = Number(modifier, "Expiration"), reduce_only = (bool)Required(modifier, "IsReduceOnly") }).ToArray()
             }, affliction = affliction is null ? null : new { id = Id(affliction), amount = Number(affliction, "Amount") }, enchantment = enchantment is null ? null : Id(enchantment) };
@@ -200,7 +230,7 @@ public partial class SandboxExport : Node
         {
             schema = "sandbox_position/3", build_id = Sts2Version.Current.Split('+')[0], seed = Required(Required(run, "Rng"), "StringSeed").ToString(), ascension = Number(run, "AscensionLevel"),
             act = Number(run, "CurrentActIndex") + 1, total_floor = Number(run, "TotalFloor"), turn = Number(combat, "RoundNumber"), turn_side = "player", active_player = active,
-            players = exportedPlayers, enemies, counters = streams, next_card_instance_id = cardIds.Count
+            players = exportedPlayers, enemies, counters = streams, next_card_instance_id = cardIds.Count, cards_played_in_combat = manager.History.CardPlaysFinished.Count()
         }, new JsonSerializerOptions { WriteIndented = true })!.AsObject();
         foreach (var player in node["players"]!.AsArray())
             foreach (var pile in new[] { "hand", "draw_pile", "discard_pile", "exhaust_pile", "play_pile" })
@@ -210,6 +240,7 @@ public partial class SandboxExport : Node
                         if (card!["affliction"] is null) card.AsObject().Remove("affliction");
                         if (card!["exhaust_on_next_play"]?.GetValue<bool>() == false) card.AsObject().Remove("exhaust_on_next_play");
                         if (card!["base_replay_count"]!.GetValue<int>() == 0) card.AsObject().Remove("base_replay_count");
+                        if (card!["play_history"] is null) card.AsObject().Remove("play_history");
                         if (card!["extra_damage"] is null) card.AsObject().Remove("extra_damage");
                     }
         foreach (var enemy in node["enemies"]!.AsArray())
@@ -229,6 +260,9 @@ public partial class SandboxExport : Node
                 if (power["ritual_just_applied"] is null) power.AsObject().Remove("ritual_just_applied");
                 if (power["skittish_used"] is null) power.AsObject().Remove("skittish_used");
                 if (power["shell_remaining"] is null) power.AsObject().Remove("shell_remaining");
+                if (power["cards_left"] is null) power.AsObject().Remove("cards_left");
+                if (power["panache_active"] is null) power.AsObject().Remove("panache_active");
+                if (power["damage"] is null) power.AsObject().Remove("damage");
                 if (power["slow_count"] is null) power.AsObject().Remove("slow_count");
                 if (power["self_damage"] is null) power.AsObject().Remove("self_damage");
                 if (power["applier"] is null) power.AsObject().Remove("applier");
