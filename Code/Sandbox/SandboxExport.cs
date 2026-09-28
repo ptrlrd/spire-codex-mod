@@ -138,8 +138,44 @@ public partial class SandboxExport : Node
         throw new InvalidOperationException("Power source is outside combat");
     }
 
+    private static void NormalizeCard(System.Text.Json.Nodes.JsonNode card)
+    {
+        if (card!["affliction"] is null) card.AsObject().Remove("affliction");
+        if (card!["exhaust_on_next_play"]?.GetValue<bool>() == false) card.AsObject().Remove("exhaust_on_next_play");
+        if (card!["base_replay_count"]!.GetValue<int>() == 0) card.AsObject().Remove("base_replay_count");
+        if (card!["retained"] is null) card.AsObject().Remove("retained");
+        foreach (var keyword in new[] { "added_sly", "single_turn_sly", "single_turn_retain" })
+            if (card![keyword]!.GetValue<bool>() == false) card.AsObject().Remove(keyword);
+        if (card!["play_history"] is null) card.AsObject().Remove("play_history");
+        if (card!["extra_damage"] is null) card.AsObject().Remove("extra_damage");
+    }
+
+    private static object CardValue(object? card)
+    {
+        if (!cardIds.TryGetValue(card!, out var instanceId))
+        {
+            instanceId = cardIds.Count;
+            cardIds.Add(card!, instanceId);
+        }
+        var energy = Required(card, "EnergyCost");
+        var cost = Reflect.Call(energy, "GetAmountToSpend") ?? throw new InvalidOperationException("Card cost unavailable");
+        var enchantment = Reflect.GetMember(card, "Enchantment");
+        var affliction = Reflect.GetMember(card, "Affliction");
+        return (object)new { instance_id = instanceId, id = Id(card), extra_damage = DamageIncrease(card), play_history = CardHistory(card), retained = ShivRetained(card), added_sly = AddedSly(card), single_turn_sly = TemporaryKeyword(card, "HasSingleTurnSly"), single_turn_retain = TemporaryKeyword(card, "HasSingleTurnRetain"), base_replay_count = Number(card, "BaseReplayCount"), exhaust_on_next_play = (bool)Required(card, "ExhaustOnNextPlay"), upgraded = (bool)Required(card, "IsUpgraded"), cost = Convert.ToInt32(cost), costs_x = (bool)Required(energy, "CostsX"), energy_cost = new {
+            base_cost = Number(energy, "_base"), captured_x = (bool)Required(energy, "CostsX") ? (int?)Number(energy, "CapturedXValue") : null,
+            modifiers = Items(Required(energy, "_localModifiers")).Select(modifier => new { amount = Number(modifier, "Amount"), type = Required(modifier, "Type").ToString()!.ToLowerInvariant(), expiration = Number(modifier, "Expiration"), reduce_only = (bool)Required(modifier, "IsReduceOnly") }).ToArray()
+        }, affliction = affliction is null ? null : new { id = Id(affliction), amount = Number(affliction, "Amount") }, enchantment = enchantment is null ? null : Id(enchantment) };
+    }
+
+    private static object? NightmareCard(object? power)
+    {
+        if (Id(power) != "NIGHTMARE_POWER") return null;
+        var field = typeof(MegaCrit.Sts2.Core.Models.PowerModel).GetField("_internalData", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        return CardValue(Required(field.GetValue(power), "selectedCard"));
+    }
+
     private static object[] Powers(object creature, object?[] players, object?[] enemies) => Items(Required(creature, "Powers"))
-        .Select(power => (object)new { id = Id(power), amount = Number(power, "Amount"), self_damage = SelfDamage(power), cards_left = PowerCardsLeft(power), panache_active = PanacheActive(power), damage = PowerDamage(power), slow_count = SlowCount(power), skittish_used = Id(power) == "SKITTISH_POWER" ? (bool?)Required(power, "HasGainedBlockThisTurn") : null, shell_remaining = Id(power) == "HARDENED_SHELL_POWER" ? (int?)Number(power, "DisplayAmount") : null, target_player = PowerTarget(power, players), stolen_gold = StolenGold(power), ritual_just_applied = Id(power) == "RITUAL_POWER" ? (bool?)Required(power, "WasJustAppliedByEnemy") : null, applier = PowerSource(power, players, enemies), skip_next_duration_tick = (Id(power) is "WEAK_POWER" or "VULNERABLE_POWER" or "FRAIL_POWER") && (bool)Required(power, "SkipNextDurationTick") }).ToArray();
+        .Select(power => (object)new { id = Id(power), amount = Number(power, "Amount"), poison_count = Id(power) == "OUTBREAK_POWER" ? (int?)Number(power, "DisplayAmount") : null, selected_card = NightmareCard(power), self_damage = SelfDamage(power), cards_left = PowerCardsLeft(power), panache_active = PanacheActive(power), damage = PowerDamage(power), slow_count = SlowCount(power), skittish_used = Id(power) == "SKITTISH_POWER" ? (bool?)Required(power, "HasGainedBlockThisTurn") : null, shell_remaining = Id(power) == "HARDENED_SHELL_POWER" ? (int?)Number(power, "DisplayAmount") : null, target_player = PowerTarget(power, players), stolen_gold = StolenGold(power), ritual_just_applied = Id(power) == "RITUAL_POWER" ? (bool?)Required(power, "WasJustAppliedByEnemy") : null, applier = PowerSource(power, players, enemies), skip_next_duration_tick = (Id(power) is "WEAK_POWER" or "VULNERABLE_POWER" or "FRAIL_POWER") && (bool)Required(power, "SkipNextDurationTick") }).ToArray();
 
     public static string Capture()
     {
@@ -174,22 +210,7 @@ public partial class SandboxExport : Node
         }
         foreach (var card in Items(Required(combat, "_allCards")))
             if (!cardIds.ContainsKey(card!)) cardIds.Add(card!, cardIds.Count);
-        object[] Cards(object pcs, string pile) => Items(Required(Required(pcs, pile), "Cards")).Select(card =>
-        {
-            if (!cardIds.TryGetValue(card!, out var instanceId))
-            {
-                instanceId = cardIds.Count;
-                cardIds.Add(card!, instanceId);
-            }
-            var energy = Required(card, "EnergyCost");
-            var cost = Reflect.Call(energy, "GetAmountToSpend") ?? throw new InvalidOperationException("Card cost unavailable");
-            var enchantment = Reflect.GetMember(card, "Enchantment");
-            var affliction = Reflect.GetMember(card, "Affliction");
-            return (object)new { instance_id = instanceId, id = Id(card), extra_damage = DamageIncrease(card), play_history = CardHistory(card), retained = ShivRetained(card), added_sly = AddedSly(card), single_turn_sly = TemporaryKeyword(card, "HasSingleTurnSly"), single_turn_retain = TemporaryKeyword(card, "HasSingleTurnRetain"), base_replay_count = Number(card, "BaseReplayCount"), exhaust_on_next_play = (bool)Required(card, "ExhaustOnNextPlay"), upgraded = (bool)Required(card, "IsUpgraded"), cost = Convert.ToInt32(cost), costs_x = (bool)Required(energy, "CostsX"), energy_cost = new {
-                base_cost = Number(energy, "_base"), captured_x = (bool)Required(energy, "CostsX") ? (int?)Number(energy, "CapturedXValue") : null,
-                modifiers = Items(Required(energy, "_localModifiers")).Select(modifier => new { amount = Number(modifier, "Amount"), type = Required(modifier, "Type").ToString()!.ToLowerInvariant(), expiration = Number(modifier, "Expiration"), reduce_only = (bool)Required(modifier, "IsReduceOnly") }).ToArray()
-            }, affliction = affliction is null ? null : new { id = Id(affliction), amount = Number(affliction, "Amount") }, enchantment = enchantment is null ? null : Id(enchantment) };
-        }).ToArray();
+        object[] Cards(object pcs, string pile) => Items(Required(Required(pcs, pile), "Cards")).Select(CardValue).ToArray();
         var enemyCreatures = Items(Required(room, "Enemies"));
         var exportedPlayers = players.Select((player, slot) =>
         {
@@ -249,16 +270,7 @@ public partial class SandboxExport : Node
             foreach (var pile in new[] { "hand", "draw_pile", "discard_pile", "exhaust_pile", "play_pile" })
                 if (player![pile] is System.Text.Json.Nodes.JsonArray cards)
                     foreach (var card in cards)
-                    {
-                        if (card!["affliction"] is null) card.AsObject().Remove("affliction");
-                        if (card!["exhaust_on_next_play"]?.GetValue<bool>() == false) card.AsObject().Remove("exhaust_on_next_play");
-                        if (card!["base_replay_count"]!.GetValue<int>() == 0) card.AsObject().Remove("base_replay_count");
-                        if (card!["retained"] is null) card.AsObject().Remove("retained");
-                        foreach (var keyword in new[] { "added_sly", "single_turn_sly", "single_turn_retain" })
-                            if (card![keyword]!.GetValue<bool>() == false) card.AsObject().Remove(keyword);
-                        if (card!["play_history"] is null) card.AsObject().Remove("play_history");
-                        if (card!["extra_damage"] is null) card.AsObject().Remove("extra_damage");
-                    }
+                        NormalizeCard(card!);
         foreach (var enemy in node["enemies"]!.AsArray())
         {
             if (enemy!["slot_name"] is null) enemy.AsObject().Remove("slot_name");
@@ -277,6 +289,9 @@ public partial class SandboxExport : Node
                 if (power["skittish_used"] is null) power.AsObject().Remove("skittish_used");
                 if (power["shell_remaining"] is null) power.AsObject().Remove("shell_remaining");
                 if (power["cards_left"] is null) power.AsObject().Remove("cards_left");
+                if (power["poison_count"] is null) power.AsObject().Remove("poison_count");
+                if (power["selected_card"] is System.Text.Json.Nodes.JsonNode selectedCard) NormalizeCard(selectedCard);
+                else power.AsObject().Remove("selected_card");
                 if (power["panache_active"] is null) power.AsObject().Remove("panache_active");
                 if (power["damage"] is null) power.AsObject().Remove("damage");
                 if (power["slow_count"] is null) power.AsObject().Remove("slow_count");
