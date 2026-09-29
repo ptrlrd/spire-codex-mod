@@ -50,7 +50,7 @@ public partial class SandboxExport : Node
     {
         "SHURIKEN" or "KUNAI" or "ORNAMENTAL_FAN" => Number(relic, "_attacksPlayedThisTurn") % 3,
         "LETTER_OPENER" => Number(relic, "_skillsPlayedThisTurn") % 3,
-        "NUNCHAKU" => Number(relic, "AttacksPlayed") % 10,
+        "NUNCHAKU" or "PEN_NIB" => Number(relic, "AttacksPlayed") % 10,
         "HAPPY_FLOWER" => Number(relic, "TurnsSeen"),
         _ => Number(relic, "DisplayAmount")
     };
@@ -183,13 +183,19 @@ public partial class SandboxExport : Node
         return new { base_cost = Number(card, "BaseStarCost"), cost = Convert.ToInt32(Reflect.Call(card!, "GetStarCostWithModifiers")), costs_x = x, last_spent = Number(card, "LastStarsSpent"), modifiers = modifiers.Select(modifier => new { amount = Number(modifier, "Cost"), expiration = ((bool)Required(modifier, "ClearsWhenTurnEnds") ? 2 : 0) | ((bool)Required(modifier, "ClearsWhenCardIsPlayed") ? 4 : 0) }).ToArray() };
     }
 
+    private static int CardIdentity(object card)
+    {
+        if (!cardIds.TryGetValue(card, out var identity))
+        {
+            identity = cardIds.Count;
+            cardIds.Add(card, identity);
+        }
+        return identity;
+    }
+
     private static object CardValue(object? card)
     {
-        if (!cardIds.TryGetValue(card!, out var instanceId))
-        {
-            instanceId = cardIds.Count;
-            cardIds.Add(card!, instanceId);
-        }
+        var instanceId = CardIdentity(card!);
         var energy = Required(card, "EnergyCost");
         var cost = Reflect.Call(energy, "GetAmountToSpend") ?? throw new InvalidOperationException("Card cost unavailable");
         var enchantment = Reflect.GetMember(card, "Enchantment");
@@ -276,7 +282,7 @@ public partial class SandboxExport : Node
                 hp_loss_count = manager.History.Entries.OfType<DamageReceivedEntry>().Count(entry => ReferenceEquals(entry.Receiver, creature) && entry.Result.UnblockedDamage > 0),
                 energy = Number(pcs, "Energy"), stars = Number(pcs, "Stars"), max_energy = Number(pcs, "MaxEnergy"), gold = Number(player, "Gold"),
                 hand = Cards(pcs, "Hand"), draw_pile = Cards(pcs, "DrawPile"), discard_pile = Cards(pcs, "DiscardPile"), exhaust_pile = Cards(pcs, "ExhaustPile"), powers = Powers(creature, players, enemyCreatures),
-                relics = Items(Required(player, "Relics")).Select(relic => new { id = Id(relic), counter = RelicCounter(relic), melted = (bool)Required(relic, "IsMelted"), cards_played_last_turn = Id(relic) == "POCKETWATCH" ? (int?)Number(relic, "_cardsPlayedLastTurn") : null, attacked_this_turn = Id(relic) == "ART_OF_WAR" ? (bool?)Required(relic, "_anyAttacksPlayedThisTurn") : null, attacked_last_turn = Id(relic) == "ART_OF_WAR" ? (bool?)Required(relic, "_anyAttacksPlayedLastTurn") : null, triggered_this_turn = Id(relic) == "DEMON_TONGUE" ? (bool?)Required(relic, "_triggeredThisTurn") : null, strength_applied = Id(relic) == "RED_SKULL" ? (bool?)Required(relic, "_strengthApplied") : null, used_this_combat = Id(relic) == "RUINED_HELMET" ? (bool?)Required(relic, "_usedThisCombat") : null }).ToArray(),
+                relics = Items(Required(player, "Relics")).Select(relic => new { id = Id(relic), counter = RelicCounter(relic), attack_to_double = Id(relic) == "PEN_NIB" && Reflect.GetMember(relic, "_attackToDouble") is { } doubled ? (int?)CardIdentity(doubled) : null, melted = (bool)Required(relic, "IsMelted"), cards_played_last_turn = Id(relic) == "POCKETWATCH" ? (int?)Number(relic, "_cardsPlayedLastTurn") : null, attacked_this_turn = Id(relic) == "ART_OF_WAR" ? (bool?)Required(relic, "_anyAttacksPlayedThisTurn") : null, attacked_last_turn = Id(relic) == "ART_OF_WAR" ? (bool?)Required(relic, "_anyAttacksPlayedLastTurn") : null, triggered_this_turn = Id(relic) == "DEMON_TONGUE" ? (bool?)Required(relic, "_triggeredThisTurn") : null, strength_applied = Id(relic) == "RED_SKULL" ? (bool?)Required(relic, "_strengthApplied") : null, used_this_combat = Id(relic) == "RUINED_HELMET" ? (bool?)Required(relic, "_usedThisCombat") : null }).ToArray(),
                 potions = Items(Required(player, "PotionSlots")).Select(potion => potion is null ? null : new { id = Id(potion) }).ToArray()
             };
         }).ToArray();
@@ -321,7 +327,7 @@ public partial class SandboxExport : Node
             foreach (var relic in player!["relics"]!.AsArray())
             {
                 if (!relic!["melted"]!.GetValue<bool>()) relic.AsObject().Remove("melted");
-                foreach (var field in new[] { "triggered_this_turn", "strength_applied", "used_this_combat", "cards_played_last_turn", "attacked_this_turn", "attacked_last_turn" })
+                foreach (var field in new[] { "triggered_this_turn", "strength_applied", "used_this_combat", "cards_played_last_turn", "attacked_this_turn", "attacked_last_turn", "attack_to_double" })
                     if (relic[field] is null) relic.AsObject().Remove(field);
             }
         foreach (var creature in node["players"]!.AsArray().Concat(node["enemies"]!.AsArray()))
