@@ -114,6 +114,13 @@ public partial class SandboxExport : Node
         return (bool)Required(field.GetValue(power), "alreadyApplied");
     }
 
+    private static int? ShellDamageReceived(object? power)
+    {
+        if (Id(power) != "HARDENED_SHELL_POWER") return null;
+        var field = typeof(MegaCrit.Sts2.Core.Models.PowerModel).GetField("_internalData", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        return Number(field.GetValue(power), "damageReceivedThisTurn");
+    }
+
     private static int? PowerDamage(object? power)
     {
         if (Id(power) != "THE_BOMB_POWER") return null;
@@ -214,7 +221,7 @@ public partial class SandboxExport : Node
     }
 
     private static object[] Powers(object creature, object?[] players, object?[] enemies) => Items(Required(creature, "Powers"))
-        .Select(power => (object)new { id = Id(power), amount = Number(power, "Amount"), energy_left = Id(power) == "ORBIT_POWER" ? (int?)Number(power, "DisplayAmount") : null, pale_activated = PaleActivated(power), manual_plays_this_turn = VoidManualPlays(power), strength_gain = Id(power) == "MONOLOGUE_POWER" ? (int?)Number(Required(Required(power, "DynamicVars"), "Strength"), "BaseValue") : null, strength_applied = Id(power) == "MONOLOGUE_POWER" ? (int?)Number(power, "DisplayAmount") : null, poison_count = Id(power) == "OUTBREAK_POWER" ? (int?)Number(power, "DisplayAmount") : null, selected_card = NightmareCard(power), self_damage = SelfDamage(power), cards_left = PowerCardsLeft(power), panache_active = PanacheActive(power), damage = PowerDamage(power), slow_count = SlowCount(power), skittish_used = Id(power) == "SKITTISH_POWER" ? (bool?)Required(power, "HasGainedBlockThisTurn") : null, shell_remaining = Id(power) == "HARDENED_SHELL_POWER" ? (int?)Number(power, "DisplayAmount") : null, target_player = PowerTarget(power, players), stolen_gold = StolenGold(power), ritual_just_applied = Id(power) == "RITUAL_POWER" ? (bool?)Required(power, "WasJustAppliedByEnemy") : null, applier = PowerSource(power, players, enemies), skip_next_duration_tick = (Id(power) is "WEAK_POWER" or "VULNERABLE_POWER" or "FRAIL_POWER") && (bool)Required(power, "SkipNextDurationTick") }).ToArray();
+        .Select(power => (object)new { id = Id(power), amount = Number(power, "Amount"), energy_left = Id(power) == "ORBIT_POWER" ? (int?)Number(power, "DisplayAmount") : null, pale_activated = PaleActivated(power), manual_plays_this_turn = VoidManualPlays(power), strength_gain = Id(power) == "MONOLOGUE_POWER" ? (int?)Number(Required(Required(power, "DynamicVars"), "Strength"), "BaseValue") : null, strength_applied = Id(power) == "MONOLOGUE_POWER" ? (int?)Number(power, "DisplayAmount") : null, poison_count = Id(power) == "OUTBREAK_POWER" ? (int?)Number(power, "DisplayAmount") : null, selected_card = NightmareCard(power), self_damage = SelfDamage(power), cards_left = PowerCardsLeft(power), panache_active = PanacheActive(power), damage = PowerDamage(power), slow_count = SlowCount(power), skittish_used = Id(power) == "SKITTISH_POWER" ? (bool?)Required(power, "HasGainedBlockThisTurn") : null, shell_damage_received = ShellDamageReceived(power), shell_remaining = Id(power) == "HARDENED_SHELL_POWER" ? (int?)Number(power, "DisplayAmount") : null, target_player = PowerTarget(power, players), stolen_gold = StolenGold(power), ritual_just_applied = Id(power) == "RITUAL_POWER" ? (bool?)Required(power, "WasJustAppliedByEnemy") : null, applier = PowerSource(power, players, enemies), skip_next_duration_tick = (Id(power) is "WEAK_POWER" or "VULNERABLE_POWER" or "FRAIL_POWER") && (bool)Required(power, "SkipNextDurationTick") }).ToArray();
 
     public static string Capture()
     {
@@ -338,6 +345,7 @@ public partial class SandboxExport : Node
                 if (power["stolen_gold"] is null) power.AsObject().Remove("stolen_gold");
                 if (power["ritual_just_applied"] is null) power.AsObject().Remove("ritual_just_applied");
                 if (power["skittish_used"] is null) power.AsObject().Remove("skittish_used");
+                if (power["shell_damage_received"] is null) power.AsObject().Remove("shell_damage_received");
                 if (power["shell_remaining"] is null) power.AsObject().Remove("shell_remaining");
                 if (power["cards_left"] is null) power.AsObject().Remove("cards_left");
                 if (power["poison_count"] is null) power.AsObject().Remove("poison_count");
