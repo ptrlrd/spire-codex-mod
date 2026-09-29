@@ -64,6 +64,7 @@ public partial class MainFile : Node
         // Live-state producer: a Node on the scene tree that polls RunState ~10x/second
         // and writes the snapshot file.
         LiveStateProducer.Start();
+        Sandbox.SandboxExport.Start();
 
         // The in-game companion overlay panel (run info, leaderboards, runs, about).
         Ui.DeckImagePanel.Start();
