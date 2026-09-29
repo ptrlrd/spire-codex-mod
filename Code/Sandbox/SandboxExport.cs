@@ -53,6 +53,7 @@ public partial class SandboxExport : Node
         "NUNCHAKU" or "PEN_NIB" => Number(relic, "AttacksPlayed") % 10,
         "HAPPY_FLOWER" => Number(relic, "TurnsSeen"),
         "PENDULUM" => Number(relic, "TurnsSeen"),
+        "FAKE_HAPPY_FLOWER" => Number(relic, "TurnsSeen"),
         _ => Number(relic, "DisplayAmount")
     };
     private static int Number(object? owner, string member) => Convert.ToInt32(Required(owner, member), CultureInfo.InvariantCulture);
