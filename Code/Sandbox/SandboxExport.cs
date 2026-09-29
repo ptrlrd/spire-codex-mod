@@ -268,7 +268,7 @@ public partial class SandboxExport : Node
                 hp_loss_count = manager.History.Entries.OfType<DamageReceivedEntry>().Count(entry => ReferenceEquals(entry.Receiver, creature) && entry.Result.UnblockedDamage > 0),
                 energy = Number(pcs, "Energy"), stars = Number(pcs, "Stars"), max_energy = Number(pcs, "MaxEnergy"), gold = Number(player, "Gold"),
                 hand = Cards(pcs, "Hand"), draw_pile = Cards(pcs, "DrawPile"), discard_pile = Cards(pcs, "DiscardPile"), exhaust_pile = Cards(pcs, "ExhaustPile"), powers = Powers(creature, players, enemyCreatures),
-                relics = Items(Required(player, "Relics")).Select(relic => new { id = Id(relic), counter = Number(relic, "DisplayAmount"), melted = (bool)Required(relic, "IsMelted") }).ToArray(),
+                relics = Items(Required(player, "Relics")).Select(relic => new { id = Id(relic), counter = Number(relic, "DisplayAmount"), melted = (bool)Required(relic, "IsMelted"), triggered_this_turn = Id(relic) == "DEMON_TONGUE" ? (bool?)Required(relic, "_triggeredThisTurn") : null, strength_applied = Id(relic) == "RED_SKULL" ? (bool?)Required(relic, "_strengthApplied") : null, used_this_combat = Id(relic) == "RUINED_HELMET" ? (bool?)Required(relic, "_usedThisCombat") : null }).ToArray(),
                 potions = Items(Required(player, "PotionSlots")).Select(potion => potion is null ? null : new { id = Id(potion) }).ToArray()
             };
         }).ToArray();
@@ -311,7 +311,11 @@ public partial class SandboxExport : Node
         }
         foreach (var player in node["players"]!.AsArray())
             foreach (var relic in player!["relics"]!.AsArray())
+            {
                 if (!relic!["melted"]!.GetValue<bool>()) relic.AsObject().Remove("melted");
+                foreach (var field in new[] { "triggered_this_turn", "strength_applied", "used_this_combat" })
+                    if (relic[field] is null) relic.AsObject().Remove(field);
+            }
         foreach (var creature in node["players"]!.AsArray().Concat(node["enemies"]!.AsArray()))
             foreach (var power in creature!["powers"]!.AsArray())
             {
