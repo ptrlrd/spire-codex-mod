@@ -1,0 +1,3 @@
+# package.sh runs under bash. Git for Windows checks out CRLF by default, and bash
+# then fails on the first shell builtin it reads with a trailing carriage return.
+*.sh text eol=lf
