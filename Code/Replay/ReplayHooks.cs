@@ -19,6 +19,8 @@ internal static class ReplayHooks
     private static bool _keywordsResolved;
 
     private const string EnchantSelectType = "deck_select_enchant";
+    private const string TransformSelectType = "deck_select_transform";
+    private const string UpgradeSelectType = "deck_select_upgrade";
 
     private static int _pendingReroll;
 
@@ -192,6 +194,8 @@ internal static class ReplayHooks
         attempted++; n += HookPatcher.PatchOn(harmony, cardCmd, "ClearAffliction", me, nameof(AfflictionCleared), 1,
                                  firstParamType: "CardModel");
         attempted++; n += HookPatcher.Patch(harmony, hook, "ShouldPlay", me, nameof(PlayRefused), postfix: true);
+        attempted++; n += HookPatcher.PatchOn(harmony, HookPatcher.FindType("MegaCrit.Sts2.Core.Commands.CardCmd"),
+                                 "MoveToResultPileWithoutPlaying", me, nameof(AutoPlayDeclined), 2);
         _autoPlayType = HookPatcher.FindType("MegaCrit.Sts2.Core.Entities.Cards.AutoPlayType");
 
         attempted++; n += HookPatcher.PatchOn(harmony,
@@ -297,7 +301,13 @@ internal static class ReplayHooks
         attempted++; n += HookPatcher.Patch(harmony, hook, "AfterCardChangedPiles", me, nameof(CardChangedPiles));
 
         attempted++; n += HookPatcher.PatchOn(harmony, HookPatcher.FindType("MegaCrit.Sts2.Core.Commands.CardCmd"),
-                                 "Upgrade", me, nameof(CardUpgraded), 2, firstParamType: "CardModel");
+                                 "Upgrade", me, nameof(UpgradesStarting), 2, firstParamType: "IEnumerable`1");
+        attempted++; n += HookPatcher.PatchOn(harmony, HookPatcher.FindType("MegaCrit.Sts2.Core.Commands.CardCmd"),
+                                 "Upgrade", me, nameof(UpgradesDone), 2, firstParamType: "IEnumerable`1", postfix: true);
+        attempted++; n += HookPatcher.PatchOn(harmony, HookPatcher.FindType("MegaCrit.Sts2.Core.Commands.CardCmd"),
+                                 "Downgrade", me, nameof(DowngradeStarting), 1);
+        attempted++; n += HookPatcher.PatchOn(harmony, HookPatcher.FindType("MegaCrit.Sts2.Core.Commands.CardCmd"),
+                                 "Downgrade", me, nameof(CardDowngraded), 1, postfix: true);
 
         attempted++; n += HookPatcher.PatchOn(harmony, HookPatcher.FindType("MegaCrit.Sts2.Core.Models.CardModel"),
                                  "AfterTransformedFrom", me, nameof(TransformedFrom), 0);
@@ -314,6 +324,7 @@ internal static class ReplayHooks
                                  "Remove", me, nameof(RelicRemoved), 1, postfix: true);
         attempted++; n += HookPatcher.PatchOn(harmony, HookPatcher.FindType("MegaCrit.Sts2.Core.Commands.RelicCmd"),
                                  "Replace", me, nameof(RelicReplacing), 2);
+        attempted++; n += HookPatcher.Patch(harmony, hook, "BeforePotionUsed", me, nameof(PotionStarting));
         attempted++; n += HookPatcher.Patch(harmony, hook, "AfterPotionUsed", me, nameof(PotionUsed));
         attempted++; n += HookPatcher.Patch(harmony, hook, "AfterPotionProcured", me, nameof(PotionProcured));
         attempted++; n += HookPatcher.Patch(harmony, hook, "AfterPotionDiscarded", me, nameof(PotionDiscarded));
@@ -340,9 +351,11 @@ internal static class ReplayHooks
         attempted++; n += HookPatcher.PatchOn(harmony,
             HookPatcher.FindType("MegaCrit.Sts2.Core.Models.EventModel"),
             "SetEventState", me, nameof(EventPageShown), 2, postfix: true);
-        attempted++; n += HookPatcher.PatchOn(harmony,
-            HookPatcher.FindType("MegaCrit.Sts2.Core.Models.EventModel"),
-            "BeginEvent", me, nameof(EventBegun), 2);
+        var eventModel = HookPatcher.FindType("MegaCrit.Sts2.Core.Models.EventModel");
+        var beginEventArgs = eventModel?.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Any(m => m.Name == "BeginEvent" && m.GetParameters().Length == 3) == true ? 3 : 2;
+        attempted++; n += HookPatcher.PatchOn(harmony, eventModel,
+            "BeginEvent", me, nameof(EventBegun), beginEventArgs);
         attempted++; n += HookPatcher.PatchOn(harmony,
             HookPatcher.FindType("MegaCrit.Sts2.Core.Multiplayer.Game.EventSynchronizer"),
             "ChooseOptionForEvent", me, nameof(EventOptionChosen), 2, firstParamType: "Player");
@@ -391,6 +404,25 @@ internal static class ReplayHooks
 
         attempted++; n += HookPatcher.Patch(harmony, hook, "AfterTakingExtraTurn", me, nameof(ExtraTurnTaken));
         attempted++; n += HookPatcher.Patch(harmony, hook, "AfterDeath", me, nameof(CreatureDied));
+        var creatureCmd = HookPatcher.FindType("MegaCrit.Sts2.Core.Commands.CreatureCmd");
+        attempted++; n += HookPatcher.PatchOn(harmony, creatureCmd, "Kill", me, nameof(KillStarting), 2,
+                                 firstParamType: "IReadOnlyCollection`1");
+        attempted++;
+        try
+        {
+            var damageFunnel = creatureCmd?.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .FirstOrDefault(m => m.Name == "Damage" && m.GetParameters() is { Length: 7 } ps
+                                     && ps[1].ParameterType.Name == "IEnumerable`1"
+                                     && ps[2].ParameterType == typeof(decimal));
+            if (damageFunnel != null)
+            {
+                harmony.Patch(damageFunnel, prefix: new HarmonyMethod(typeof(ReplayHooks).GetMethod(
+                    nameof(DamageStarting), BindingFlags.NonPublic | BindingFlags.Static)));
+                n++;
+            }
+            else MainFile.Logger.Info("hooks: CreatureCmd.Damage(targets, amount, ...) not found");
+        }
+        catch (Exception e) { MainFile.Logger.Info($"hooks: patching Damage failed: {e.Message}"); }
         BindCombatEndEvents();
 
         attempted++; n += HookPatcher.PatchOn(harmony,
@@ -405,10 +437,13 @@ internal static class ReplayHooks
         attempted++; n += HookPatcher.Patch(harmony, hook, "AfterDiedToDoom", me, nameof(DoomKillDone));
         attempted++; n += HookPatcher.Patch(harmony, hook, "BeforeSideTurnStart", me, nameof(IntentTurnStarting));
         attempted++; n += HookPatcher.Patch(harmony, hook, "AfterPlayerTurnStart", me, nameof(IntentsShown));
-        attempted++; n += HookPatcher.Patch(harmony, hook, "BeforeTurnEnd", me, nameof(IntentsCommitted));
+        attempted++; n += HookPatcher.Patch(harmony, hook, "BeforeTurnEnd|BeforeSideTurnEnd", me, nameof(IntentsCommitted));
         attempted++; n += HookPatcher.PatchOn(harmony,
             HookPatcher.FindType("MegaCrit.Sts2.Core.Models.MonsterModel"),
             "SetMoveImmediate", me, nameof(MoveSetImmediate), 2);
+        attempted++; n += HookPatcher.PatchOn(harmony,
+            HookPatcher.FindType("MegaCrit.Sts2.Core.DevConsole.DevConsole"),
+            "ProcessCommand", me, nameof(ConsoleCommand), 3, firstParamType: "Player");
 
         _selectorProp = Reflect.StaticProperty(
             HookPatcher.FindType("MegaCrit.Sts2.Core.Commands.CardSelectCmd"), "Selector");
@@ -886,6 +921,52 @@ internal static class ReplayHooks
         catch { }
     }
 
+    private static readonly ConditionalWeakTable<object, string> KilledBy = new();
+    private static readonly ConditionalWeakTable<object, string> DamagedBy = new();
+
+    private static void KillStarting(object __0)
+    {
+        try
+        {
+            if (CallerId() is not { } by) return;
+            foreach (var c in Enumerate(__0))
+            {
+                KilledBy.Remove(c);
+                KilledBy.Add(c, by);
+            }
+        }
+        catch { }
+    }
+
+    private static void DamageStarting(object __1, object? __4, object? __5)
+    {
+        try
+        {
+            if (__4 != null || __5 != null) return;
+            if (CallerId() is not { } by) return;
+            foreach (var t in Enumerate(__1))
+            {
+                DamagedBy.Remove(t);
+                DamagedBy.Add(t, by);
+            }
+        }
+        catch { }
+    }
+
+    private static string? CallerId()
+    {
+        var owner = CallerOf("MegaCrit.Sts2.Core.Commands.CreatureCmd", out _);
+        if (owner == null) return null;
+        var name = owner.Name;
+        var sb = new System.Text.StringBuilder(name.Length + 8);
+        for (var i = 0; i < name.Length; i++)
+        {
+            if (i > 0 && char.IsUpper(name[i]) && !char.IsUpper(name[i - 1])) sb.Append('_');
+            sb.Append(char.ToUpperInvariant(name[i]));
+        }
+        return sb.ToString();
+    }
+
     private static void CreatureDied(object __2, bool __3)
     {
         try
@@ -895,6 +976,7 @@ internal static class ReplayHooks
                 .Set("tgt_cid", CreatureSlots.Maybe(__2))
                 .SetFlag("removal_prevented", __3)
                 .Set("cause", _doomed.Contains(__2) ? "doom" : null)
+                .Set("killed_by", KilledBy.TryGetValue(__2, out var by) ? by : null)
                 .Emit();
         }
         catch { }
@@ -1184,18 +1266,38 @@ internal static class ReplayHooks
         catch { }
     }
 
+    private static object? _vetoedCard;
+    private static object? _vetoPreventer;
+    private static int _vetoAutoType;
+
     private static void PlayRefused(bool __result, object __1, object? __2, int __3)
     {
         if (__result || __3 == 0) return;
+        _vetoedCard = __1;
+        _vetoPreventer = __2;
+        _vetoAutoType = __3;
+    }
+
+    private static void AutoPlayDeclined(object __1)
+    {
         try
         {
+            var vetoed = ReferenceEquals(__1, _vetoedCard);
+            var reason = Enumerate(Reflect.GetMember(__1, "Keywords"))
+                             .Any(k => k?.ToString() == "Unplayable") ? "unplayable"
+                : vetoed ? "blocked"
+                : "no_target";
+            if (vetoed) _vetoedCard = null;
+            var blocked = reason == "blocked";
+            var kind = blocked && _autoPlayType != null ? Enum.GetName(_autoPlayType, _vetoAutoType) : null;
             var origin = CardInstances.DeckIdOf(__1);
-            var kind = _autoPlayType == null ? null : Enum.GetName(_autoPlayType, __3);
             ReplayRecorder.Line("play_blocked")
                 ?.Set("c", CardInstances.Of(__1))
                 .Set("deck_c", origin > 0 ? origin : (int?)null)
                 .Set("id", Ids.Bare(Reflect.GetString(__1, "Id")))
-                .Set("preventer", Ids.Bare(Reflect.GetString(__2, "Id")))
+                .Set("up", Reflect.GetInt(__1, "CurrentUpgradeLevel", 0))
+                .Set("reason", reason)
+                .Set("preventer", blocked ? Ids.Bare(Reflect.GetString(_vetoPreventer, "Id")) : null)
                 .Set("auto_type", kind?.ToLowerInvariant())
                 .Set("mine", Mine(Reflect.GetMember(__1, "Owner")))
                 .Emit();
@@ -1227,6 +1329,7 @@ internal static class ReplayHooks
                 .SetFlag("killed", Reflect.GetBool(__3, "WasTargetKilled"))
                 .Set("dmg_type", DamageProps(__4))
                 .Set("card", __6 == null ? null : Ids.Bare(Reflect.GetString(__6, "Id")))
+                .Set("effect", __2 == null && __6 == null && DamagedBy.TryGetValue(__5, out var by) ? by : null)
                 .Set("atk", hit == null ? null : AttackIdFor(__1, __2, __6, __4))
                 .Set("mods", why?.Mods)
                 .Set("hp_mods", why?.HpMods)
@@ -1677,12 +1780,12 @@ internal static class ReplayHooks
         catch { }
     }
 
-    private static void BlockBroken(object __1)
+    private static void BlockBroken(object __2)
     {
         try
         {
-            if (__1 == null) return;
-            BlockRow(__1, null, "broken").Emit();
+            if (__2 == null) return;
+            BlockRow(__2, null, "broken").Emit();
         }
         catch { }
     }
@@ -2381,16 +2484,68 @@ internal static class ReplayHooks
         catch { }
     }
 
+    private static void UpgradesStarting(object __0, out List<(object Card, int Level)>? __state)
+    {
+        __state = null;
+        try
+        {
+            __state = Enumerate(__0).Select(c => (c, Reflect.GetInt(c, "CurrentUpgradeLevel", 0))).ToList();
+        }
+        catch { }
+    }
+
+    private static void UpgradesDone(List<(object Card, int Level)>? __state)
+    {
+        if (__state == null) return;
+        foreach (var (card, before) in __state)
+        {
+            try
+            {
+                if (Reflect.GetInt(card, "CurrentUpgradeLevel", 0) > before) CardUpgraded(card);
+            }
+            catch { }
+        }
+    }
+
     private static void CardUpgraded(object __0)
     {
         try
         {
             ReplayRecorder.MarkDeckChanged();
+            var offered = _decisionType == UpgradeSelectType;
             ReplayRecorder.Line("upgrade")
-                ?.Set("decision_id", _decision > 0 ? _decision : (int?)null)
-                .Set("option_index", SelectIndexOf(__0))
+                ?.Set("decision_id", _decision > 0 && (offered || _decisionType is "event" or "rest")
+                    ? _decision : (int?)null)
+                .Set("option_index", offered ? SelectIndexOf(__0) : null)
                 .Set("c", CardInstances.Of(__0))
                 .Set("id", Ids.Bare(Reflect.GetString(__0, "Id")))
+                .Emit();
+        }
+        catch { }
+    }
+
+    private static int _levelBeforeDowngrade;
+
+    private static void DowngradeStarting(object __0)
+    {
+        try { _levelBeforeDowngrade = Reflect.GetInt(__0, "CurrentUpgradeLevel", 0); } catch { }
+    }
+
+    private static void CardDowngraded(object __0)
+    {
+        try
+        {
+            var before = _levelBeforeDowngrade;
+            _levelBeforeDowngrade = 0;
+            var after = Reflect.GetInt(__0, "CurrentUpgradeLevel", 0);
+            if (after >= before) return;
+            ReplayRecorder.MarkDeckChanged();
+            ReplayRecorder.Line("downgrade")
+                ?.Set("decision_id", _decisionType == "event" && _decision > 0 ? _decision : (int?)null)
+                .Set("c", CardInstances.Of(__0))
+                .Set("id", Ids.Bare(Reflect.GetString(__0, "Id")))
+                .Set("from_up", before)
+                .Set("up", after)
                 .Emit();
         }
         catch { }
@@ -2440,9 +2595,11 @@ internal static class ReplayHooks
         _transformFrom = null;
         try
         {
+            var offered = _decisionType == TransformSelectType;
             ReplayRecorder.Line("transform")
-                ?.Set("decision_id", _decision > 0 ? _decision : (int?)null)
-                .Set("option_index", SelectIndexOf(from))
+                ?.Set("decision_id", _decision > 0 && (offered || _decisionType is "event" or "rest")
+                    ? _decision : (int?)null)
+                .Set("option_index", offered ? SelectIndexOf(from) : null)
                 .Set("from_c", from == null ? (int?)null : CardInstances.Of(from))
                 .Set("from_id", Ids.Bare(Reflect.GetString(from, "Id")))
                 .Set("to_c", CardInstances.Of(__instance))
@@ -2492,6 +2649,20 @@ internal static class ReplayHooks
     }
 
     private static void PotionUsed(object __2, object __3) => Potion("potion_used", __2, __3);
+    private static void PotionStarting(object __2, object __3) => Potion("potion_start", __2, __3);
+
+    private static void ConsoleCommand(object? __0, string __1, string[] __2)
+    {
+        try
+        {
+            ReplayRecorder.Line("console")
+                ?.Set("cmd", __1)
+                .Set("args", __2 is { Length: > 0 } ? __2.ToList() : null)
+                .Set("mine", Mine(__0))
+                .Emit();
+        }
+        catch { }
+    }
     private static void PotionProcured(object __2) => Potion("potion_got", __2);
     private static void PotionDiscarded(object __2) => Potion("potion_dropped", __2);
 
