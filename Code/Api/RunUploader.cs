@@ -9,18 +9,6 @@ using Godot;
 
 namespace SpireCodex.Api;
 
-// Watches the Slay the Spire 2 save tree for completed .run files and uploads them,
-// and (once) backfills the player's existing run history. Both gated by the opt-in
-// Config.UploadRuns.
-//
-// Notes on Slay the Spire 2 saves:
-//  - Save root is %APPDATA%/SlayTheSpire2/steam/<steamid64>/. The folder name is the
-//    steam id, used for run attribution (?steam_id=).
-//  - When mods are loaded the game writes to a separate modded/ subtree, so finished
-//    runs land in steam/<id>/modded/profileN/saves/history/. We watch the whole
-//    steam/<id>/ tree recursively to cover modded and vanilla profiles alike.
-//  - The game writes run files atomically (temp then rename), so the final *.run name
-//    arrives as a Renamed event, not Created. We handle both.
 public sealed class RunUploader : IDisposable
 {
     private readonly SpireCodexClient _client = new();
@@ -29,11 +17,8 @@ public sealed class RunUploader : IDisposable
     private readonly HashSet<string> _heldForConsent = new(StringComparer.OrdinalIgnoreCase);
     private FileSystemWatcher? _watcher;
     private string? _root;
-    private static RunUploader? _instance; // for the F5 Settings "Backfill past runs" button
+    private static RunUploader? _instance;
 
-    // Live backfill progress, surfaced to the F5 Settings tab. Written from the upload worker
-    // threads and read on the Godot main thread; int reads/writes are atomic and _bfDone is bumped
-    // via Interlocked, so a simple progress readout needs no lock.
     private static volatile bool _bfActive;
     private static volatile bool _bfHasRun;
     private static int _bfTotal, _bfDone, _bfAdded, _bfDuplicate;
@@ -44,18 +29,13 @@ public sealed class RunUploader : IDisposable
     public static int BackfillAdded => _bfAdded;
     public static int BackfillDuplicate => _bfDuplicate;
 
-    // Ledger of run files already sent (uploaded OR confirmed duplicate by the server), persisted
-    // per Steam id at %APPDATA%/SpireCodex/uploaded-<id>.txt. Lets a re-run of backfill skip
-    // everything already on the server instead of re-spending the API's hourly budget on duplicates.
     private readonly HashSet<string> _uploaded = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _ledgerLock = new();
     private bool _ledgerLoaded;
 
-    // Client-side pacer: hand out upload "slots" ~BackfillIntervalMs apart so a backfill stays under
-    // the API's ~10k/hour (~2.8/s) rate limit instead of bursting and getting throttled/429'd.
     private static readonly object _paceLock = new();
     private static DateTime _nextSlot = DateTime.MinValue;
-    private const int BackfillIntervalMs = 400; // ~2.5 uploads/sec ≈ 9000/hour, safely under the cap
+    private const int BackfillIntervalMs = 400;
 
     public RunUploader(string sts2Version) => _sts2Version = sts2Version;
 
@@ -76,7 +56,7 @@ public sealed class RunUploader : IDisposable
         {
             IncludeSubdirectories = true,
             NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size,
-            InternalBufferSize = 64 * 1024, // deep recursive tree, avoid buffer overflow
+            InternalBufferSize = 64 * 1024,
             EnableRaisingEvents = true,
         };
         _watcher.Created += (_, e) => _ = Upload(e.FullPath);
@@ -85,8 +65,6 @@ public sealed class RunUploader : IDisposable
         MainFile.Logger.Info($"watching for completed runs under {root} " +
                  $"(steam_id={Config.SteamId}, upload={Config.UploadRuns})");
 
-        // When the player grants upload consent mid-session, flush any runs that finished
-        // while the prompt was up and kick the backfill that was held at the gate.
         Consent.OnGranted += () =>
         {
             string[] held;
@@ -101,18 +79,11 @@ public sealed class RunUploader : IDisposable
             _ = Replay.ReplayUploader.SweepAsync();
         };
 
-        // One-time backfill of existing history, off the main thread.
         if (Config.BackfillOnce) _ = BackfillAsync(root);
 
-        // Journals stranded on disk: recorded while uploads were off, or whose upload failed
-        // with nothing to re-trigger it. Runs every launch, cheap when there is nothing to do.
         _ = Replay.ReplayUploader.SweepAsync();
     }
 
-    // Manual "Backfill past runs" trigger for the F5 Settings tab. Runs the same history upload as
-    // the automatic first-enable backfill, but ignores the one-time .done marker since the player
-    // asked for it explicitly (the API dedupes, so re-running is safe). Returns false (no-op) unless
-    // uploads are on and consent is granted, so the UI can tell the player to enable uploads first.
     public static bool BackfillNow()
     {
         if (_instance?._root is not { } root) return false;
@@ -121,8 +92,6 @@ public sealed class RunUploader : IDisposable
         return true;
     }
 
-    // %APPDATA%/SlayTheSpire2/steam/<steamid64>/ — the one all-digit subfolder.
-    // Also used by LocalStats for personal per-character win rates.
     internal static string? FindSaveRoot()
     {
         try
@@ -142,27 +111,21 @@ public sealed class RunUploader : IDisposable
     private async Task Upload(string path)
     {
         if (!Config.UploadRuns) return;
-        if (!Consent.Granted) // hold at the gate; flushed by OnGranted, dropped on decline
+        if (!Consent.Granted)
         {
             lock (_heldForConsent) _heldForConsent.Add(Path.GetFullPath(path));
             return;
         }
-        if (!_dispatched.Add(Path.GetFullPath(path))) return; // Windows fires duplicate events
+        if (!_dispatched.Add(Path.GetFullPath(path))) return;
 
         try
         {
-            await Task.Delay(1500).ConfigureAwait(false); // let the game finish writing the file
+            await Task.Delay(1500).ConfigureAwait(false);
             var json = await File.ReadAllTextAsync(path).ConfigureAwait(false);
-            if (!HasMapHistory(json)) return; // empty insta-abandon, nothing to record
+            if (!HasMapHistory(json)) return;
 
-            // Attach this run's damage summary (per-hit totals tracked during the run). Live
-            // completions only: backfilled history has no in-memory damage and rides through
-            // unchanged. No-op when nothing was tracked.
             var payload = Core.DamageTracker.AttachTo(json);
 
-            // SpireCodexClient retries 429 and every 5xx internally with Retry-After and
-            // backoff, so there is deliberately no second retry loop here — stacking them
-            // would turn one bad minute into 25 attempts.
             var result = await _client
                 .UploadRunAsync(payload, Config.SteamId, Config.Username, _sts2Version)
                 .ConfigureAwait(false);
@@ -173,23 +136,14 @@ public sealed class RunUploader : IDisposable
 
             if (result.Success)
             {
-                RecordUploaded(Path.GetFullPath(path)); // so a later backfill skips it
+                RecordUploaded(Path.GetFullPath(path));
 
-                // Then the replay, if there is one and the player opted in. Strictly after the
-                // .run: the replay endpoint 404s until the run doc exists, and the hash comes
-                // from THIS response rather than being computed locally, which is what keeps
-                // co-op landing on the uploader's own slot.
                 if (ParseUploadResponse(result.Body) is { Hash: not null } r)
                     await Replay.ReplayUploader.TryUploadAsync(json, r.Hash).ConfigureAwait(false);
             }
             else
             {
-                // Keep the run eligible. Leaving it out of the ledger AND out of _dispatched
-                // means the next backfill still finds it, instead of the run being marked
-                // handled and lost for good after one failed request.
                 _dispatched.Remove(Path.GetFullPath(path));
-                // And say so on screen. A silent failure looked exactly like the feature not
-                // firing: the only symptom of a lost run was the post-run card never appearing.
                 Ui.RunCompleteCard.ShowFailedDeferred(result.StatusCode);
             }
 
@@ -222,7 +176,6 @@ public sealed class RunUploader : IDisposable
             string? url = null;
             if (r.TryGetProperty("url", out var u) && u.GetString() is { Length: > 0 } ru) url = ru;
 
-            // Seed standing (server includes it when this run sits on a known seed).
             string? rankLine = null;
             var rank = r.TryGetProperty("seed_rank", out var sr) && sr.ValueKind == JsonValueKind.Number
                 ? sr.GetInt32() : (int?)null;
@@ -236,16 +189,15 @@ public sealed class RunUploader : IDisposable
         catch { return default; }
     }
 
-    // Upload every existing .run once, then write a marker so it never runs again.
     private async Task BackfillAsync(string root, bool force = false)
     {
         try
         {
-            if (!Config.UploadRuns) return; // respect opt-in; retry next launch if enabled later
-            if (!Consent.Granted) return; // OnGranted re-kicks this once consent lands
+            if (!Config.UploadRuns) return;
+            if (!Consent.Granted) return;
 
             var marker = BackfillMarkerPath();
-            if (!force && marker != null && File.Exists(marker)) return; // already backfilled (manual backfill forces)
+            if (!force && marker != null && File.Exists(marker)) return;
 
             var files = Directory.GetFiles(root, "*.run", SearchOption.AllDirectories);
             MainFile.Logger.Info($"backfill: scanning {files.Length} run files...");
@@ -255,7 +207,7 @@ public sealed class RunUploader : IDisposable
             _bfActive = true;
             EnsureLedgerLoaded();
             int added = 0, duplicate = 0, skipped = 0, errored = 0;
-            using var gate = new SemaphoreSlim(6); // concurrency ceiling; the pacer governs the rate
+            using var gate = new SemaphoreSlim(6);
             var tasks = new List<Task>();
 
             foreach (var file in files)
@@ -266,15 +218,13 @@ public sealed class RunUploader : IDisposable
                     try
                     {
                         var full = Path.GetFullPath(file);
-                        // Already on the server (a prior backfill or a live upload): skip it entirely,
-                        // no request, so re-runs are near-instant and don't re-spend the rate budget.
                         if (AlreadyUploaded(full)) { Interlocked.Increment(ref duplicate); return; }
 
                         var json = await File.ReadAllTextAsync(file).ConfigureAwait(false);
                         if (!HasMapHistory(json)) { Interlocked.Increment(ref skipped); return; }
 
-                        _dispatched.Add(full); // don't double with the watcher
-                        await PaceAsync().ConfigureAwait(false); // stay under the API's rate limit
+                        _dispatched.Add(full);
+                        await PaceAsync().ConfigureAwait(false);
                         var r = await _client
                             .UploadRunAsync(json, Config.SteamId, Config.Username, _sts2Version)
                             .ConfigureAwait(false);
@@ -282,7 +232,7 @@ public sealed class RunUploader : IDisposable
                         if (!r.Success) { Interlocked.Increment(ref errored); return; }
                         if (r.Body.Contains("\"duplicate\":true")) Interlocked.Increment(ref duplicate);
                         else Interlocked.Increment(ref added);
-                        RecordUploaded(full); // remember it so future backfills skip it
+                        RecordUploaded(full);
                     }
                     catch
                     {
@@ -316,14 +266,10 @@ public sealed class RunUploader : IDisposable
         }
         finally
         {
-            _bfActive = false; // never leave the UI stuck on "backfilling"
+            _bfActive = false;
         }
     }
 
-    // --- upload pacing + "already uploaded" ledger -----------------------------------
-
-    // Space upload starts ~BackfillIntervalMs apart across all concurrent backfill tasks, so the
-    // aggregate stays under the API's rate limit. Each caller reserves the next slot and waits for it.
     private static async Task PaceAsync()
     {
         DateTime slot;
@@ -362,7 +308,7 @@ public sealed class RunUploader : IDisposable
                     foreach (var line in File.ReadAllLines(path))
                         if (!string.IsNullOrWhiteSpace(line)) _uploaded.Add(line.Trim());
             }
-            catch { /* a missing/corrupt ledger just means we might re-send some runs once */ }
+            catch {  }
         }
     }
 
@@ -375,7 +321,7 @@ public sealed class RunUploader : IDisposable
     {
         lock (_ledgerLock)
         {
-            if (!_uploaded.Add(fullPath)) return; // already recorded
+            if (!_uploaded.Add(fullPath)) return;
             try
             {
                 var path = LedgerPath();
@@ -383,7 +329,7 @@ public sealed class RunUploader : IDisposable
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
                 File.AppendAllText(path, fullPath + "\n");
             }
-            catch { /* best-effort; worst case we re-send this run on a later backfill */ }
+            catch {  }
         }
     }
 
@@ -402,8 +348,6 @@ public sealed class RunUploader : IDisposable
         }
     }
 
-    // The API rejects runs with empty map_point_history (insta-abandons). Skip them
-    // client-side so they don't generate noise.
     private static bool HasMapHistory(string json)
     {
         try
