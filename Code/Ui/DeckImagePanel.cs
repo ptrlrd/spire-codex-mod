@@ -751,8 +751,13 @@ public partial class DeckImagePanel : CanvasLayer
 
         btn.Pressed += () =>
         {
-            var ok = RunUploader.BackfillNow();
-            status.Text = Loc.T(ok ? "deck_backfill_started" : "deck_backfill_need_uploads");
+            var start = RunUploader.BackfillNow();
+            status.Text = Loc.T(start switch
+            {
+                RunUploader.BackfillStart.Started => "deck_backfill_started",
+                RunUploader.BackfillStart.NeedSignIn => "deck_backfill_need_signin",
+                _ => "deck_backfill_need_uploads",
+            });
             status.AddThemeColorOverride("font_color", Accent);
             status.Visible = true;
         };

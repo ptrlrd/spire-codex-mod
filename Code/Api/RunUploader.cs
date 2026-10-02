@@ -39,6 +39,19 @@ public sealed class RunUploader : IDisposable
 
     public RunUploader(string sts2Version) => _sts2Version = sts2Version;
 
+    public enum BackfillStart { Started, NeedUploads, NeedSignIn }
+
+    private static readonly TimeSpan LiveSignInWait = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan BackfillSignInWait = TimeSpan.FromSeconds(150);
+
+    private static async Task<bool> WaitForSignIn(TimeSpan limit)
+    {
+        var deadline = DateTime.UtcNow + limit;
+        while (!SteamAuth.IsSignedIn && DateTime.UtcNow < deadline)
+            await Task.Delay(1000).ConfigureAwait(false);
+        return SteamAuth.IsSignedIn;
+    }
+
     public void Start()
     {
         var root = FindSaveRoot();
@@ -84,12 +97,13 @@ public sealed class RunUploader : IDisposable
         _ = Replay.ReplayUploader.SweepAsync();
     }
 
-    public static bool BackfillNow()
+    public static BackfillStart BackfillNow()
     {
-        if (_instance?._root is not { } root) return false;
-        if (!Config.UploadRuns || !Consent.Granted) return false;
+        if (_instance?._root is not { } root) return BackfillStart.NeedUploads;
+        if (!Config.UploadRuns || !Consent.Granted) return BackfillStart.NeedUploads;
+        if (!SteamAuth.IsSignedIn) return BackfillStart.NeedSignIn;
         _ = _instance.BackfillAsync(root, force: true);
-        return true;
+        return BackfillStart.Started;
     }
 
     internal static string? FindSaveRoot()
@@ -124,6 +138,7 @@ public sealed class RunUploader : IDisposable
             var json = await File.ReadAllTextAsync(path).ConfigureAwait(false);
             if (!HasMapHistory(json)) return;
 
+            var signedIn = await WaitForSignIn(LiveSignInWait).ConfigureAwait(false);
             var payload = Core.DamageTracker.AttachTo(json);
 
             var result = await _client
@@ -136,7 +151,8 @@ public sealed class RunUploader : IDisposable
 
             if (result.Success)
             {
-                RecordUploaded(Path.GetFullPath(path));
+                if (signedIn) RecordUploaded(Path.GetFullPath(path));
+                else MainFile.Logger.Info($"upload {Path.GetFileName(path)}: sent without sign-in, left out of the ledger");
 
                 if (ParseUploadResponse(result.Body) is { Hash: not null } r)
                     await Replay.ReplayUploader.TryUploadAsync(json, r.Hash).ConfigureAwait(false);
@@ -198,6 +214,12 @@ public sealed class RunUploader : IDisposable
 
             var marker = BackfillMarkerPath();
             if (!force && marker != null && File.Exists(marker)) return;
+
+            if (!await WaitForSignIn(BackfillSignInWait).ConfigureAwait(false))
+            {
+                MainFile.Logger.Info("backfill deferred: not signed in");
+                return;
+            }
 
             var files = Directory.GetFiles(root, "*.run", SearchOption.AllDirectories);
             MainFile.Logger.Info($"backfill: scanning {files.Length} run files...");
