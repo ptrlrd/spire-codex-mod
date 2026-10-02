@@ -5,18 +5,8 @@ using SpireCodex.Api;
 
 namespace SpireCodex.Ui;
 
-// The companion panel (default hotkey F5, rebindable), styled with the unified Spire Codex
-// palette (brand gold #ffd34d on warm dark cards, shared with the FTUE cards and the extractor
-// mod). Five tabs: Leaderboard, Runs, Import, Settings, and About. Switch tabs by clicking or pressing
-// Tab while open (the shoulder bumpers on a controller). The live in-run dashboard is handled by
-// the Spire Codex Overwolf overlay; this native panel focuses on rankings, your run history,
-// in-overlay settings, and info.
 public partial class DeckImagePanel : CanvasLayer
 {
-    // Unified Spire Codex palette: warm card surfaces + brand gold #ffd34d + warm off-white text,
-    // shared with the FTUE cards and the extractor mod so the whole thing reads as one product.
-    // The tokens live in Skin (one source of truth for every surface); aliased here so the rest
-    // of this file reads unchanged.
     private static readonly Color Bg = Skin.Bg;
     private static readonly Color BgSoft = Skin.BgSoft;
     private static readonly Color BgSofter = Skin.BgSofter;
@@ -30,13 +20,9 @@ public partial class DeckImagePanel : CanvasLayer
     private static readonly Color Good = Skin.Good;
     private static readonly Color Danger = Skin.Danger;
 
-    // Loc KEYS (not text): resolved to on-screen strings at the render site (BuildTabBar), since
-    // the array is built at class load when the language may not be ready yet.
     private static readonly string[] Tabs =
         { "deck_tab_leaderboard", "deck_tab_runs", "deck_tab_import", "deck_tab_settings", "deck_tab_about" };
 
-    // The community stat bracket choices shown in the Settings tab selector (Label/Tip hold loc
-    // KEYS, resolved via Loc.T at the render site in BuildBracketRow).
     private static readonly (StatBracket Bracket, string Label, string Tip)[] BracketChoices =
     {
         (StatBracket.All, "deck_bracket_all", "deck_bracket_all_tip"),
@@ -46,7 +32,6 @@ public partial class DeckImagePanel : CanvasLayer
         (StatBracket.A10_WR75, "deck_bracket_a10_wr75", "deck_bracket_a10_wr75_tip"),
     };
 
-    // Links (ripped from the Overwolf about page).
     private const string SiteUrl = "https://spire-codex.com";
     private const string GithubUrl = "https://github.com/ptrlrd/spire-codex";
     private const string DiscordUrl = "https://discord.gg/uged4qFufK";
@@ -59,14 +44,6 @@ public partial class DeckImagePanel : CanvasLayer
     private bool _dragging;
     private Vector2 _dragOffset;
 
-    // The game's stick-click ("peek") action. STS2 routes the controller through Steam Input
-    // and emits this as a synthetic action; it's also the native left-stick-click binding when
-    // Steam Input is off. Listening for the action (not a raw joypad button) is the only thing
-    // that reaches the mod while Steam Input is active, which is the default.
-    //
-    // The game renames these: v0.109.1 turned controller_joystick_press into
-    // controller_l_stick_press. So resolve against the live InputMap rather than hard-coding one
-    // name, newest first. A rename then costs a lookup instead of silently killing the binding.
     private static readonly string[] StickClickNames =
     {
         "controller_l_stick_press", "controller_joystick_press", "controller_left_stick_press",
@@ -74,34 +51,29 @@ public partial class DeckImagePanel : CanvasLayer
     private static StringName? _stickClick;
     private static bool _stickClickResolved;
 
-    // L1 / R1 bumpers (also synthetic actions under Steam Input) cycle the panel's tabs while
-    // it's open — the controller mirror of the Tab key.
     private static readonly StringName BumperLeft = "controller_left_bumper";
     private static readonly StringName BumperRight = "controller_right_bumper";
 
     private VBoxContainer _content = null!;
     private Label _hint = null!;
-    private Label? _backfillStatus; // the Settings "Backfill past runs" progress line, when built
-    private Button? _importButton;  // the Import tab's action button, when built
+    private Label? _backfillStatus;
+    private Button? _importButton;
     private int _importSource = 1, _importTarget = 1;
-    private bool _importArmed;      // second press of Import actually writes
-    private static DeckImagePanel? _instance; // for WelcomeCard's "Open it now"
+    private bool _importArmed;
+    private static DeckImagePanel? _instance;
 
-    // True while the F5 overlay (the card/deck display) is open, so other on-map surfaces (the
-    // map danger route) can stand down rather than drawing their rings around/through it.
     public static bool IsOpen => _instance is { Visible: true };
     private readonly List<Button> _tabButtons = new();
-    private readonly List<Button> _bracketButtons = new(); // Settings tab stat-bracket selector
+    private readonly List<Button> _bracketButtons = new();
     private int _tab;
-    private int _loadToken; // guards against a stale async fetch populating the wrong tab
+    private int _loadToken;
 
-    private int _lbSub; // leaderboard sub-board: 0 = Fast Wins (A10), 1 = Daily Climb, 2 = Your Standing
+    private int _lbSub;
     private List<BoardRun>? _a10;
     private List<BoardRun>? _daily;
     private List<RunSummary>? _wins;
     private List<RunSummary>? _runs;
 
-    // Loc KEYS (not text): resolved via Loc.T at the render site (BuildLbSubNav).
     private static readonly string[] LbSub = { "deck_lbsub_fast_wins", "deck_lbsub_daily_climb", "deck_lbsub_your_standing" };
 
     public static void Start()
@@ -119,13 +91,8 @@ public partial class DeckImagePanel : CanvasLayer
     public override void _Ready()
     {
         _instance = this;
-        // Top of every mod overlay so the open F5 panel is never clipped by the card-score
-        // plates (200), map hints (199), run card (150), or consent prompt (210). Harmless when
-        // closed: the layer is hidden (Visible=false), so the plates render normally then.
         Layer = 220;
 
-        // Floating panel (not docked) so the player can drag it anywhere. Fixed size; the
-        // ScrollContainer inside handles overflow. Height tracks the screen with a sane cap.
         var vp = GetViewport()?.GetVisibleRect().Size ?? new Vector2(1920, 1080);
         var width = 560f;
         var height = Mathf.Clamp(vp.Y - 80f, 360f, 760f);
@@ -144,7 +111,7 @@ public partial class DeckImagePanel : CanvasLayer
         style.ContentMarginLeft = 0; style.ContentMarginRight = 0;
         style.ContentMarginTop = 0; style.ContentMarginBottom = 0;
         panel.AddThemeStyleboxOverride("panel", style);
-        Skin.ApplyFont(panel); // Kreon for the whole panel; it never adopted a theme before
+        Skin.ApplyFont(panel);
         AddChild(panel);
 
         var root = new VBoxContainer();
@@ -178,8 +145,6 @@ public partial class DeckImagePanel : CanvasLayer
     private Control BuildHeader()
     {
         var header = new PanelContainer();
-        // The header doubles as the drag handle: press starts a drag, the rest is tracked in
-        // _Input so the cursor can leave the bar mid-drag without dropping it.
         header.GuiInput += e =>
         {
             if (e is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true })
@@ -216,8 +181,6 @@ public partial class DeckImagePanel : CanvasLayer
         UpdateHint();
         row.AddChild(_hint);
 
-        // Close affordance in the corner. The hotkey still works, but a visible X is what people
-        // reach for first, and it does not depend on remembering which key they bound.
         row.AddChild(CloseButton(() => { if (Visible) ToggleOverlay(); }));
 
         header.AddChild(row);
@@ -252,9 +215,6 @@ public partial class DeckImagePanel : CanvasLayer
     {
         if (Visible && !SpireCodexConfig.ShowDeckView) Visible = false;
 
-        // Live "Backfill past runs" progress on the Settings tab: a running count/percentage while
-        // it uploads, then a one-line summary. Driven from RunUploader so it reflects the auto
-        // first-enable backfill too, not only a button press.
         if (Visible && _tab == 3 && _backfillStatus is { } s && GodotObject.IsInstanceValid(s))
         {
             if (RunUploader.BackfillActive)
@@ -277,8 +237,6 @@ public partial class DeckImagePanel : CanvasLayer
 
     public override void _Input(InputEvent @event)
     {
-        // Drag tracking. The header's GuiInput starts the drag; motion + release are caught
-        // here so the panel keeps following even when the cursor outruns the header bar.
         if (_dragging)
         {
             if (@event is InputEventMouseMotion)
@@ -295,9 +253,6 @@ public partial class DeckImagePanel : CanvasLayer
             }
         }
 
-        // Controller toggle. STS2 routes the pad through Steam Input and emits synthetic input
-        // ACTIONS (never InputEventJoypadButton), so we listen for the game's stick-click
-        // action; this also matches the native joypad binding when Steam Input is off.
         if (SpireCodexConfig.OverlayPad == ControllerToggle.StickClick
             && SpireCodexConfig.ShowDeckView
             && StickClickAction() is { } stickClick
@@ -308,7 +263,6 @@ public partial class DeckImagePanel : CanvasLayer
             return;
         }
 
-        // While the panel is open, the bumpers cycle tabs (controller mirror of Tab).
         if (Visible && IsAction(@event, BumperRight))
         {
             SetTab((_tab + 1) % Tabs.Length);
@@ -324,7 +278,6 @@ public partial class DeckImagePanel : CanvasLayer
 
         if (@event is not InputEventKey { Pressed: true, Echo: false } key) return;
 
-        // Cycle tabs with Tab while the panel is open.
         if (Visible && key.Keycode == Key.Tab)
         {
             SetTab((_tab + 1) % Tabs.Length);
@@ -332,7 +285,6 @@ public partial class DeckImagePanel : CanvasLayer
             return;
         }
 
-        // Number keys pick the leaderboard sub-board while on that tab.
         if (Visible && _tab == 0 && key.Keycode is Key.Key1 or Key.Key2 or Key.Key3)
         {
             SetLbSub((int)(key.Keycode - Key.Key1));
@@ -348,8 +300,6 @@ public partial class DeckImagePanel : CanvasLayer
         }
     }
 
-    // The X that closes a surface: quiet until hovered, then brand gold. Plain capital X rather
-    // than a dingbat so it renders in Kreon instead of falling back to another face.
     internal static Button CloseButton(Action onPressed)
     {
         var b = new Button { Text = "X", Flat = true, TooltipText = Loc.T("deck_close") };
@@ -362,15 +312,9 @@ public partial class DeckImagePanel : CanvasLayer
         return b;
     }
 
-    // Matches an action only when the game actually defines it. Godot logs an error for every
-    // lookup of an unknown action, and _Input runs on every event, so an action the game has
-    // renamed would otherwise spam the log thousands of times a session (v0.109.1 did exactly
-    // that: 1794 lines in one run). HasAction is a dictionary hit, so the guard is free.
     private static bool IsAction(InputEvent e, StringName action) =>
         InputMap.HasAction(action) && e.IsActionPressed(action);
 
-    // The stick-click action under whatever name this game build uses, or null when it defines
-    // none of them (the pad toggle then does nothing instead of erroring on every event).
     private static StringName? StickClickAction()
     {
         if (_stickClickResolved) return _stickClick;
@@ -386,12 +330,9 @@ public partial class DeckImagePanel : CanvasLayer
         return null;
     }
 
-    // Open the overlay from outside (the welcome card's "Open it now"). No-op if already open.
     public static void OpenOverlay()
         => Callable.From(() => { if (_instance is { Visible: false }) _instance.ToggleOverlay(); }).CallDeferred();
 
-    // Open straight onto the Settings tab (the main-menu entry). Switches tabs even when the
-    // panel is already up, so the entry always lands where it says it will.
     public static void OpenSettings() => OpenOn(3);
 
     private static void OpenOn(int tab) => Callable.From(() =>
@@ -401,31 +342,24 @@ public partial class DeckImagePanel : CanvasLayer
         panel.SetTab(tab);
     }).CallDeferred();
 
-    // Flip the panel's visibility and, when opening, refresh the hint and drop cached feeds so
-    // each open shows fresh data. Shared by the keyboard hotkey and the controller binding.
     private void ToggleOverlay()
     {
         Visible = !Visible;
         if (Visible)
         {
-            // Re-read the game language each open, so a language change (or a first open before
-            // the game's LocManager was ready at boot) is reflected. Re-apply the tab labels,
-            // which are built once and otherwise wouldn't pick up the refreshed language.
             Loc.Refresh();
             for (var i = 0; i < _tabButtons.Count && i < Tabs.Length; i++)
                 _tabButtons[i].Text = Loc.T(Tabs[i]);
-            UpdateHint(); // reflect the current configured hotkey (it may have been rebound)
-            _a10 = null; _daily = null; _wins = null; _runs = null; // refresh each open
+            UpdateHint();
+            _a10 = null; _daily = null; _wins = null; _runs = null;
             SetTab(_tab);
         }
     }
 
-    // The close-hint shows the player's actual configured deck-view hotkey, not a hardcoded
-    // key, so it stays correct if they rebind it in the mod settings.
     private void UpdateHint()
     {
         var keyLabel = SpireCodexConfig.OverlayKey is var k and not HotKey.None ? k.ToString() : null;
-        var padLabel = PadLabel(SpireCodexConfig.OverlayPad); // e.g. "R3/L3"
+        var padLabel = PadLabel(SpireCodexConfig.OverlayPad);
         string close;
         if (!string.IsNullOrEmpty(keyLabel) && !string.IsNullOrEmpty(padLabel))
             close = Loc.F("deck_hint_key_or_pad", keyLabel, padLabel);
@@ -434,15 +368,12 @@ public partial class DeckImagePanel : CanvasLayer
         _hint.Text = Loc.F("deck_hint_controls", close);
     }
 
-    // Short controller-binding label for the close hint (null when the pad toggle is off).
     private static string? PadLabel(ControllerToggle t) => t switch
     {
         ControllerToggle.StickClick => Loc.T("deck_pad_r3l3"),
         _ => null,
     };
 
-    // Move the panel to pos, keeping it fully on-screen (uses the live viewport size so it
-    // still clamps correctly after a window resize).
     private void DragTo(Vector2 pos)
     {
         var vp = GetViewport().GetVisibleRect().Size;
@@ -461,8 +392,6 @@ public partial class DeckImagePanel : CanvasLayer
 
         foreach (var c in _content.GetChildren()) c.QueueFree();
 
-        // Version nudges (relocated from the retired Current Run tab): shown atop whichever tab is
-        // open so an available update or an untested game build is never missed.
         if (ModVersion.UpdateAvailable is { } up)
             AddWarn(Loc.F("deck_update_available", up, ModVersion.UpdateUrl ?? "spire-codex.com"));
         if (ModVersion.Sts2Untested)
@@ -478,9 +407,6 @@ public partial class DeckImagePanel : CanvasLayer
         }
     }
 
-    // ---- Leaderboards tab -----------------------------------------------------------
-
-    // The Leaderboards tab is itself a submenu: a sub-nav row over the active sub-board.
     private void BuildLeaderboard()
     {
         _content.AddChild(BuildLbSubNav());
@@ -504,8 +430,6 @@ public partial class DeckImagePanel : CanvasLayer
 
     private Control BuildLbSubNav()
     {
-        // Segmented sub-tabs: one clearly-clickable pill per board, the active one gold-bordered,
-        // so players click across the boards instead of scrolling. Number keys 1-3 still switch.
         var row = new HBoxContainer();
         row.AddThemeConstantOverride("separation", 6);
         for (var i = 0; i < LbSub.Length; i++)
@@ -534,7 +458,6 @@ public partial class DeckImagePanel : CanvasLayer
         BuildLeaderboard();
     }
 
-    // Render a cached board, or show "Loading…" and fetch it, re-rendering when it lands.
     private void ShowBoard(List<BoardRun>? cache, Action<List<BoardRun>> store,
         Func<System.Threading.Tasks.Task<List<BoardRun>>> fetch, string title, bool metricTime)
     {
@@ -567,8 +490,6 @@ public partial class DeckImagePanel : CanvasLayer
         _content.AddChild(grid);
     }
 
-    // Your Standing: your winning runs, each with its live GLOBAL rank on the fastest board
-    // (filled in async per run) + a View link.
     private void ShowStanding()
     {
         if (_wins != null) { RenderStanding(_wins); return; }
@@ -628,8 +549,6 @@ public partial class DeckImagePanel : CanvasLayer
         return grid;
     }
 
-    // ---- Runs tab -------------------------------------------------------------------
-
     private void BuildRuns()
     {
         if (_runs != null) { RenderRuns(_runs); return; }
@@ -678,7 +597,6 @@ public partial class DeckImagePanel : CanvasLayer
                 Loc.F("deck_runs_meta", r.Floors, FmtTime(r.RunTime), FmtDate(r.Date));
             row.AddChild(line);
 
-            // "View" opens the run's public page in the browser (alt-tabs out of the game).
             if (r.Hash is { } hash)
                 row.AddChild(ViewButton(Config.RunUrl(hash)));
 
@@ -687,30 +605,21 @@ public partial class DeckImagePanel : CanvasLayer
         }
     }
 
-    // ---- Settings tab ---------------------------------------------------------------
-
-    // In-overlay mirror of the mod settings: pick the community stat bracket and toggle the
-    // on-screen surfaces. Writes the same SpireCodexConfig the BaseLib menu does, and persists
-    // it the same way (the auto-property setters don't save on their own).
     private void BuildSettings()
     {
         _importButton = null;
-        _importArmed = false; // the tab is rebuilt from scratch, so never re-enter armed
+        _importArmed = false;
 
-        // Community stat bracket.
         AboutHead(Loc.T("deck_settings_community_stats"));
         AboutText(Loc.T("deck_settings_community_stats_desc"));
         _content.AddChild(BuildBracketRow());
 
-        // Run tracking (privacy). Turning uploads on here re-triggers the consent disclosure when
-        // it was never granted, exactly as flipping it in the game's own options menu does.
         AboutHead(Loc.T("deck_settings_run_tracking"));
         AboutText(Loc.T("deck_settings_run_tracking_desc"));
         _content.AddChild(SettingCheck(Loc.T("deck_toggle_upload_runs"), () => SpireCodexConfig.UploadRuns, v => SpireCodexConfig.UploadRuns = v));
         _content.AddChild(SettingCheck(Loc.T("deck_toggle_live_status"), () => SpireCodexConfig.ShareLiveStatus, v => SpireCodexConfig.ShareLiveStatus = v));
         _content.AddChild(BuildBackfillRow());
 
-        // On-screen surfaces.
         AboutHead(Loc.T("deck_settings_onscreen"));
         _content.AddChild(SettingCheck(Loc.T("deck_toggle_damage_meter"), () => SpireCodexConfig.ShowDamageMeter, v => SpireCodexConfig.ShowDamageMeter = v));
         _content.AddChild(SettingCheck(Loc.T("deck_toggle_card_reward_hints"), () => SpireCodexConfig.ShowCardRewardHints, v => SpireCodexConfig.ShowCardRewardHints = v));
@@ -720,43 +629,30 @@ public partial class DeckImagePanel : CanvasLayer
         _content.AddChild(SettingCheck(Loc.T("deck_toggle_post_run_card"), () => SpireCodexConfig.ShowPostRunCard, v => SpireCodexConfig.ShowPostRunCard = v));
         AboutText(Loc.T("deck_settings_onscreen_desc"));
 
-        // Controls: the overlay hotkey + controller button, now configurable right here instead of
-        // only in the game's mod options menu.
         AboutHead(Loc.T("deck_settings_controls"));
         _content.AddChild(BuildHotkeyRow());
         _content.AddChild(BuildControllerRow());
 
-        // Replay the first-run welcome card.
         var replay = new Button { Text = Loc.T("deck_settings_show_welcome"), SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
         StyleSecondary(replay);
         replay.Pressed += () => { Visible = false; WelcomeCard.ShowAgain(); };
         _content.AddChild(replay);
 
-        // Localization note: there's no setting to change here (the mod follows the game's
-        // language automatically), just a heads-up so players know the behaviour exists.
         AboutHead(Loc.T("deck_settings_localization"));
         AboutText(Loc.T("deck_settings_localization_desc"));
     }
 
-    // ---- Import tab -----------------------------------------------------------------
-
-    // Bringing an unmodded save across. Modded STS2 writes to its own steam/<id>/modded/ tree, so
-    // first-time modders land on an empty account; this copies the vanilla one over. Its own tab
-    // rather than a Settings section: it is a one-off task people go looking for, not a toggle.
     private void BuildImport()
     {
         AboutHead(Loc.T("deck_settings_import"));
         AboutText(Loc.T("deck_settings_import_desc"));
         _content.AddChild(BuildImportRow());
 
-        // Credit where it's due: Ind-E's ImportVanillaSaves worked this out first.
         AboutHead(Loc.T("deck_import_credit_head"));
         AboutText(Loc.T("deck_import_credit"));
         _content.AddChild(LinkButton(Loc.T("deck_import_credit_link"), ImportCreditUrl));
     }
 
-    // A row of selectable bracket buttons; the active one is gold. Clicking sets the config and
-    // persists; the producer applies it to the score cache on its next tick.
     private Control BuildBracketRow()
     {
         _bracketButtons.Clear();
@@ -786,8 +682,6 @@ public partial class DeckImagePanel : CanvasLayer
                 "font_color", BracketChoices[i].Bracket == SpireCodexConfig.Stats ? Accent : TextMuted);
     }
 
-    // A gold checkbox bound to a bool config field (the extractor mod's box style: a gold ring
-    // with a solid gold fill when on). Clicking flips and persists it immediately.
     private Control SettingCheck(string label, Func<bool> get, Action<bool> set)
     {
         var cb = new CheckBox { Text = label, ButtonPressed = get() };
@@ -805,21 +699,19 @@ public partial class DeckImagePanel : CanvasLayer
         return cb;
     }
 
-    // Cached checkbox icons (built once): a gold-bordered square, dark interior, gold block when on.
     private ImageTexture? _checkOn, _checkOff;
     private ImageTexture CheckIcon(bool on) => on ? (_checkOn ??= MakeCheckIcon(true)) : (_checkOff ??= MakeCheckIcon(false));
     private static ImageTexture MakeCheckIcon(bool check)
     {
         const int size = 22, border = 2, inset = 6;
         var img = Image.CreateEmpty(size, size, false, Image.Format.Rgba8);
-        img.Fill(Accent);                                                                      // gold ring
-        img.FillRect(new Rect2I(border, border, size - 2 * border, size - 2 * border), Field); // dark interior
+        img.Fill(Accent);
+        img.FillRect(new Rect2I(border, border, size - 2 * border, size - 2 * border), Field);
         if (check)
-            img.FillRect(new Rect2I(inset, inset, size - 2 * inset, size - 2 * inset), Accent); // gold fill
+            img.FillRect(new Rect2I(inset, inset, size - 2 * inset, size - 2 * inset), Accent);
         return ImageTexture.CreateFromImage(img);
     }
 
-    // Overlay hotkey picker (F5-F12, or None to unbind the key).
     private Control BuildHotkeyRow()
     {
         var keys = new[] { HotKey.None, HotKey.F5, HotKey.F6, HotKey.F7, HotKey.F8, HotKey.F9, HotKey.F10, HotKey.F11, HotKey.F12 };
@@ -829,7 +721,6 @@ public partial class DeckImagePanel : CanvasLayer
             k => { SpireCodexConfig.OverlayKey = k; PersistConfig(); UpdateHint(); });
     }
 
-    // Controller-button picker for the same overlay toggle (Off / stick-click).
     private Control BuildControllerRow()
     {
         var pads = new[] { ControllerToggle.Off, ControllerToggle.StickClick };
@@ -839,8 +730,6 @@ public partial class DeckImagePanel : CanvasLayer
             p => { SpireCodexConfig.OverlayPad = p; PersistConfig(); UpdateHint(); });
     }
 
-    // "Backfill past runs" action: manually upload the player's existing local run history now.
-    // No-op with a hint if uploads/consent aren't on yet; otherwise kicks the backfill (background).
     private Control BuildBackfillRow()
     {
         var box = new VBoxContainer();
@@ -858,23 +747,23 @@ public partial class DeckImagePanel : CanvasLayer
         };
         status.AddThemeFontSizeOverride("font_size", 12);
         box.AddChild(status);
-        _backfillStatus = status; // _Process drives the live count/percentage from here
+        _backfillStatus = status;
 
         btn.Pressed += () =>
         {
-            // On success the running count is taken over by _Process; here just show the kickoff
-            // line (or the "turn uploads on" hint when it's a no-op).
-            var ok = RunUploader.BackfillNow();
-            status.Text = Loc.T(ok ? "deck_backfill_started" : "deck_backfill_need_uploads");
+            var start = RunUploader.BackfillNow();
+            status.Text = Loc.T(start switch
+            {
+                RunUploader.BackfillStart.Started => "deck_backfill_started",
+                RunUploader.BackfillStart.NeedSignIn => "deck_backfill_need_signin",
+                _ => "deck_backfill_need_uploads",
+            });
             status.AddThemeColorOverride("font_color", Accent);
             status.Visible = true;
         };
         return box;
     }
 
-    // "Import vanilla saves": pick a vanilla profile and a modded profile, then copy the first
-    // onto the second (unlocks, ancient stats, prefs, run history). Two-step confirm because it
-    // overwrites the target; the vanilla side is only ever read.
     private Control BuildImportRow()
     {
         var box = new VBoxContainer();
@@ -919,7 +808,6 @@ public partial class DeckImagePanel : CanvasLayer
                 return;
             }
 
-            // First press arms and warns, second press does it.
             if (!_importArmed)
             {
                 _importArmed = true;
@@ -932,8 +820,6 @@ public partial class DeckImagePanel : CanvasLayer
             var runs = Core.SaveImport.Import(_importSource, _importTarget);
             if (runs < 0) { Say(Loc.T("deck_import_failed"), Danger); return; }
 
-            // The menu still shows the pre-import profile, so reload it. On a miss (game rename)
-            // the copy is still on disk and a restart picks it up.
             if (Core.SaveImport.ReloadMainMenu())
             {
                 Say(Loc.F("deck_import_done", _importSource, _importTarget, runs), Good);
@@ -947,14 +833,12 @@ public partial class DeckImagePanel : CanvasLayer
         return box;
     }
 
-    // Back to the unarmed state after a profile change or a completed/aborted import.
     private void DisarmImport()
     {
         _importArmed = false;
         if (_importButton is { } b && GodotObject.IsInstanceValid(b)) b.Text = Loc.T("deck_import_button");
     }
 
-    // A label + OptionButton bound to an enum config field, styled to match the panel chrome.
     private Control SettingDropdown<T>(string label, T[] options, Func<T, string> name, T current, Action<T> set)
     {
         var row = new HBoxContainer();
@@ -987,12 +871,7 @@ public partial class DeckImagePanel : CanvasLayer
         return row;
     }
 
-    // BaseLib's config auto-properties don't save on set, so persist after a UI change. Same call
-    // ConsentPrompt uses (the registered instance's immediate Save) — deliberately not the
-    // debounced variant, since mixing Save() and SaveDebounced() on one config can deadlock.
     private static void PersistConfig() => BaseLib.Config.ModConfigRegistry.Get<SpireCodexConfig>()?.Save();
-
-    // ---- About tab ------------------------------------------------------------------
 
     private void BuildAbout()
     {
@@ -1013,8 +892,6 @@ public partial class DeckImagePanel : CanvasLayer
         note.Text = Loc.T("deck_about_companion");
         _content.AddChild(note);
 
-        // Prominent gold CTA piping players to the Overwolf overlay for the live in-run dashboard
-        // (this panel no longer duplicates it), and a natural place to advertise the overlay.
         var overlayCta = new Button { Text = Loc.T("deck_about_download_overlay"), SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
         StylePrimary(overlayCta);
         overlayCta.Pressed += () => OS.ShellOpen(OverlayUrl);
@@ -1055,8 +932,6 @@ public partial class DeckImagePanel : CanvasLayer
         _content.AddChild(l);
     }
 
-    // ---- shared rendering helpers ---------------------------------------------------
-
     private RichTextLabel InfoLabel()
     {
         var l = new RichTextLabel
@@ -1074,7 +949,7 @@ public partial class DeckImagePanel : CanvasLayer
     private async System.Threading.Tasks.Task LoadAsync<T>(System.Threading.Tasks.Task<T> task, Action<T> onDone)
     {
         try { var r = await task.ConfigureAwait(false); Callable.From(() => onDone(r)).CallDeferred(); }
-        catch { /* leave the loading text */ }
+        catch {  }
     }
 
     private void Clear() { foreach (var c in _content.GetChildren()) c.QueueFree(); }
@@ -1126,8 +1001,6 @@ public partial class DeckImagePanel : CanvasLayer
         grid.AddChild(l);
     }
 
-    // An accent button that opens a URL in the browser. Relies on the overlay receiving
-    // mouse clicks (Godot GUI controls get input priority over gameplay).
     private Button LinkButton(string label, string url)
     {
         var b = new Button { Text = label, SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
@@ -1151,9 +1024,6 @@ public partial class DeckImagePanel : CanvasLayer
 
     private static StyleBoxFlat ButtonBox(Color bg, Color border) => Skin.ButtonBox(bg, border);
 
-    // Extractor-mod button kit (ported so the two mods read as one family). Primary = a filled
-    // gold pill with dark text, for the single main action on a view. Secondary = a dark pill with
-    // a gold border, for supporting actions.
     private void StylePrimary(Button b) => Skin.Primary(b);
 
     private void StyleSecondary(Button b) => Skin.Secondary(b);
@@ -1177,8 +1047,6 @@ public partial class DeckImagePanel : CanvasLayer
         _content.AddChild(l);
     }
 
-    // ---- formatting -----------------------------------------------------------------
-
     private static string FmtTime(int seconds)
     {
         if (seconds <= 0) return "-";
@@ -1189,10 +1057,6 @@ public partial class DeckImagePanel : CanvasLayer
     private static string FmtDate(string? iso)
         => DateTimeOffset.TryParse(iso, out var d) ? d.ToString("MMM d") : "";
 
-    // "THE_INSATIABLE_BOSS" -> "The Insatiable Boss"; null -> "?".
-    // Game terms resolve to the game's own localized name (via its loc tables), each falling back
-    // to a prettified id when the game has no entry, so a miss reads the same as before. Only the
-    // two the Leaderboard/Runs tabs need remain: the character and the encounter that ended a run.
     private static string CharName(string? id) => Loc.CharacterName(id) ?? Pretty(id);
     private static string EncName(string? id) => Loc.EncounterName(id) ?? Pretty(id);
 
