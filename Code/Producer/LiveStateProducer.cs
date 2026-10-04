@@ -43,7 +43,7 @@ public partial class LiveStateProducer : Node
             hpPct = prev;
         RewardContext.HpPct = hpPct;
         Api.CodexScores.EnsureCharacter(snapshot.InRun ? snapshot.Character : null);
-        Api.CodexScores.SetFilter(SpireCodexConfig.StatsFilterKey);
+        Api.CodexScores.SetFilter(SpireCodexConfig.BracketKey);
         Replay.ReplayRecorder.NoteRun(snapshot);
         SnapshotWriter.Write(snapshot);
     }

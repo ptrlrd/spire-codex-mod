@@ -33,12 +33,12 @@ public sealed class SpireCodexConfig : SimpleModConfig
 
     public static Key OverlayKeycode => KeyOf(OverlayKey);
 
-    public static string StatsFilterKey => Stats switch
+    public static string BracketKey => Stats switch
     {
         StatBracket.A10 => "a10",
-        StatBracket.A10_WR30 => "a10_wr30",
-        StatBracket.A10_WR50 => "a10_wr50",
-        StatBracket.A10_WR75 => "a10_wr75",
+        StatBracket.A10_WR30 => "wr30",
+        StatBracket.A10_WR50 => "wr50",
+        StatBracket.A10_WR75 => "wr75",
         _ => "all",
     };
 

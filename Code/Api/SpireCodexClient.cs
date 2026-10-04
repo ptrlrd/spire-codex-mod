@@ -108,14 +108,14 @@ public sealed class SpireCodexClient
     public const string SkipId = "SKIP";
 
     public async Task<ScoreSet> GetScoresAsync(
-        string entityType, string? character = null, string? statFilter = null,
+        string entityType, string? character = null, string? bracket = null,
         bool includeSkip = false)
     {
         var url = $"{Config.ApiBase}/runs/scores/{entityType}";
         var query = new List<string>();
         if (!string.IsNullOrEmpty(character)) query.Add($"character={Uri.EscapeDataString(character)}");
-        if (!string.IsNullOrEmpty(statFilter) && statFilter != StatFilter.DefaultKey)
-            query.Add($"stat_filter={Uri.EscapeDataString(statFilter)}");
+        if (!string.IsNullOrEmpty(bracket) && bracket != StatFilter.DefaultKey)
+            query.Add($"bracket={Uri.EscapeDataString(bracket)}");
         if (includeSkip) query.Add("include_skip=1");
         if (query.Count > 0) url += "?" + string.Join("&", query);
         using var resp = await Http.GetAsync(url).ConfigureAwait(false);

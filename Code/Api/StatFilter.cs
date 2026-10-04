@@ -8,9 +8,9 @@ public static class StatFilter
     {
         new("all", "sf_all"),
         new("a10", "sf_a10"),
-        new("a10_wr30", "sf_a10_wr30"),
-        new("a10_wr50", "sf_a10_wr50"),
-        new("a10_wr75", "sf_a10_wr75"),
+        new("wr30", "sf_wr30"),
+        new("wr50", "sf_wr50"),
+        new("wr75", "sf_wr75"),
     };
 
     public const string DefaultKey = "all";
