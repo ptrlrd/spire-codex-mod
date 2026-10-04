@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <Compile Include="../../Code/Api/Ranks.cs" Link="Api/Ranks.cs" />
+    <Compile Include="../../Code/Api/MetricsParse.cs" Link="Api/MetricsParse.cs" />
     <Compile Include="../../Code/Replay/ReplayJournalScan.cs" Link="Replay/ReplayJournalScan.cs" />
     <Compile Include="../../Code/Replay/DeckRemap.cs" Link="Replay/DeckRemap.cs" />
   </ItemGroup>

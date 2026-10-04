@@ -27,9 +27,9 @@ public partial class DeckImagePanel : CanvasLayer
     {
         (StatBracket.All, "deck_bracket_all", "deck_bracket_all_tip"),
         (StatBracket.A10, "deck_bracket_a10", "deck_bracket_a10_tip"),
-        (StatBracket.A10_WR30, "deck_bracket_a10_wr30", "deck_bracket_a10_wr30_tip"),
-        (StatBracket.A10_WR50, "deck_bracket_a10_wr50", "deck_bracket_a10_wr50_tip"),
-        (StatBracket.A10_WR75, "deck_bracket_a10_wr75", "deck_bracket_a10_wr75_tip"),
+        (StatBracket.A10_WR30, "deck_bracket_wr30", "deck_bracket_wr30_tip"),
+        (StatBracket.A10_WR50, "deck_bracket_wr50", "deck_bracket_wr50_tip"),
+        (StatBracket.A10_WR75, "deck_bracket_wr75", "deck_bracket_wr75_tip"),
     };
 
     private const string SiteUrl = "https://spire-codex.com";

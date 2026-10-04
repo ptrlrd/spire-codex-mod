@@ -6,13 +6,10 @@ namespace SpireCodex.Api;
 
 public sealed record CharStat(string Character, double WinRate, int Picks);
 
-// Full per-card stats for the hover tooltip (/api/runs/stats/cards/{id}).
 public sealed record CardStats(
     string Id, double? Score, double WinRate, double PickRate,
     double BaselineWinRate, int Picks, IReadOnlyList<CharStat> ByCharacter);
 
-// Lazily fetches and caches full per-entity stats. Get() returns null while loading; a fetch
-// is kicked off on first request and the result cached (including failures, to avoid retries).
 public sealed class StatsCache
 {
     private readonly string _entityType;

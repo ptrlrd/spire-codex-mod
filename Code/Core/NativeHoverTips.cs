@@ -10,30 +10,18 @@ using SpireCodex.Api;
 
 namespace SpireCodex.Core;
 
-// Reuses the game's own hover-tip widget for our card-reward stats, so they look native
-// instead of a bolted-on panel.
-//
-// When a card holder is hovered the game already does:
-//     NHoverTipSet.CreateAndShow(this, CardNode.Model.HoverTips);
-//     set.SetAlignmentForCardHolder(this);
-// We Harmony-prefix CreateAndShow and append our own HoverTip (a "Spire Codex" stat block)
-// to the list. The game then renders and positions it inside its own tooltip set, with the
-// same scene, font, panel and side-aware alignment. No custom positioning, fully native.
-//
-// All MegaCrit type access is reflection and isolated here in Core, and every path is
-// guarded so a renamed type just disables the feature instead of breaking the game's tips.
 internal static class NativeHoverTips
 {
-    private static Type? _hoverTipType;   // MegaCrit.Sts2.Core.HoverTips.HoverTip (struct)
-    private static Type? _iHoverTipType;  // MegaCrit.Sts2.Core.HoverTips.IHoverTip
-    private static Type? _cardHolderType; // MegaCrit.Sts2.Core.Nodes.Cards.Holders.NCardHolder
-    private static Type? _relicType;      // MegaCrit.Sts2.Core.Nodes.Relics.NRelic
-    private static Type? _hoverTipSetType;// MegaCrit.Sts2.Core.Nodes.HoverTips.NHoverTipSet
-    private static Type? _portraitTipType;// NTopBarPortraitTip (note: lowercase "sts2" namespace)
-    private static Type? _restButtonType;  // NRestSiteButton (campfire options; no game tip)
-    private static Type? _skipButtonType;  // NChoiceSelectionSkipButton (card/relic skip)
-    private static MethodBase? _createAndShowSingle; // CreateAndShow(Control, IHoverTip, alignment)
-    private static MethodBase? _hoverTipRemove;      // NHoverTipSet.Remove(Control)
+    private static Type? _hoverTipType;
+    private static Type? _iHoverTipType;
+    private static Type? _cardHolderType;
+    private static Type? _relicType;
+    private static Type? _hoverTipSetType;
+    private static Type? _portraitTipType;
+    private static Type? _restButtonType;
+    private static Type? _skipButtonType;
+    private static MethodBase? _createAndShowSingle;
+    private static MethodBase? _hoverTipRemove;
     private static bool _resolved;
 
     public static void Apply(Harmony harmony)
@@ -47,8 +35,6 @@ internal static class NativeHoverTips
             harmony.Patch(target, prefix: new HarmonyMethod(prefix));
             Diag("native hover-tip patch applied");
 
-            // The single-tip overload, used to show our own portrait/campfire tips, and
-            // the by-owner Remove used to clear them on unfocus.
             _createAndShowSingle = _hoverTipSetType!.GetMethods(BindingFlags.Public | BindingFlags.Static)
                 .FirstOrDefault(m => m.Name == "CreateAndShow"
                     && m.GetParameters().Length == 3
@@ -62,9 +48,6 @@ internal static class NativeHoverTips
         catch (Exception e) { Diag($"apply failed: {e.GetType().Name}: {e.Message}"); }
     }
 
-    // At Ascension 0 the portrait shows NO game tip at all (ShowTip is false and the control
-    // is not focusable), so there is nothing to append to. Patch the portrait control: make
-    // it hoverable, and on focus show our character-stats tip when the game shows none.
     private static void ApplyPortraitPatch(Harmony harmony)
     {
         try
@@ -82,10 +65,6 @@ internal static class NativeHoverTips
         catch (Exception e) { Diag($"portrait patch failed: {e.GetType().Name}: {e.Message}"); }
     }
 
-    // Campfire option buttons show NO game tooltip at all (OnFocus is pure visuals), so we
-    // create our own: OnFocus postfix shows the community campfire stats; the unfocus side
-    // rides NClickableControl.OnUnfocus (NRestSiteButton doesn't override it) with a type
-    // guard so only campfire buttons are touched.
     private static void ApplyRestSitePatch(Harmony harmony)
     {
         try
@@ -95,9 +74,6 @@ internal static class NativeHoverTips
                 Diag("rest-site types not found; campfire stats disabled");
                 return;
             }
-            // Patch the MOST-DERIVED declarations: Harmony hooks a method declaration, not
-            // the virtual slot, so patching a base method misses subclass overrides (the
-            // original cause of stuck campfire tips - NRestSiteButton overrides OnUnfocus).
             var focus = FindDeclaredMethod(_restButtonType, "OnFocus");
             var unfocus = FindDeclaredMethod(_restButtonType, "OnUnfocus");
             if (focus == null || unfocus == null)
@@ -114,8 +90,6 @@ internal static class NativeHoverTips
         catch (Exception e) { Diag($"rest-site patch failed: {e.GetType().Name}: {e.Message}"); }
     }
 
-    // Walk down from the type to its bases and return the first DECLARED method, i.e. the
-    // override that virtual dispatch would actually run.
     private static MethodInfo? FindDeclaredMethod(Type type, string name)
     {
         for (var t = type; t != null; t = t.BaseType)
@@ -133,9 +107,6 @@ internal static class NativeHoverTips
         {
             if (!SpireCodexConfig.ShowHoverTips) return;
             if (__instance is not Godot.Control owner) return;
-            // Clear any tip still tracked for this owner first: a stale entry makes the
-            // game's CreateAndShow throw after parenting the new set, orphaning it on
-            // screen forever (the "tips stay up" bug).
             _hoverTipRemove?.Invoke(null, new object[] { owner });
             var text = BuildRestText(__instance);
             if (text == null) return;
@@ -156,11 +127,9 @@ internal static class NativeHoverTips
             if (_restButtonType?.IsInstanceOfType(__instance) != true) return;
             _hoverTipRemove?.Invoke(null, new[] { __instance });
         }
-        catch { /* removal is best-effort */ }
+        catch {  }
     }
 
-    // "Smith — picked 54% of campfires / At your HP: 61% / Win rate when chosen 52%".
-    // The action id falls out of the option's type name (SmithRestSiteOption -> SMITH).
     private static string? BuildRestText(object owner)
     {
         CommunityStats.EnsureLoaded();
@@ -169,20 +138,24 @@ internal static class NativeHoverTips
         const string suffix = "RestSiteOption";
         if (typeName == null || !typeName.EndsWith(suffix, StringComparison.Ordinal)) return null;
         var key = typeName.Substring(0, typeName.Length - suffix.Length).ToUpperInvariant();
+        Metrics.EnsureLoaded();
+        var cm = Metrics.Campfire(key);
         var rc = CommunityStats.Rest(key);
-        if (rc == null) return null;
+        if (cm == null && rc == null) return null;
 
         var sb = new StringBuilder();
         sb.Append(Logo).Append('\n');
-        sb.Append(Loc.F("hover_rest_picked", rc.Label, rc.Pct));
+        if (cm != null) sb.Append(Loc.F("hover_rest_picked", cm.Name, cm.Share));
+        else sb.Append(Loc.F("hover_rest_picked", rc!.Label, rc.Pct));
         var hp = RewardContext.HpPct;
-        if (hp is { } h && rc.PctLowHp is { } lo && rc.PctHighHp is { } hi)
+        if (hp is { } h && rc is { PctLowHp: { } lo, PctHighHp: { } hi })
         {
             var band = h < 50 ? lo : hi;
             sb.Append(Loc.F("hover_rest_at_hp", h, band));
         }
-        if (rc.WinRate is { } wr)
-            sb.Append(Loc.F("hover_rest_win_rate", wr));
+        if (cm is { Lift: { } lift }) AppendLift(sb, lift, cm.LiftN);
+        if (cm != null) sb.Append(Loc.F("hover_rest_win_rate", cm.WinRate));
+        else if (rc!.WinRate is { } wr) sb.Append(Loc.F("hover_rest_win_rate", wr));
         return sb.ToString().TrimEnd();
     }
 
@@ -191,7 +164,6 @@ internal static class NativeHoverTips
         try
         {
             if (!SpireCodexConfig.ShowHoverTips) return;
-            // The game disables focus when it has no ascension tip; re-enable so hover fires.
             if (!Reflect.GetBool(__instance, "ShowTip") && __instance is Godot.Control c)
                 c.FocusMode = Godot.Control.FocusModeEnum.All;
         }
@@ -203,7 +175,7 @@ internal static class NativeHoverTips
         try
         {
             if (!SpireCodexConfig.ShowHoverTips) return;
-            if (Reflect.GetBool(__instance, "ShowTip")) return; // game tip shown; Prefix appended ours
+            if (Reflect.GetBool(__instance, "ShowTip")) return;
             if (_createAndShowSingle == null || __instance is not Godot.Control owner) return;
             var text = BuildCharacterText();
             if (text == null) return;
@@ -236,7 +208,6 @@ internal static class NativeHoverTips
             "MegaCrit.Sts2.Core.Nodes.Screens.CardSelection.NChoiceSelectionSkipButton");
     }
 
-    // NHoverTipSet.CreateAndShow(Control, IEnumerable<IHoverTip>, HoverTipAlignment)
     private static MethodBase? FindCreateAndShow()
     {
         if (_hoverTipSetType == null || _iHoverTipType == null) return null;
@@ -247,11 +218,8 @@ internal static class NativeHoverTips
                 && m.GetParameters()[1].ParameterType == enumerableOfTip);
     }
 
-    // "Spire" gold, "Codex" white — the tip's first line (the native Title label can't
-    // do mixed colors, so the tip's Title stays null and this leads the description).
     private const string Logo = "[color=#ffd34d][b]Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color]";
 
-    // Append our stat tip to the hover-tip list the game is about to render.
     private static void Prefix(object[] __args)
     {
         try
@@ -260,7 +228,7 @@ internal static class NativeHoverTips
             if (!SpireCodexConfig.ShowHoverTips) return;
             var owner = __args[0];
             if (owner == null) return;
-            if (ContainsOurTip(__args[1])) return; // we initiated this call; don't double-append
+            if (ContainsOurTip(__args[1])) return;
 
             var text = BuildTipText(owner);
             if (text == null) return;
@@ -272,15 +240,11 @@ internal static class NativeHoverTips
         catch (Exception e) { Diag($"prefix error: {e.GetType().Name}: {e.Message}"); }
     }
 
-    // Route the hover owner to the right tip: card / relic / potion stats, the shop's
-    // card-removal service, or the top-bar character portrait. Null -> add nothing.
     private static string? BuildTipText(object owner)
     {
-        PersonalStats.EnsureLoaded(); // warm the player's own pick rates once a token lands
+        PersonalStats.EnsureLoaded();
+        Metrics.EnsureLoaded();
 
-        // The skip button: the full case for taking nothing, which the plate under it only
-        // summarises. Shown whether or not skipping wins, so the numbers are always there
-        // to check rather than appearing only when the mod has an opinion.
         if (_skipButtonType?.IsInstanceOfType(owner) == true && CodexScores.Skip is { } sk)
             return BuildSkipTip(sk);
 
@@ -289,7 +253,8 @@ internal static class NativeHoverTips
         {
             var id = Bare(Reflect.GetString(model, "Id"));
             if (id == null || CodexScores.Card(id) is not { Picks: > 0 } sc) return null;
-            var text = BuildStats(sc, CardStatsCache.Get(id), id == RewardContext.BestCardId, showElo: true);
+            var text = BuildStats(sc, CardStatsCache.Get(id), Metrics.Card(id), "cards", id,
+                id == RewardContext.BestCardId, showElo: true);
             if (PersonalStats.Card(id) is { Offered: > 0 } you)
                 text += "\n" + Loc.F("hover_you_kept", Pct(you), you.Picked, you.Offered);
             return text;
@@ -300,10 +265,8 @@ internal static class NativeHoverTips
         {
             var id = Bare(Reflect.GetString(model, "Id"));
             if (id == null || CodexScores.Relic(id) is not { Picks: > 0 } sc) return null;
-            var text = BuildStats(sc, RelicStatsCache.Get(id), id == RewardContext.BestRelicId, showElo: false);
-            // How coveted this relic is at Ancient 3-relic offers (the informed-decision
-            // line for the ancient screen; harmless context elsewhere), plus the player's own
-            // take rate when signed in.
+            var text = BuildStats(sc, RelicStatsCache.Get(id), Metrics.Relic(id), "relics", id,
+                id == RewardContext.BestRelicId, showElo: false, isWax: Reflect.GetMember(model, "IsWax") is true);
             if (CommunityStats.Ancient(id) is { } anc)
                 text += "\n" + Loc.F("hover_ancient_taken", anc.TakeRate, anc.Offered);
             if (PersonalStats.Ancient(id) is { Offered: > 0 } youAnc)
@@ -316,7 +279,7 @@ internal static class NativeHoverTips
         {
             var id = Bare(Reflect.GetString(model, "Id"));
             if (id == null || CodexScores.Potion(id) is not { Picks: > 0 } sc) return null;
-            return BuildStats(sc, PotionStatsCache.Get(id), isBest: false, showElo: false);
+            return BuildStats(sc, PotionStatsCache.Get(id), Metrics.Potion(id), "potions", id, isBest: false, showElo: false);
         }
 
         var typeName = owner.GetType().Name;
@@ -324,20 +287,10 @@ internal static class NativeHoverTips
         if (typeName == "NEventOptionButton") return BuildEventOptionText(owner);
         if (typeName.Contains("Portrait")) return BuildCharacterText();
 
-        DiagOwnerOnce(owner); // surface unknown hover owners instead of failing silently
+        DiagOwnerOnce(owner);
         return null;
     }
 
-    // The compact stat block:
-    //   Spire Codex
-    //   Best pick            (only when flagged)
-    //   S tier
-    //   Codex Elo 1821       (cards with an Elo only)
-    //   Codex Score 71
-    //   Win rate 63.9% (+3.2% vs base)   <- current character's number when known
-    //   Pick rate 5.0%
-    // Codex Elo for skipping, the act's community skip rate, and the sample behind it.
-    // Elo is comparable to a card's because both come out of the same fit.
     private static string BuildSkipTip(SkipScore sk)
     {
         var act = Producer.LiveStateProducer.Latest?.Act ?? 0;
@@ -355,45 +308,67 @@ internal static class NativeHoverTips
         return sb.ToString();
     }
 
-    private static string BuildStats(EntityScore sc, CardStats? full, bool isBest, bool showElo)
+    private static string BuildStats(
+        EntityScore sc, CardStats? full, EntityMetrics? m, string entityType, string id,
+        bool isBest, bool showElo, bool isWax = false)
     {
-        // Tier letters grade Codex Score, matching both the website and the reward plate.
         var tier = Ranks.Tier(sc.Score);
         var character = RewardContext.Character;
         var sb = new StringBuilder();
         sb.Append(Logo).Append('\n');
         if (isBest) sb.Append($"[color=#ffd34d]{Loc.T("hover_best_pick")}[/color]\n");
         sb.Append($"[color={TierHex(tier)}]{Loc.F("hover_tier", tier)}[/color]\n");
-        if (showElo && sc.Elo is { } elo) sb.Append(Loc.F("hover_codex_elo", elo));
+        if (m is { Lift: { } lift }) AppendLift(sb, lift, m.LiftN);
+        var elo = sc.Elo ?? m?.Elo;
+        if ((showElo || m?.Elo != null) && elo is { } e) sb.Append(Loc.F("hover_codex_elo", e));
         sb.Append(Loc.F("hover_codex_score", sc.Score));
 
-        // Win rate: current character's slice when available, else global.
-        double wr;
-        double? delta = null;
-        CharStat? mine = null;
-        if (full != null && !string.IsNullOrEmpty(character))
-            foreach (var c in full.ByCharacter)
-                if (c.Character == character) { mine = c; break; }
-        if (mine != null) { wr = mine.WinRate; delta = wr - full!.BaselineWinRate; }
-        else if (sc.Scope == "character") { wr = sc.WinRate; if (full != null) delta = wr - full.BaselineWinRate; }
-        else if (full != null) { wr = full.WinRate; delta = wr - full.BaselineWinRate; }
-        else wr = sc.WinRate;
-
-        sb.Append(Loc.F("hover_win_rate", wr));
-        if (delta is { } d)
+        if (isWax && m?.Wax is { } wax)
         {
-            var dc = d >= 0 ? "#86e08a" : "#e08a86";
-            sb.Append($"  [color={dc}]{Loc.F("hover_vs_base", d >= 0 ? "+" : "", d)}[/color]");
+            sb.Append(Loc.F("hover_wax", wax.WinRate, wax.Picks)).Append('\n');
         }
-        sb.Append('\n');
+        else
+        {
+            double wr;
+            double? delta = null;
+            CharStat? mine = null;
+            if (full != null && !string.IsNullOrEmpty(character))
+                foreach (var c in full.ByCharacter)
+                    if (c.Character == character) { mine = c; break; }
+            if (mine != null) { wr = mine.WinRate; delta = wr - full!.BaselineWinRate; }
+            else if (sc.Scope == "character") { wr = sc.WinRate; if (full != null) delta = wr - full.BaselineWinRate; }
+            else if (full != null) { wr = full.WinRate; delta = wr - full.BaselineWinRate; }
+            else wr = sc.WinRate;
 
-        if (full is { PickRate: > 0 }) sb.Append(Loc.F("hover_pick_rate", full.PickRate));
+            sb.Append(Loc.F("hover_win_rate", wr));
+            if (delta is { } d)
+                sb.Append($"  [color={DeltaHex(d)}]{Loc.F("hover_vs_base", d >= 0 ? "+" : "", d)}[/color]");
+            sb.Append('\n');
+        }
+
+        if (m?.UseRate is { } use) sb.Append(Loc.F("hover_potion_used", use));
+        else if (m is { PickRate: > 0 } && m.HoldRate is { } hold)
+        {
+            sb.Append(Loc.F("hover_pick_rate", m.PickRate));
+            sb.Append(Loc.F("hover_hold_rate", hold));
+        }
+        else if (full is { PickRate: > 0 }) sb.Append(Loc.F("hover_pick_rate", full.PickRate));
+
+        if (RewardContext.Screen == "merchant" && Metrics.Shop(entityType, id) is { } shop)
+        {
+            sb.Append(Loc.F("hover_shop_bought", shop.BuyRate, shop.Bought, shop.Seen));
+            if (shop.Lift is { } sl)
+                sb.Append($"[color={DeltaHex(sl)}]{Loc.F("hover_shop_lift", sl >= 0 ? "+" : "", sl)}[/color]\n");
+        }
         return sb.ToString().TrimEnd();
     }
 
-    // Event option: how the community decides this event. The button exposes Event
-    // (EventModel) and Option (EventOption.TextKey); community option ids are the upper-cased
-    // key, with staged repeats suffixed KEY_0, KEY_1... which we sum into one number.
+    private static void AppendLift(StringBuilder sb, double lift, int n)
+        => sb.Append($"[color={DeltaHex(lift)}]{Loc.F("hover_lift", lift >= 0 ? "+" : "", lift)}[/color]  ")
+             .Append($"[color=#9aa3ab]{Loc.F("hover_lift_n", n)}[/color]\n");
+
+    private static string DeltaHex(double d) => d >= 0 ? "#86e08a" : "#e08a86";
+
     private static readonly HashSet<string> EventDiagSeen = new();
 
     private static string? BuildEventOptionText(object owner)
@@ -401,8 +376,6 @@ internal static class NativeHoverTips
         CommunityStats.EnsureLoaded();
         if (CommunityStats.Data == null) { EventDiag("(any)", "community stats not loaded yet"); return null; }
         var evId = Bare(Reflect.GetString(Reflect.GetMember(owner, "Event"), "Id"));
-        // TextKey is the full loc path ("SLIPPERY_BRIDGE.pages.INITIAL.options.OVERCOME");
-        // the community option id is its last segment ("OVERCOME", "HOLD_ON_1", ...).
         var rawKey = Reflect.GetString(Reflect.GetMember(owner, "Option"), "TextKey");
         var key = rawKey?.Substring(rawKey.LastIndexOf('.') + 1).ToUpperInvariant();
         if (evId == null || string.IsNullOrEmpty(key))
@@ -411,8 +384,6 @@ internal static class NativeHoverTips
             return null;
         }
 
-        // At an ancient (Neow, Nonupeipe, ...) the offered relics are event options keyed by
-        // relic id, so the relic-hover path never fires — surface the relic's ancient stats here.
         if (BuildAncientOptionText(key) is { } ancientTip) return ancientTip;
 
         var ev = CommunityStats.Event(evId);
@@ -444,34 +415,24 @@ internal static class NativeHoverTips
         return sb.ToString();
     }
 
-    // Relic offered at an ancient (Neow, Nonupeipe, ...). The ancient screen exposes each relic
-    // as an event option keyed by the relic id, so this renders the relic's Codex stats plus its
-    // community take rate and the player's own pick. Returns null for non-relic options (the
-    // normal event-option path handles those).
     private static string? BuildAncientOptionText(string relicId)
     {
         var anc = CommunityStats.Ancient(relicId);
-        if (anc == null) return null; // only ancient-pool relics; ordinary options fall through
+        if (anc == null) return null;
 
-        // No Codex tier/score here: ancient-pool relics are situational and read as low tiers on
-        // the reward-based score, which is misleading when picking at an ancient. The community
-        // take rate is the signal that actually applies, so show just that (plus the player's own).
         var text = $"{Logo}\n" + Loc.F("hover_ancient_taken", anc.TakeRate, anc.Offered);
         if (PersonalStats.Ancient(relicId) is { Offered: > 0 } you)
             text += "\n" + Loc.F("hover_you_took", Pct(you), you.Picked, you.Offered);
         return text;
     }
 
-    // Whole-percent personal take rate (Picked of Offered); callers gate on Offered > 0.
     private static int Pct(UserPick u) => (int)System.Math.Round(u.Picked * 100.0 / u.Offered);
 
-    // One line per distinct event-tip miss, so a missing percentage is never silent.
     private static void EventDiag(string evId, string why)
     {
         if (EventDiagSeen.Add($"{evId}|{why}")) Diag($"event tip miss: {evId}: {why}");
     }
 
-    // Shop card-removal service: what the community actually removes.
     private static string? BuildRemovalText()
     {
         CommunityStats.EnsureLoaded();
@@ -491,7 +452,6 @@ internal static class NativeHoverTips
 
     private static bool _portraitDiagged;
 
-    // Top-bar character portrait: your win rate (local run history) + the community's.
     private static string? BuildCharacterText()
     {
         var character = RewardContext.Character;
@@ -523,9 +483,6 @@ internal static class NativeHoverTips
         return sb.ToString().TrimEnd();
     }
 
-    // Build a boxed HoverTip struct directly via reflection (its public ctors all need a
-    // LocString; we only need Title/Description/Id, which are plain CLR fields). A null
-    // title hides the tip's title row (our logo line leads the description instead).
     private static object? BuildTip(string? title, string description)
     {
         if (_hoverTipType == null) return null;
@@ -556,8 +513,6 @@ internal static class NativeHoverTips
         return false;
     }
 
-    // Copy the incoming tips into a fresh List<IHoverTip> and add ours, keeping the
-    // argument's static type (IEnumerable<IHoverTip>) intact for Harmony's write-back.
     private static object Append(object? existing, object tip)
     {
         var listType = typeof(List<>).MakeGenericType(_iHoverTipType!);
@@ -568,7 +523,6 @@ internal static class NativeHoverTips
         return list;
     }
 
-    // "<Title>k__BackingField" -> "title"; "Title" -> "title"
     private static string Strip(string field)
     {
         var s = field;
@@ -604,9 +558,6 @@ internal static class NativeHoverTips
         return string.Join(" ", parts);
     }
 
-    // Card surfaces: NCardHolder family (reward rows, pack previews) expose CardModel
-    // directly; the shop's NMerchantCard holds an NCard in _cardNode. Card models are
-    // concrete subclasses, so checks walk the base-type chain.
     private static object? ResolveCardModel(object owner)
     {
         if (_cardHolderType?.IsInstanceOfType(owner) == true)
@@ -618,19 +569,12 @@ internal static class NativeHoverTips
             ?? Reflect.GetMember(owner, "_card") ?? Reflect.GetMember(owner, "Card");
         var m = Reflect.GetMember(node, "Model");
         if (IsModelType(m, "CardModel")) return m;
-        if (IsModelType(node, "CardModel")) return node; // the member was already the model
+        if (IsModelType(node, "CardModel")) return node;
         m = Reflect.GetMember(owner, "CardModel");
         if (IsModelType(m, "CardModel")) return m;
         return null;
     }
 
-    // Relic surfaces pass different owners to CreateAndShow:
-    //   - NRelicBasicHolder / NRelicInventoryHolder (top bar, OnFocus): owner.Relic -> NRelic -> Model
-    //   - shop/treasure holders: same Relic/_relic shape
-    //   - NRewardButton (rewards list): owner.Reward (RelicReward) -> Relic/_relic
-    //   - NInspectRelicScreen: owner._relics[_index]
-    // Relics are concrete subclasses (344 of them, e.g. Akabeko), so the check must walk the
-    // base-type chain for RelicModel, never compare the runtime type name directly.
     private static object? ResolveRelicModel(object owner)
     {
         var node = _relicType?.IsInstanceOfType(owner) == true
@@ -638,7 +582,7 @@ internal static class NativeHoverTips
             : Reflect.GetMember(owner, "Relic") ?? Reflect.GetMember(owner, "_relic");
         var m = Reflect.GetMember(node, "Model");
         if (IsModelType(m, "RelicModel")) return m;
-        if (IsModelType(node, "RelicModel")) return node; // the Relic member was already the model
+        if (IsModelType(node, "RelicModel")) return node;
 
         m = Reflect.GetMember(owner, "_model") ?? Reflect.GetMember(owner, "Model");
         if (IsModelType(m, "RelicModel")) return m;
@@ -655,15 +599,13 @@ internal static class NativeHoverTips
         return null;
     }
 
-    // Potion surfaces: NPotionHolder (belt) exposes Potion (NPotion) -> Model; the shop's
-    // NMerchantPotion holds the PotionModel directly in _potion (and an NPotion in _potionNode).
     private static object? ResolvePotionModel(object owner)
     {
         var direct = Reflect.GetMember(owner, "_potion") ?? Reflect.GetMember(owner, "PotionModel");
         if (IsModelType(direct, "PotionModel")) return direct;
         var node = Reflect.GetMember(owner, "Potion") ?? Reflect.GetMember(owner, "_potionNode")
             ?? Reflect.GetMember(owner, "PotionNode");
-        if (IsModelType(node, "PotionModel")) return node; // the member was already the model
+        if (IsModelType(node, "PotionModel")) return node;
         var m = Reflect.GetMember(node, "Model");
         if (IsModelType(m, "PotionModel")) return m;
         return null;
@@ -676,8 +618,6 @@ internal static class NativeHoverTips
         return false;
     }
 
-    // Log each unrecognized hover-tip owner type once, so new surfaces (potions, shop items,
-    // compendium entries) show up in the log instead of silently not matching.
     private static readonly HashSet<string> SeenOwners = new();
 
     private static void DiagOwnerOnce(object owner)
@@ -694,7 +634,7 @@ internal static class NativeHoverTips
                 Path.Combine(Path.GetTempPath(), "spire-codex-cardhints.log"),
                 $"{DateTimeOffset.UtcNow:o}  [native-tip] {msg}\n");
         }
-        catch { /* ignore */ }
+        catch {  }
         MainFile.Logger.Info($"native-tip: {msg}");
     }
 }
