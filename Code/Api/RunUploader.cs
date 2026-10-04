@@ -131,6 +131,8 @@ public sealed class RunUploader : IDisposable
             return;
         }
         if (!_dispatched.Add(Path.GetFullPath(path))) return;
+        EnsureLedgerLoaded();
+        if (AlreadyUploaded(Path.GetFullPath(path))) return;
 
         try
         {
@@ -166,7 +168,7 @@ public sealed class RunUploader : IDisposable
             if (result.Success)
             {
                 var up = ParseUploadResponse(result.Body);
-                if (up.Hash != null)
+                if (up.Hash != null && !up.Duplicate)
                     Ui.RunCompleteCard.ShowRunDeferred(
                         up.Url ?? Config.RunUrl(up.Hash), up.RankLine, Core.DamageTracker.RunCardLine());
             }
@@ -177,7 +179,7 @@ public sealed class RunUploader : IDisposable
         }
     }
 
-    private readonly record struct UploadInfo(string? Hash, string? Url, string? RankLine);
+    private readonly record struct UploadInfo(string? Hash, string? Url, string? RankLine, bool Duplicate);
 
     private static UploadInfo ParseUploadResponse(string body)
     {
@@ -200,7 +202,8 @@ public sealed class RunUploader : IDisposable
             if (rank is { } rv && total is { } tv) rankLine = Loc.F("rc_seed_rank", rv, tv);
             else if (total is { } tv2 and > 1) rankLine = Loc.F("rc_seed_tracked", tv2);
 
-            return new UploadInfo(hash, url, rankLine);
+            var duplicate = r.TryGetProperty("duplicate", out var d) && d.ValueKind == JsonValueKind.True;
+            return new UploadInfo(hash, url, rankLine, duplicate);
         }
         catch { return default; }
     }
