@@ -11,4 +11,6 @@ internal static class RewardContext
     public static string? Character;
 
     public static double? HpPct;
+
+    public static string? Screen;
 }

@@ -138,20 +138,24 @@ internal static class NativeHoverTips
         const string suffix = "RestSiteOption";
         if (typeName == null || !typeName.EndsWith(suffix, StringComparison.Ordinal)) return null;
         var key = typeName.Substring(0, typeName.Length - suffix.Length).ToUpperInvariant();
+        Metrics.EnsureLoaded();
+        var cm = Metrics.Campfire(key);
         var rc = CommunityStats.Rest(key);
-        if (rc == null) return null;
+        if (cm == null && rc == null) return null;
 
         var sb = new StringBuilder();
         sb.Append(Logo).Append('\n');
-        sb.Append(Loc.F("hover_rest_picked", rc.Label, rc.Pct));
+        if (cm != null) sb.Append(Loc.F("hover_rest_picked", cm.Name, cm.Share));
+        else sb.Append(Loc.F("hover_rest_picked", rc!.Label, rc.Pct));
         var hp = RewardContext.HpPct;
-        if (hp is { } h && rc.PctLowHp is { } lo && rc.PctHighHp is { } hi)
+        if (hp is { } h && rc is { PctLowHp: { } lo, PctHighHp: { } hi })
         {
             var band = h < 50 ? lo : hi;
             sb.Append(Loc.F("hover_rest_at_hp", h, band));
         }
-        if (rc.WinRate is { } wr)
-            sb.Append(Loc.F("hover_rest_win_rate", wr));
+        if (cm is { Lift: { } lift }) AppendLift(sb, lift, cm.LiftN);
+        if (cm != null) sb.Append(Loc.F("hover_rest_win_rate", cm.WinRate));
+        else if (rc!.WinRate is { } wr) sb.Append(Loc.F("hover_rest_win_rate", wr));
         return sb.ToString().TrimEnd();
     }
 
@@ -239,6 +243,7 @@ internal static class NativeHoverTips
     private static string? BuildTipText(object owner)
     {
         PersonalStats.EnsureLoaded();
+        Metrics.EnsureLoaded();
 
         if (_skipButtonType?.IsInstanceOfType(owner) == true && CodexScores.Skip is { } sk)
             return BuildSkipTip(sk);
@@ -248,7 +253,8 @@ internal static class NativeHoverTips
         {
             var id = Bare(Reflect.GetString(model, "Id"));
             if (id == null || CodexScores.Card(id) is not { Picks: > 0 } sc) return null;
-            var text = BuildStats(sc, CardStatsCache.Get(id), id == RewardContext.BestCardId, showElo: true);
+            var text = BuildStats(sc, CardStatsCache.Get(id), Metrics.Card(id), "cards", id,
+                id == RewardContext.BestCardId, showElo: true);
             if (PersonalStats.Card(id) is { Offered: > 0 } you)
                 text += "\n" + Loc.F("hover_you_kept", Pct(you), you.Picked, you.Offered);
             return text;
@@ -259,7 +265,8 @@ internal static class NativeHoverTips
         {
             var id = Bare(Reflect.GetString(model, "Id"));
             if (id == null || CodexScores.Relic(id) is not { Picks: > 0 } sc) return null;
-            var text = BuildStats(sc, RelicStatsCache.Get(id), id == RewardContext.BestRelicId, showElo: false);
+            var text = BuildStats(sc, RelicStatsCache.Get(id), Metrics.Relic(id), "relics", id,
+                id == RewardContext.BestRelicId, showElo: false, isWax: Reflect.GetMember(model, "IsWax") is true);
             if (CommunityStats.Ancient(id) is { } anc)
                 text += "\n" + Loc.F("hover_ancient_taken", anc.TakeRate, anc.Offered);
             if (PersonalStats.Ancient(id) is { Offered: > 0 } youAnc)
@@ -272,7 +279,7 @@ internal static class NativeHoverTips
         {
             var id = Bare(Reflect.GetString(model, "Id"));
             if (id == null || CodexScores.Potion(id) is not { Picks: > 0 } sc) return null;
-            return BuildStats(sc, PotionStatsCache.Get(id), isBest: false, showElo: false);
+            return BuildStats(sc, PotionStatsCache.Get(id), Metrics.Potion(id), "potions", id, isBest: false, showElo: false);
         }
 
         var typeName = owner.GetType().Name;
@@ -301,7 +308,9 @@ internal static class NativeHoverTips
         return sb.ToString();
     }
 
-    private static string BuildStats(EntityScore sc, CardStats? full, bool isBest, bool showElo)
+    private static string BuildStats(
+        EntityScore sc, CardStats? full, EntityMetrics? m, string entityType, string id,
+        bool isBest, bool showElo, bool isWax = false)
     {
         var tier = Ranks.Tier(sc.Score);
         var character = RewardContext.Character;
@@ -309,31 +318,56 @@ internal static class NativeHoverTips
         sb.Append(Logo).Append('\n');
         if (isBest) sb.Append($"[color=#ffd34d]{Loc.T("hover_best_pick")}[/color]\n");
         sb.Append($"[color={TierHex(tier)}]{Loc.F("hover_tier", tier)}[/color]\n");
-        if (showElo && sc.Elo is { } elo) sb.Append(Loc.F("hover_codex_elo", elo));
+        if (m is { Lift: { } lift }) AppendLift(sb, lift, m.LiftN);
+        var elo = sc.Elo ?? m?.Elo;
+        if ((showElo || m?.Elo != null) && elo is { } e) sb.Append(Loc.F("hover_codex_elo", e));
         sb.Append(Loc.F("hover_codex_score", sc.Score));
 
-        double wr;
-        double? delta = null;
-        CharStat? mine = null;
-        if (full != null && !string.IsNullOrEmpty(character))
-            foreach (var c in full.ByCharacter)
-                if (c.Character == character) { mine = c; break; }
-        if (mine != null) { wr = mine.WinRate; delta = wr - full!.BaselineWinRate; }
-        else if (sc.Scope == "character") { wr = sc.WinRate; if (full != null) delta = wr - full.BaselineWinRate; }
-        else if (full != null) { wr = full.WinRate; delta = wr - full.BaselineWinRate; }
-        else wr = sc.WinRate;
-
-        sb.Append(Loc.F("hover_win_rate", wr));
-        if (delta is { } d)
+        if (isWax && m?.Wax is { } wax)
         {
-            var dc = d >= 0 ? "#86e08a" : "#e08a86";
-            sb.Append($"  [color={dc}]{Loc.F("hover_vs_base", d >= 0 ? "+" : "", d)}[/color]");
+            sb.Append(Loc.F("hover_wax", wax.WinRate, wax.Picks)).Append('\n');
         }
-        sb.Append('\n');
+        else
+        {
+            double wr;
+            double? delta = null;
+            CharStat? mine = null;
+            if (full != null && !string.IsNullOrEmpty(character))
+                foreach (var c in full.ByCharacter)
+                    if (c.Character == character) { mine = c; break; }
+            if (mine != null) { wr = mine.WinRate; delta = wr - full!.BaselineWinRate; }
+            else if (sc.Scope == "character") { wr = sc.WinRate; if (full != null) delta = wr - full.BaselineWinRate; }
+            else if (full != null) { wr = full.WinRate; delta = wr - full.BaselineWinRate; }
+            else wr = sc.WinRate;
 
-        if (full is { PickRate: > 0 }) sb.Append(Loc.F("hover_pick_rate", full.PickRate));
+            sb.Append(Loc.F("hover_win_rate", wr));
+            if (delta is { } d)
+                sb.Append($"  [color={DeltaHex(d)}]{Loc.F("hover_vs_base", d >= 0 ? "+" : "", d)}[/color]");
+            sb.Append('\n');
+        }
+
+        if (m?.UseRate is { } use) sb.Append(Loc.F("hover_potion_used", use));
+        else if (m is { PickRate: > 0 } && m.HoldRate is { } hold)
+        {
+            sb.Append(Loc.F("hover_pick_rate", m.PickRate));
+            sb.Append(Loc.F("hover_hold_rate", hold));
+        }
+        else if (full is { PickRate: > 0 }) sb.Append(Loc.F("hover_pick_rate", full.PickRate));
+
+        if (RewardContext.Screen == "merchant" && Metrics.Shop(entityType, id) is { } shop)
+        {
+            sb.Append(Loc.F("hover_shop_bought", shop.BuyRate, shop.Bought, shop.Seen));
+            if (shop.Lift is { } sl)
+                sb.Append($"[color={DeltaHex(sl)}]{Loc.F("hover_shop_lift", sl >= 0 ? "+" : "", sl)}[/color]\n");
+        }
         return sb.ToString().TrimEnd();
     }
+
+    private static void AppendLift(StringBuilder sb, double lift, int n)
+        => sb.Append($"[color={DeltaHex(lift)}]{Loc.F("hover_lift", lift >= 0 ? "+" : "", lift)}[/color]  ")
+             .Append($"[color=#9aa3ab]{Loc.F("hover_lift_n", n)}[/color]\n");
+
+    private static string DeltaHex(double d) => d >= 0 ? "#86e08a" : "#e08a86";
 
     private static readonly HashSet<string> EventDiagSeen = new();
 

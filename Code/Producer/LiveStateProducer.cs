@@ -42,8 +42,10 @@ public partial class LiveStateProducer : Node
         if (snapshot.Screen == "rest" && hpPct is { } now && RewardContext.HpPct is { } prev && now > prev)
             hpPct = prev;
         RewardContext.HpPct = hpPct;
+        RewardContext.Screen = snapshot.Screen;
         Api.CodexScores.EnsureCharacter(snapshot.InRun ? snapshot.Character : null);
         Api.CodexScores.SetFilter(SpireCodexConfig.BracketKey);
+        Api.Metrics.SetBracket(SpireCodexConfig.BracketKey);
         Replay.ReplayRecorder.NoteRun(snapshot);
         SnapshotWriter.Write(snapshot);
     }
