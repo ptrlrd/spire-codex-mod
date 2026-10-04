@@ -9,14 +9,10 @@ using System.Threading.Tasks;
 
 namespace SpireCodex.Api;
 
-// Thin client for the Spire Codex API. See docs/API.md for the full contract.
 public sealed class SpireCodexClient
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
-    // POST the raw .run JSON to /api/runs. Idempotent; the server dedupes by run hash.
-    // Attribution by ?steam_id / ?username; sts2_version tags the build. There is no
-    // bearer auth today (Phase 3 adds the Steam JWT flow). See docs/API.md.
     public async Task<RunUploadResult> UploadRunAsync(
         string runJson, string? steamId, string? username, string sts2Version)
     {
@@ -24,26 +20,18 @@ public sealed class SpireCodexClient
         if (!string.IsNullOrEmpty(steamId)) url += $"&steam_id={Uri.EscapeDataString(steamId)}";
         if (!string.IsNullOrEmpty(username)) url += $"&username={Uri.EscapeDataString(username)}";
 
-        // Retry on rate-limit (429) and transient server errors (502/503/504), honoring Retry-After,
-        // so a run isn't dropped when the API throttles a burst. Backfill also paces itself under the
-        // limit, so these retries are a safety net rather than the common path.
         for (var attempt = 0; ; attempt++)
         {
             try
             {
                 using var content = new StringContent(runJson, Encoding.UTF8, "application/json");
                 using var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
-                // Authenticated upload when signed in; ?steam_id still attributes unauthenticated.
                 if (!string.IsNullOrEmpty(SteamAuth.Token))
                     req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", SteamAuth.Token);
                 using var resp = await Http.SendAsync(req).ConfigureAwait(false);
                 var body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
 
                 var code = (int)resp.StatusCode;
-                // ANY 5xx, not just 502/503/504. A Cloudflare 520 ("origin returned an unknown
-                // error") slipped through that narrower list and silently lost a real run when
-                // the API restarted mid-deploy. 5xx is the server's problem by definition and is
-                // always worth another attempt; 4xx is a genuine rejection and never is.
                 if ((code == 429 || code >= 500) && attempt < UploadMaxRetries)
                 {
                     await Task.Delay(RetryDelay(resp, attempt)).ConfigureAwait(false);
@@ -65,8 +53,6 @@ public sealed class SpireCodexClient
 
     private const int UploadMaxRetries = 4;
 
-    // How long to wait before retrying a throttled/failed upload: the server's Retry-After when it
-    // sends one (capped so we never stall for a minute+), else exponential backoff (1,2,4,8s).
     private static TimeSpan RetryDelay(HttpResponseMessage resp, int attempt)
     {
         var ra = resp.Headers.RetryAfter;
@@ -81,16 +67,6 @@ public sealed class SpireCodexClient
         return TimeSpan.FromSeconds(Math.Min(30, 1 << attempt));
     }
 
-    // POST a gzipped NDJSON replay to /api/runs/{run_hash}/replay.
-    //
-    // The body is ONE complete gzip member with its trailer (a single GZipStream, closed once),
-    // never concatenated members: the server streams the decompression and rejects anything
-    // else as 400 not_gzip. Auth is required here, unlike the run upload — a replay is a much
-    // richer fingerprint than a run summary and must not be spoofable onto someone else's run.
-    //
-    // Status meanings the caller acts on: 404 the run doc does not exist yet (upload the .run
-    // first, retry later), 409 the run already has a different replay or the header disagrees
-    // with the run, 413 over the size caps, 503 storage trouble (retry later).
     public async Task<RunUploadResult> UploadReplayAsync(string runHash, byte[] gzip)
     {
         var url = $"{Config.ApiBase}/runs/{Uri.EscapeDataString(runHash)}/replay";
@@ -110,7 +86,6 @@ public sealed class SpireCodexClient
                 var body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
 
                 var code = (int)resp.StatusCode;
-                // Same policy as the run upload: 429 and every 5xx are the server's problem.
                 if ((code == 429 || code >= 500) && attempt < UploadMaxRetries)
                 {
                     await Task.Delay(RetryDelay(resp, attempt)).ConfigureAwait(false);
@@ -130,11 +105,6 @@ public sealed class SpireCodexClient
         }
     }
 
-    // GET /api/runs/scores/{entityType}[?character=] -> { "ENTITY_ID": {score, win_rate,
-    // picks, wins[, scope]}, ... }. With `character`, entries carry that character's slice
-    // when its sample is big enough (scope="character"), else global (scope="global").
-    // Older backends ignore the param and return global numbers with no scope.
-    // The reserved key the server uses for the skip entrant under ?include_skip=1.
     public const string SkipId = "SKIP";
 
     public async Task<ScoreSet> GetScoresAsync(
@@ -144,11 +114,8 @@ public sealed class SpireCodexClient
         var url = $"{Config.ApiBase}/runs/scores/{entityType}";
         var query = new List<string>();
         if (!string.IsNullOrEmpty(character)) query.Add($"character={Uri.EscapeDataString(character)}");
-        // "all" is the server default, so only the narrowed filters need the param.
         if (!string.IsNullOrEmpty(statFilter) && statFilter != StatFilter.DefaultKey)
             query.Add($"stat_filter={Uri.EscapeDataString(statFilter)}");
-        // Opt-in: without it the payload is exactly what it always was, so an older
-        // backend (or one whose entity store hasn't rebuilt yet) just omits SKIP.
         if (includeSkip) query.Add("include_skip=1");
         if (query.Count > 0) url += "?" + string.Join("&", query);
         using var resp = await Http.GetAsync(url).ConfigureAwait(false);
@@ -166,7 +133,7 @@ public sealed class SpireCodexClient
         var scores = new Dictionary<string, EntityScore>(raw.Count);
         foreach (var (id, v) in raw)
         {
-            if (id == SkipId) continue; // not a card; never goes in the entity table
+            if (id == SkipId) continue;
             scores[id] = new EntityScore(
                 v.Score ?? 0, v.WinRate ?? 0,
                 (int)Math.Min(v.Picks, int.MaxValue), v.Scope, v.Elo);
@@ -176,32 +143,18 @@ public sealed class SpireCodexClient
 
     private sealed class ScoreDto
     {
-        // score is null for entries with no data (0 picks); elo only exists for
-        // reward-offered cards (null for relics/potions/starters).
-        // win_rate/wins are nullable because the reserved SKIP entry has no win outcome
-        // (you can't win "with" a skip). A non-nullable double there would throw on the
-        // null and take down the whole score set, not just that entry.
         [JsonPropertyName("score")] public double? Score { get; set; }
         [JsonPropertyName("win_rate")] public double? WinRate { get; set; }
-        // long, not int: this is a card's pick count for a card, but for SKIP it's the
-        // number of reward screens skipped (10.3M today) and `offered` is every reward
-        // screen ever shown (36.5M and climbing), which outgrows int.
         [JsonPropertyName("picks")] public long Picks { get; set; }
         [JsonPropertyName("scope")] public string? Scope { get; set; }
         [JsonPropertyName("elo")] public double? Elo { get; set; }
-        // SKIP reports its sample as screens seen vs screens skipped, and pick_rate is then
-        // the community skip rate. The count arrives as `picks`; `picked` is accepted too
-        // because the contract was specified with that name and either may be served.
         [JsonPropertyName("offered")] public long Offered { get; set; }
         [JsonPropertyName("picked")] public long? Picked { get; set; }
         [JsonPropertyName("pick_rate")] public double PickRate { get; set; }
-        // Per-act screen totals, so the plate can quote the rate for the act you're in.
         [JsonPropertyName("off_act")] public long[]? OffAct { get; set; }
         [JsonPropertyName("pick_act")] public long[]? PickAct { get; set; }
     }
 
-    // GET /api/runs/community-stats -> headline community numbers. We only parse what the
-    // in-game tips need: per-character win rates and the most-removed cards.
     public async Task<CommunityStatsData?> GetCommunityStatsAsync()
     {
         try
@@ -271,7 +224,6 @@ public sealed class SpireCodexClient
         [JsonPropertyName("id")] public string? Id { get; set; }
         [JsonPropertyName("label")] public string? Label { get; set; }
         [JsonPropertyName("pct")] public double Pct { get; set; }
-        // Nullable: older payloads (pre map-danger deploy) lack these.
         [JsonPropertyName("win_rate")] public double? WinRate { get; set; }
         [JsonPropertyName("pct_low_hp")] public double? PctLowHp { get; set; }
         [JsonPropertyName("pct_high_hp")] public double? PctHighHp { get; set; }
@@ -329,10 +281,6 @@ public sealed class SpireCodexClient
         [JsonPropertyName("pct")] public double Pct { get; set; }
     }
 
-    // GET /api/runs/me/picks (authed) -> { "cards": {...}, "ancients": {...} }, each a map of
-    // "ENTITY_ID" -> {picked, offered}. The server scopes the result to the JWT's verified
-    // steam_id, so there's no id param. Returns null on any non-2xx (signed out, or the endpoint
-    // isn't deployed yet) so the caller retries; empty maps mean "signed in, nothing recorded yet".
     public async Task<PersonalStatsData?> GetUserPicksAsync()
     {
         if (string.IsNullOrEmpty(SteamAuth.Token)) return null;
@@ -371,8 +319,6 @@ public sealed class SpireCodexClient
 
     public Task<CardStats> GetCardStatsAsync(string id) => GetStatsAsync("cards", id);
 
-    // GET /api/runs/stats/{entityType}/{id} -> full per-entity stats (for the hover tooltip).
-    // Same JSON shape for cards and relics.
     public async Task<CardStats> GetStatsAsync(string entityType, string id)
     {
         var url = $"{Config.ApiBase}/runs/stats/{entityType}/{Uri.EscapeDataString(id)}";
@@ -406,10 +352,6 @@ public sealed class SpireCodexClient
         [JsonPropertyName("picks")] public int Picks { get; set; }
     }
 
-    // POST /api/presence — the ~30s live-run heartbeat that feeds the site's "who is in a
-    // run right now" view. Requires the Steam JWT (the server keys the entry by the token's
-    // verified steam_id); returns false without one or on any failure so the publisher
-    // just retries on its next tick.
     public async Task<bool> PostPresenceAsync(string json)
     {
         if (string.IsNullOrEmpty(SteamAuth.Token)) return false;
@@ -424,9 +366,6 @@ public sealed class SpireCodexClient
         catch { return false; }
     }
 
-    // GET /api/runs/leaderboard/seed-rank?seed=&steam_id= -> seed + global standing. Rank
-    // fields are null when the player has no winning run in that pool. Returns null on any
-    // non-2xx (e.g. the endpoint isn't deployed yet), so callers degrade silently.
     public async Task<RankInfo?> GetRankAsync(string steamId, string seed)
     {
         var url = $"{Config.ApiBase}/runs/leaderboard/seed-rank?seed={Uri.EscapeDataString(seed)}&steam_id={Uri.EscapeDataString(steamId)}";
