@@ -1310,31 +1310,39 @@ internal static class ReplayHooks
     {
         try
         {
-            var why = TakeDamageFrame(__1, __5, __2, __6);
             var dealerIsPlayer = Reflect.GetMember(__2, "IsPlayer") is true;
             var targetIsPlayer = Reflect.GetMember(__5, "IsPlayer") is true;
             if (targetIsPlayer && Reflect.GetBool(__3, "WasTargetKilled")) PlayerDied = true;
             if (targetIsPlayer && _hpLostInCombat is { } lost)
                 _hpLostInCombat = lost + Reflect.GetInt(__3, "UnblockedDamage", 0);
             var hit = ReplayRecorder.Line("hit");
-            hit
-                ?.Set("src", dealerIsPlayer ? "player"
+            if (hit == null)
+            {
+                TakeDamageFrame(__1, __5, __2, __6);
+                return;
+            }
+            hit.Set("src", dealerIsPlayer ? "player"
                         : __2 == null ? "effect" : Ids.Bare(Reflect.GetString(__2, "ModelId")))
-                .Set("src_cid", CreatureSlots.Maybe(__2))
                 .Set("dst", targetIsPlayer ? "player" : Ids.Bare(Reflect.GetString(__5, "ModelId")))
-                .Set("dst_cid", CreatureSlots.Maybe(__5))
                 .Set("dmg", Reflect.GetInt(__3, "UnblockedDamage", 0))
                 .Set("blocked", Reflect.GetInt(__3, "BlockedDamage", 0))
                 .Set("overkill", IntOf(__3, "OverkillDamage") is int over && over > 0 ? over : (int?)null)
                 .Set("full_block", Reflect.GetMember(__3, "WasFullyBlocked") is true ? true : (bool?)null)
                 .SetFlag("killed", Reflect.GetBool(__3, "WasTargetKilled"))
-                .Set("dmg_type", DamageProps(__4))
-                .Set("card", __6 == null ? null : Ids.Bare(Reflect.GetString(__6, "Id")))
-                .Set("effect", __2 == null && __6 == null && DamagedBy.TryGetValue(__5, out var by) ? by : null)
-                .Set("atk", hit == null ? null : AttackIdFor(__1, __2, __6, __4))
-                .Set("mods", why?.Mods)
-                .Set("hp_mods", why?.HpMods)
-                .Emit();
+                .Set("card", __6 == null ? null : Ids.Bare(Reflect.GetString(__6, "Id")));
+            try
+            {
+                var why = TakeDamageFrame(__1, __5, __2, __6);
+                hit.Set("src_cid", CreatureSlots.Maybe(__2))
+                    .Set("dst_cid", CreatureSlots.Maybe(__5))
+                    .Set("dmg_type", DamageProps(__4))
+                    .Set("effect", __2 == null && __6 == null && DamagedBy.TryGetValue(__5, out var by) ? by : null)
+                    .Set("atk", AttackIdFor(__1, __2, __6, __4))
+                    .Set("mods", why?.Mods)
+                    .Set("hp_mods", why?.HpMods);
+            }
+            catch (Exception e) { ReplayRecorder.Fault(e); }
+            hit.Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
