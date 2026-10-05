@@ -1097,36 +1097,45 @@ internal static class ReplayHooks
         {
             var card = Reflect.GetMember(__1, "Card");
             var target = Reflect.GetMember(__1, "Target");
-            var resources = Reflect.GetMember(__1, "Resources");
-            var origin = CardInstances.DeckIdOf(card);
-            var energyCost = Reflect.GetMember(card, "EnergyCost");
-            var xValue = Reflect.GetBool(energyCost, "CostsX")
-                ? Reflect.GetMember(energyCost, "CapturedXValue") as int?
-                : null;
-            var keywords = _keywordsResolved
-                ? Enumerate(Reflect.GetMember(card, "Keywords"))
-                      .Select(k => k.ToString()!.ToLowerInvariant()).ToList()
-                : null;
-            ReplayRecorder.Line("play")
-                ?.Set("c", CardInstances.Of(card))
-                .Set("deck_c", origin > 0 ? origin : (int?)null)
+            var play = ReplayRecorder.Line("play");
+            if (play == null) return;
+            play.Set("c", CardInstances.Of(card))
                 .Set("id", Ids.Bare(Reflect.GetString(card, "Id")))
                 .Set("up", Reflect.GetInt(card, "CurrentUpgradeLevel", 0))
                 .Set("target", target == null ? null : Ids.Bare(Reflect.GetString(target, "ModelId")))
-                .Set("target_cid", CreatureSlots.Maybe(target))
-                .Set("cost_paid", Reflect.GetInt(resources, "EnergySpent", -1))
-                .Set("cost_value", Reflect.GetMember(resources, "EnergyValue") as int?)
-                .Set("stars_paid", Reflect.GetInt(resources, "StarsSpent", 0))
-                .Set("stars_value", Reflect.GetMember(resources, "StarValue") as int?)
-                .Set("x_value", xValue)
-                .Set("result_pile",
-                     Reflect.GetMember(__1, "ResultPile")?.ToString()?.ToLowerInvariant())
-                .Set("keywords", keywords is { Count: > 0 } ? keywords : null)
                 .SetFlag("auto", Reflect.GetBool(__1, "IsAutoPlay"))
                 .Set("play_index", Reflect.GetInt(__1, "PlayIndex", 0))
                 .Set("play_count", Reflect.GetInt(__1, "PlayCount", 1))
-                .Set("turn", Reflect.GetInt(__0, "RoundNumber", 0))
-                .Emit();
+                .Set("turn", Reflect.GetInt(__0, "RoundNumber", 0));
+            try
+            {
+                var origin = CardInstances.DeckIdOf(card);
+                play.Set("deck_c", origin > 0 ? origin : (int?)null)
+                    .Set("target_cid", CreatureSlots.Maybe(target));
+            }
+            catch (Exception e) { ReplayRecorder.Fault(e); }
+            try
+            {
+                var resources = Reflect.GetMember(__1, "Resources");
+                var energyCost = Reflect.GetMember(card, "EnergyCost");
+                var xValue = Reflect.GetBool(energyCost, "CostsX")
+                    ? Reflect.GetMember(energyCost, "CapturedXValue") as int?
+                    : null;
+                var keywords = _keywordsResolved
+                    ? Enumerate(Reflect.GetMember(card, "Keywords"))
+                          .Select(k => k.ToString()!.ToLowerInvariant()).ToList()
+                    : null;
+                play.Set("cost_paid", Reflect.GetInt(resources, "EnergySpent", -1))
+                    .Set("cost_value", Reflect.GetMember(resources, "EnergyValue") as int?)
+                    .Set("stars_paid", Reflect.GetInt(resources, "StarsSpent", 0))
+                    .Set("stars_value", Reflect.GetMember(resources, "StarValue") as int?)
+                    .Set("x_value", xValue)
+                    .Set("result_pile",
+                         Reflect.GetMember(__1, "ResultPile")?.ToString()?.ToLowerInvariant())
+                    .Set("keywords", keywords is { Count: > 0 } ? keywords : null);
+            }
+            catch (Exception e) { ReplayRecorder.Fault(e); }
+            play.Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
@@ -1141,13 +1150,17 @@ internal static class ReplayHooks
     {
         try
         {
-            var origin = CardInstances.DeckIdOf(card);
             var line = ReplayRecorder.Line(kind);
             if (line == null) return;
             line.Set("c", CardInstances.Of(card))
-                .Set("deck_c", origin > 0 ? origin : (int?)null)
                 .Set("id", Ids.Bare(Reflect.GetString(card, "Id")));
             if (reason != null) line.SetFlag(reason, value);
+            try
+            {
+                var origin = CardInstances.DeckIdOf(card);
+                line.Set("deck_c", origin > 0 ? origin : (int?)null);
+            }
+            catch (Exception e) { ReplayRecorder.Fault(e); }
             line.Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
