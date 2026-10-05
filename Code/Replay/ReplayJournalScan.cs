@@ -128,6 +128,29 @@ public static class ReplayJournalScan
         return best;
     }
 
+    public static string? OpenCombat(string path)
+    {
+        string? open = null;
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var reader = new StreamReader(stream);
+            while (reader.ReadLine() is { } line)
+            {
+                var starts = line.Contains("\"t\":\"combat_start\"", StringComparison.Ordinal);
+                if (!starts && !line.Contains("\"t\":\"combat_end\"", StringComparison.Ordinal)) continue;
+                try
+                {
+                    using var doc = JsonDocument.Parse(line);
+                    open = starts ? Text(doc.RootElement, "combat_id") : null;
+                }
+                catch { }
+            }
+        }
+        catch { return null; }
+        return open;
+    }
+
     public static List<DeckRemap.Entry> DeckEntries(string? line)
     {
         var rows = new List<DeckRemap.Entry>();

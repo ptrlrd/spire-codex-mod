@@ -21,7 +21,7 @@ namespace SpireCodex.Replay;
 //     writer thread (LongRunning)
 //     -> Utf8JsonWriter into a reused buffer
 //     -> append newline-terminated record to <seed>-<start_time>.jsonl
-//     -> periodic flush
+//     -> flush to the OS whenever the queue is empty, and at least every FlushIntervalMs
 //
 // THE LOSS CONTRACT. No in-process recorder gives both zero frame hitches and zero crash
 // loss: durability means waiting on storage, and asynchronous capture means an uncommitted
@@ -224,7 +224,11 @@ internal sealed class ReplayJournal : IDisposable
             {
                 WriteLine(fs, buffer, line);
 
-                if (lastFlush.ElapsedMilliseconds >= FlushIntervalMs)
+                // Hand the file to the OS whenever the writer has caught up, not only every two
+                // seconds. A process that dies keeps what the OS already holds, so a fight's last
+                // rows are no longer lost behind a game save that already recorded the victory.
+                // The interval still bounds the loss during a burst the writer is still draining.
+                if (!_channel.Reader.TryPeek(out _) || lastFlush.ElapsedMilliseconds >= FlushIntervalMs)
                 {
                     fs.Flush();
                     lastFlush.Restart();

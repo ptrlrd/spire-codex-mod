@@ -126,4 +126,48 @@ public sealed class ReplayJournalScanTests
 
         Assert.Equal(tail, hw.Seq);
     }
+
+    [Fact]
+    public void AFightTheProcessDiedInIsTheOpenCombat()
+    {
+        var path = WriteJournal(
+            """{"t":"combat_start","s":0,"combat_id":"1.5:CULTIST"}""",
+            """{"t":"combat_end","s":1,"result":"victory","combat_id":"1.5:CULTIST"}""",
+            """{"t":"combat_start","s":2,"combat_id":"1.6:SLUDGE_SPINNER_WEAK"}""",
+            """{"t":"play","s":3,"id":"ANGER"}""");
+
+        var open = ReplayJournalScan.OpenCombat(path);
+        File.Delete(path);
+
+        Assert.Equal("1.6:SLUDGE_SPINNER_WEAK", open);
+    }
+
+    [Fact]
+    public void AFinishedFightLeavesNoCombatOpen()
+    {
+        var path = WriteJournal(
+            """{"t":"combat_start","s":0,"combat_id":"1.6:SLUDGE_SPINNER_WEAK"}""",
+            """{"t":"combat_end","s":1,"result":"victory","combat_id":"1.6:SLUDGE_SPINNER_WEAK"}""",
+            """{"t":"decision","s":2,"decision_id":4}""");
+
+        var open = ReplayJournalScan.OpenCombat(path);
+        File.Delete(path);
+
+        Assert.Null(open);
+    }
+
+    [Fact]
+    public void AFightResumedAfterAReloadAndFinishedIsClosed()
+    {
+        var path = WriteJournal(
+            """{"t":"combat_start","s":0,"combat_id":"1.6:SLUDGE_SPINNER_WEAK"}""",
+            """{"t":"end","s":1,"terminal_reason":"interrupted","capture_status":"truncated"}""",
+            """{"t":"resume","s":2,"combat_id":"1.6:SLUDGE_SPINNER_WEAK"}""",
+            """{"t":"combat_end","s":3,"result":"victory","combat_id":"1.6:SLUDGE_SPINNER_WEAK"}""");
+
+        var open = ReplayJournalScan.OpenCombat(path);
+        File.Delete(path);
+
+        Assert.Null(open);
+    }
 }

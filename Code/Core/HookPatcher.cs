@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using HarmonyLib;
@@ -99,7 +100,45 @@ internal static class HookPatcher
         }
         var hm = new HarmonyMethod(patch);
         harmony.Patch(target, prefix: postfix ? null : hm, postfix: postfix ? hm : null);
+        lock (Applied) Applied.Add(new AppliedPatch(harmony, target, patch, postfix));
         return 1;
+    }
+
+    // Every patch Apply installed, so Restore can tell when one stops being there.
+    private sealed record AppliedPatch(Harmony Harmony, MethodBase Target, MethodInfo Patch, bool Postfix);
+
+    private static readonly List<AppliedPatch> Applied = new();
+
+    public sealed record LostPatch(string Method, string Patch, List<string> Owners);
+
+    // Re-install any patch of ours that is no longer on its method, and say which. Patches
+    // are only ever applied once at load, so a missing one means something else took it off
+    // mid-session, and every row that hook writes has been silently absent since.
+    public static List<LostPatch> Restore()
+    {
+        var lost = new List<LostPatch>();
+        List<AppliedPatch> applied;
+        lock (Applied) applied = Applied.ToList();
+        foreach (var p in applied)
+        {
+            try
+            {
+                var info = Harmony.GetPatchInfo(p.Target);
+                var present = info != null
+                              && (p.Postfix ? info.Postfixes : info.Prefixes)
+                                 .Any(x => x.owner == p.Harmony.Id && x.PatchMethod == p.Patch);
+                if (present) continue;
+                var owners = info?.Owners.ToList() ?? new List<string>();
+                var hm = new HarmonyMethod(p.Patch);
+                p.Harmony.Patch(p.Target, prefix: p.Postfix ? null : hm, postfix: p.Postfix ? hm : null);
+                lost.Add(new LostPatch($"{p.Target.DeclaringType?.Name}.{p.Target.Name}", p.Patch.Name, owners));
+            }
+            catch (Exception e)
+            {
+                MainFile.Logger.Info($"hooks: checking {p.Target.Name} failed: {e.Message}");
+            }
+        }
+        return lost;
     }
 
     public static Type? FindType(string fullName)
