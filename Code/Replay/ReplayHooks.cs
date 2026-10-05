@@ -805,11 +805,26 @@ internal static class ReplayHooks
     private static int _selectDecision;
     private static string? _selectDecisionType;
 
+    private static void RestoreLostPatches()
+    {
+        try
+        {
+            foreach (var lost in HookPatcher.Restore())
+                ReplayRecorder.Line("hook_lost")
+                    ?.Set("method", lost.Method)
+                    .Set("hook", lost.Patch)
+                    .Set("owners", lost.Owners.Count > 0 ? lost.Owners : null)
+                    .Emit();
+        }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
+    }
+
     private static void CombatStart(object __1)
     {
         try
         {
             ReplayRecorder.ResetFaults();
+            RestoreLostPatches();
             _combatWon = false;
             _extraTurnPending = null;
             _doomed.Clear();
