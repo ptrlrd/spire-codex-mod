@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using SpireCodex.Core;
@@ -695,10 +696,13 @@ public static class ReplayRecorder
             {
                 if (HasTerminal(file)) continue;
                 if (!EndsWithNewline(file)) File.AppendAllText(file, "\n");
-                var seq = ReplayJournal.LastSequence(file) + 1;
+                var last = ReplayJournal.LastSequence(file);
+                var open = ReplayJournalScan.OpenCombat(file);
                 File.AppendAllText(file,
-                    "{\"t\":\"end\",\"s\":" + seq + ",\"terminal_reason\":\"interrupted\"," +
-                    "\"capture_status\":\"truncated\"}\n");
+                    "{\"t\":\"end\",\"s\":" + (last + 1) + ",\"terminal_reason\":\"interrupted\"," +
+                    "\"capture_status\":\"truncated\"" +
+                    (last >= 0 ? ",\"last_s\":" + last : "") +
+                    (open != null ? ",\"open_combat\":" + JsonSerializer.Serialize(open) : "") + "}\n");
                 MainFile.Logger.Info($"replay: recovered {Path.GetFileName(file)} (interrupted)");
             }
             catch {  }
