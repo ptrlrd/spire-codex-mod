@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -125,6 +126,7 @@ public static class ReplayRecorder
             CreatureSlots.ResumeFrom(journal.LastCreatureId);
 
             lock (Gate) _journal = journal;
+            ResetFaults();
             WriteHeader(snapshot, runSeed, startTime);
 
             var reloads = Reloads();
@@ -168,6 +170,31 @@ public static class ReplayRecorder
     {
         if (line == null) return;
         _journal?.Write(line);
+    }
+
+    private static readonly object FaultGate = new();
+    private static HashSet<string> _faultsThisFight = new();
+
+    public static void ResetFaults()
+    {
+        lock (FaultGate) _faultsThisFight = new HashSet<string>();
+    }
+
+    public static void Fault(Exception e, [CallerMemberName] string hook = "")
+    {
+        try
+        {
+            var error = e.GetType().Name;
+            lock (FaultGate)
+                if (!_faultsThisFight.Add(hook + "|" + error)) return;
+            Line("hook_error")
+                ?.Set("hook", hook)
+                .Set("error", error)
+                .Set("message", e.Message.Length > 200 ? e.Message[..200] : e.Message)
+                .Set("at", e.TargetSite == null ? null : $"{e.TargetSite.DeclaringType?.Name}.{e.TargetSite.Name}")
+                .Emit();
+        }
+        catch { }
     }
 
     public static int NextDecisionId() => Interlocked.Increment(ref _decisionId);

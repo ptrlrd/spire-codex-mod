@@ -87,7 +87,7 @@ internal static class ReplayHooks
                 ?? Ids.Bare(Reflect.GetString(
                        Reflect.GetMember(Reflect.GetMember(__instance, "CreationResult"), "Card"), "Id"));
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static Dictionary<string, int>? _offerIndex;
@@ -514,7 +514,7 @@ internal static class ReplayHooks
                 if (Reflect.GetMember(__1, extra) is { } point) points.Add(point);
             _mapPoints = points;
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static int? MapGeneration()
@@ -554,7 +554,7 @@ internal static class ReplayHooks
                            ?? Ids.Bare(Reflect.GetString(__1, "ModelId")))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static HashSet<object>? _mapPoints;
@@ -585,7 +585,7 @@ internal static class ReplayHooks
             else
                 _pendingAct = (state, __0, name);
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void FlushPendingAct(object runState, int actIndex)
@@ -662,13 +662,13 @@ internal static class ReplayHooks
                 .Set("option_id", pick)
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void RoomResuming(object __instance)
     {
         try { _resumeFrom = Reflect.GetMember(Reflect.GetMember(__instance, "State"), "CurrentRoom"); }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void RoomExiting(object __instance)
@@ -695,7 +695,7 @@ internal static class ReplayHooks
                            ?? Ids.Bare(Reflect.GetString(below, "ModelId")))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void MapRoomEntered(object __0, bool __1)
@@ -707,7 +707,7 @@ internal static class ReplayHooks
                 ?.Set("act", Reflect.GetMember(__0, "CurrentActIndex") is int a ? a + 1 : (int?)null)
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void BossSwapped(object __0, object __1)
@@ -725,7 +725,7 @@ internal static class ReplayHooks
                 .Set("prev", prev)
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void QuestAdded(object __instance, object __0) => QuestChanged("add", __instance, __0);
@@ -742,7 +742,7 @@ internal static class ReplayHooks
                 .Set("id", Ids.Bare(Reflect.GetString(model, "Id")))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static readonly ConditionalWeakTable<object, object> MoveOwners = new();
@@ -757,7 +757,7 @@ internal static class ReplayHooks
             if (IntentsShownFor(Reflect.GetMember(__1, "CombatState")))
                 EmitIntent(__1, __result, "roll");
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void MovePerformed(object __instance)
@@ -773,7 +773,7 @@ internal static class ReplayHooks
                 .Set("intents", intents.Count > 0 ? intents : null)
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static string CreatureRef(object? creature)
@@ -809,6 +809,7 @@ internal static class ReplayHooks
     {
         try
         {
+            ReplayRecorder.ResetFaults();
             _combatWon = false;
             _extraTurnPending = null;
             _doomed.Clear();
@@ -852,7 +853,7 @@ internal static class ReplayHooks
                 .Set("allies", allies)
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void CombatEnd(object __1) => EmitCombatEnd(__1, won: true);
@@ -871,7 +872,7 @@ internal static class ReplayHooks
                 .Set("side", "player")
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void SideTurnStart(object __0, object __1)
@@ -888,7 +889,7 @@ internal static class ReplayHooks
                 .Set("side", side)
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void TurnEnd(object __0, object __1)
@@ -901,7 +902,7 @@ internal static class ReplayHooks
                 .Set("side", __1?.ToString()?.ToLowerInvariant())
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static bool _combatWon;
@@ -918,7 +919,7 @@ internal static class ReplayHooks
             if (__1 == null) return;
             (_extraTurnPending ??= new List<object>()).Add(__1);
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static readonly ConditionalWeakTable<object, string> KilledBy = new();
@@ -935,7 +936,7 @@ internal static class ReplayHooks
                 KilledBy.Add(c, by);
             }
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void DamageStarting(object __1, object? __4, object? __5)
@@ -950,7 +951,7 @@ internal static class ReplayHooks
                 DamagedBy.Add(t, by);
             }
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static string? CallerId()
@@ -979,7 +980,7 @@ internal static class ReplayHooks
                 .Set("killed_by", KilledBy.TryGetValue(__2, out var by) ? by : null)
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void CombatWonEvent(object room) => _combatWon = true;
@@ -990,7 +991,7 @@ internal static class ReplayHooks
         {
             EmitCombatEnd(Reflect.GetMember(room, "CombatState"), _combatWon);
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void EmitCombatEnd(object? combatState, bool won)
@@ -1010,7 +1011,7 @@ internal static class ReplayHooks
             _hpLostInCombat = null;
             _extraTurnPending = null;
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void BindCombatEndEvents()
@@ -1127,7 +1128,7 @@ internal static class ReplayHooks
                 .Set("turn", Reflect.GetInt(__0, "RoundNumber", 0))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void CardDrawn(object __2, bool __3) => CardMove("draw", __2, "turn_start", __3);
@@ -1149,7 +1150,7 @@ internal static class ReplayHooks
             if (reason != null) line.SetFlag(reason, value);
             line.Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void CardCloned(object __0, object __result)
@@ -1168,7 +1169,7 @@ internal static class ReplayHooks
                 .Set("id", Ids.Bare(Reflect.GetString(__1, "Id")))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void Shuffled(object __2)
@@ -1184,7 +1185,7 @@ internal static class ReplayHooks
                 .Set("order_c", PileOrder(cards))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static Type? _autoPlayType;
@@ -1202,7 +1203,7 @@ internal static class ReplayHooks
                 .Set("retained_c", PileOrder(__4))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void OpeningDrawOrder(object __1)
@@ -1223,7 +1224,7 @@ internal static class ReplayHooks
                 .Set("order_deck_c", deck.Contains(0) ? null : deck)
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void CardAfflicted(object __1, decimal __2, object? __result)
@@ -1244,7 +1245,7 @@ internal static class ReplayHooks
                 .Set("mine", Mine(Reflect.GetMember(__1, "Owner")))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void AfflictionCleared(object __0)
@@ -1263,7 +1264,7 @@ internal static class ReplayHooks
                 .Set("mine", Mine(Reflect.GetMember(__0, "Owner")))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static object? _vetoedCard;
@@ -1302,7 +1303,7 @@ internal static class ReplayHooks
                 .Set("mine", Mine(Reflect.GetMember(__1, "Owner")))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void DamageGiven(object __1, object __2, object __3, object __4, object __5, object __6)
@@ -1335,7 +1336,7 @@ internal static class ReplayHooks
                 .Set("hp_mods", why?.HpMods)
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void DamageReceived(object __2, object __3, object __4, object __5)
@@ -1351,7 +1352,7 @@ internal static class ReplayHooks
                 .Set("dmg_type", DamageProps(__5))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void PowerChanged(object __2, decimal __3, object __4)
@@ -1375,7 +1376,7 @@ internal static class ReplayHooks
             StampInstance(line, __2);
             line.Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void PowerChanging(object __1, decimal __2, object __4, object __5)
@@ -1392,7 +1393,7 @@ internal static class ReplayHooks
                 Card = __5 == null ? null : Ids.Bare(Reflect.GetString(__5, "Id")),
             });
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void PowerApplied(object __instance, object __0, decimal __1)
@@ -1402,7 +1403,7 @@ internal static class ReplayHooks
             if (__1 != 0m) return;
             EmitNegated(__instance, __0, Reflect.GetMember(__instance, "Applier"), onBoard: false);
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void PowerReceived(object __1, decimal __2, object __3)
@@ -1412,7 +1413,7 @@ internal static class ReplayHooks
             if ((int)__2 != 0) return;
             EmitNegated(__1, Reflect.GetMember(__1, "Owner"), __3, onBoard: true);
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void EmitNegated(object? power, object? target, object? applier, bool onBoard)
@@ -1455,7 +1456,7 @@ internal static class ReplayHooks
             StampInstance(line, __instance);
             line.Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static int? AmountOf(object? power)
@@ -1527,7 +1528,7 @@ internal static class ReplayHooks
                 .Set("mine", MineCreature(__0))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private sealed class AttackFrame
@@ -1603,7 +1604,7 @@ internal static class ReplayHooks
                 Combat = __0,
             });
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void AttackHitCount(object __1, decimal __result)
@@ -1613,7 +1614,7 @@ internal static class ReplayHooks
             var f = OpenAttacks.LastOrDefault(x => ReferenceEquals(x.Command, __1));
             if (f != null) f.Planned = (int)Math.Ceiling(__result);
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static long? AttackIdFor(object combat, object? dealer, object? card, object? props)
@@ -1651,7 +1652,7 @@ internal static class ReplayHooks
                 .Set("random", random ? true : (bool?)null)
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void DamageModified(object __3)
@@ -1661,7 +1662,7 @@ internal static class ReplayHooks
             if (PendingDamageMods.Count > 16) PendingDamageMods.Clear();
             PendingDamageMods.Push(ModelIds(__3));
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void DamageLanding(object __2, object __3, object __6, object __7)
@@ -1677,7 +1678,7 @@ internal static class ReplayHooks
                 Target = __3, Dealer = __6, Card = __7, Combat = __2, Mods = mods,
             });
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void HpLossModified(object __1, object __2)
@@ -1690,7 +1691,7 @@ internal static class ReplayHooks
             if (ModelIds(__2) is not { } ids) return;
             f.HpMods = f.HpMods == null ? ids : f.HpMods.Union(ids).ToList();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static DamageFrame? TakeDamageFrame(object combat, object target, object? dealer, object? card)
@@ -1712,7 +1713,7 @@ internal static class ReplayHooks
             if (OpenBlock.Count > 16) OpenBlock.Clear();
             OpenBlock.Add(new BlockFrame { Combat = __0, Card = __2, Amount = __1, Mods = ModelIds(__4) });
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static List<string>? TakeBlockMods(object combat, decimal amount, object? card)
@@ -1738,7 +1739,7 @@ internal static class ReplayHooks
                 .Set("mods", mods)
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void BlockClearing(object __instance)
@@ -1750,7 +1751,7 @@ internal static class ReplayHooks
             if (IntOf(__instance, "Block") is int block && block > 0)
                 BlockBeforeClear.Add(__instance, block);
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void BlockCleared(object __1)
@@ -1764,7 +1765,7 @@ internal static class ReplayHooks
             if (IntOf(__1, "Block") != 0) return;
             BlockRow(__1, -had, "cleared").Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void BlockClearPrevented(object __1, object __2)
@@ -1777,7 +1778,7 @@ internal static class ReplayHooks
                 ?.Set("by", Ids.Bare(Reflect.GetString(__1, "Id")))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void BlockBroken(object __2)
@@ -1787,7 +1788,7 @@ internal static class ReplayHooks
             if (__2 == null) return;
             BlockRow(__2, null, "broken").Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void BlockLost(object __instance, decimal __0)
@@ -1800,7 +1801,7 @@ internal static class ReplayHooks
             if (removed <= 0) return;
             BlockRow(__instance, -removed, "lost", block - removed).Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static ReplayLine? BlockRow(object creature, int? n, string reason, int? left = null)
@@ -1827,7 +1828,7 @@ internal static class ReplayHooks
                 .Set("mine", MineCreature(__2))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void MaxHpSet(object __0, decimal __1)
@@ -1845,7 +1846,7 @@ internal static class ReplayHooks
             if (HpOf(__0, "CurrentHp") is int cur) line.Set("hp", Math.Min(cur, newMax));
             line.Set("mine", MineCreature(__0)).Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void CurrentHpSet(object __0, decimal __1)
@@ -1865,7 +1866,7 @@ internal static class ReplayHooks
                 .Set("mine", MineCreature(__0))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void GoldGained(object __1)
@@ -1877,7 +1878,7 @@ internal static class ReplayHooks
                 .Set("mine", Mine(__1))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static int? _goldBefore;
@@ -1894,7 +1895,7 @@ internal static class ReplayHooks
             _goldBefore = IntOf(__1, "Gold");
             _goldShop = PaidByMerchant();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void GoldLost(object __1, object __2)
@@ -1912,7 +1913,7 @@ internal static class ReplayHooks
                 .Set("mine", Mine(__1))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static bool PaidByMerchant()
@@ -1961,7 +1962,7 @@ internal static class ReplayHooks
             if (CallerOf("MegaCrit.Sts2.Core.Models.CardModel", out _)?.Name == "PlayCardAction")
                 PaidByPlay.Add(__instance, true);
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void CardEnergyPaying(object __instance, int __0)
@@ -1993,7 +1994,7 @@ internal static class ReplayHooks
                 .Set("mine", Mine(Reflect.GetMember(__instance, "_player")))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void EnergyReset(object __1)
@@ -2016,7 +2017,7 @@ internal static class ReplayHooks
                 .Set("mine", Mine(__1))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void StarsModified(int __1, object __2)
@@ -2031,7 +2032,7 @@ internal static class ReplayHooks
                 .Set("mine", Mine(__2))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void Forged(decimal __1, object __2, object? __3)
@@ -2058,7 +2059,7 @@ internal static class ReplayHooks
             }
             line.Set("mine", Mine(__2)).Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static readonly ConditionalWeakTable<object, string> OrbIds = new();
@@ -2088,7 +2089,7 @@ internal static class ReplayHooks
             }
             line.Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void OrbEvoking(object __2, bool __3)
@@ -2097,7 +2098,7 @@ internal static class ReplayHooks
         {
             Evoking.AddOrUpdate(__2, new EvokeLatch { Val = OrbValue(__2, "EvokeVal"), Dequeue = __3 });
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void OrbPassive(object __instance)
@@ -2106,7 +2107,7 @@ internal static class ReplayHooks
         {
             Orb("orb_passive", __instance)?.Set("val", OrbValue(__instance, "PassiveVal")).Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static ReplayLine? Orb(string kind, object orb)
@@ -2183,7 +2184,7 @@ internal static class ReplayHooks
                 .Set("options", options)
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void CardRewardSkipped()
@@ -2197,7 +2198,7 @@ internal static class ReplayHooks
                 .Emit();
             DemoteDecision();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void CardRewardRerolled()
@@ -2212,7 +2213,7 @@ internal static class ReplayHooks
                 .Set("offer_generation", _pendingReroll - 1)
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static string SelectKind(object? prefs)
@@ -2238,7 +2239,7 @@ internal static class ReplayHooks
                 ?.Set("prompt_key", kind == "unknown" ? PromptKey(__1) : null)
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void EnchantSelectOffered(object __0, object __1, int __2, object __3)
@@ -2254,7 +2255,7 @@ internal static class ReplayHooks
                 .Set("amount", __2)
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static ReplayLine? OpenSelectOffer(string source, string kind, object? player,
@@ -2334,7 +2335,7 @@ internal static class ReplayHooks
                 .Set("cards", picked)
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static string? SelectorName()
@@ -2358,7 +2359,7 @@ internal static class ReplayHooks
                 .Set("id", Ids.Bare(Reflect.GetString(__1, "Id")))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void ItemPurchased(object __1, object __2, int __3)
@@ -2382,7 +2383,7 @@ internal static class ReplayHooks
                 .Set("gold_on_hand", Reflect.GetInt(__1, "Gold", 0))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static int? ShopSlot(object player, object entry, string kind)
@@ -2439,7 +2440,7 @@ internal static class ReplayHooks
             }
             line.Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void CardChangedPiles(object __0, object __1, object __2, object __3)
@@ -2481,7 +2482,7 @@ internal static class ReplayHooks
                 .Emit();
             if (offered && decisionForCard == _decision) DemoteDecision();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void UpgradesStarting(object __0, out List<(object Card, int Level)>? __state)
@@ -2491,7 +2492,7 @@ internal static class ReplayHooks
         {
             __state = Enumerate(__0).Select(c => (c, Reflect.GetInt(c, "CurrentUpgradeLevel", 0))).ToList();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void UpgradesDone(List<(object Card, int Level)>? __state)
@@ -2521,7 +2522,7 @@ internal static class ReplayHooks
                 .Set("id", Ids.Bare(Reflect.GetString(__0, "Id")))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static int _levelBeforeDowngrade;
@@ -2548,7 +2549,7 @@ internal static class ReplayHooks
                 .Set("up", after)
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void CardEnchanted(object __0, object __1, decimal __2, object? __result)
@@ -2572,7 +2573,7 @@ internal static class ReplayHooks
                 .Set("pile", PileName(__1))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static string PileName(object? card)
@@ -2606,7 +2607,7 @@ internal static class ReplayHooks
                 .Set("to_id", Ids.Bare(Reflect.GetString(__instance, "Id")))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void RelicObtained(object __0)
@@ -2622,7 +2623,7 @@ internal static class ReplayHooks
                 .Set("id", Ids.Bare(Reflect.GetString(__0, "Id")))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static bool _replacingRelic;
@@ -2645,7 +2646,7 @@ internal static class ReplayHooks
                 .Set("mine", Mine(Reflect.GetMember(__0, "Owner")))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void PotionUsed(object __2, object __3) => Potion("potion_used", __2, __3);
@@ -2661,7 +2662,7 @@ internal static class ReplayHooks
                 .Set("mine", Mine(__0))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
     private static void PotionProcured(object __2) => Potion("potion_got", __2);
     private static void PotionDiscarded(object __2) => Potion("potion_dropped", __2);
@@ -2677,7 +2678,7 @@ internal static class ReplayHooks
                 .Set("target_cid", CreatureSlots.Maybe(target))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void RestHeal(bool __2)
@@ -2690,7 +2691,7 @@ internal static class ReplayHooks
                 .SetFlag("mimicked", __2)
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void RestSmith()
@@ -2717,7 +2718,7 @@ internal static class ReplayHooks
             _restChoiceIndex = 0;
             OfferRest(Reflect.GetMember(__1, "Options"));
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void OfferRest(object? list)
@@ -2775,7 +2776,7 @@ internal static class ReplayHooks
             _restPending = new RestChoice(__0, Reflect.GetString(opt, "OptionId")?.ToLowerInvariant(),
                                           __1, mine, decision);
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void RestChosen(object? __result)
@@ -2790,7 +2791,7 @@ internal static class ReplayHooks
                 System.Threading.Tasks.TaskContinuationOptions.ExecuteSynchronously,
                 System.Threading.Tasks.TaskScheduler.Default);
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void RestChoiceSettled(RestChoice choice, System.Threading.Tasks.Task<bool> t)
@@ -2815,7 +2816,7 @@ internal static class ReplayHooks
                 HookPatcher.FindType("MegaCrit.Sts2.Core.Runs.RunManager"), "Instance") is { } rm
                     ? Reflect.GetMember(rm, "RestSiteSynchronizer") : null, "GetLocalOptions"));
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static readonly ConditionalWeakTable<object, StrongBox<int>> _relicCounters = new();
@@ -2839,7 +2840,7 @@ internal static class ReplayHooks
                 .Set("mine", Mine(owner))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static string? _pendingDeckKind;
@@ -2858,7 +2859,7 @@ internal static class ReplayHooks
             if (cards.Count == 0) return;
             OpenSelectOffer("deck_select", "upgrade", __0, __1, cards, filter: null)?.Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void TransformSelectOffered(object __0, object __1)
@@ -2871,7 +2872,7 @@ internal static class ReplayHooks
             if (cards.Count == 0) return;
             OpenSelectOffer("deck_select", "transform", __0, __1, cards, filter: null)?.Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static IEnumerable<object> DeckCards(object? player)
@@ -2913,7 +2914,7 @@ internal static class ReplayHooks
                 .Set("options", options)
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void TreasurePicked(object __instance, object __0, int? __1)
@@ -2932,7 +2933,7 @@ internal static class ReplayHooks
                 .Set("mine", Mine(__0))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void TreasureEmpty()
@@ -2949,7 +2950,7 @@ internal static class ReplayHooks
                 .Set("options", new List<ReplayLine>())
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static readonly ConditionalWeakTable<object, StrongBox<int>> _relicRewardDecisions = new();
@@ -2985,7 +2986,7 @@ internal static class ReplayHooks
     private static void RelicRewardSelecting(object __instance)
     {
         try { RelicRewardDecision(__instance, mint: true); }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void RelicRewardSkipped(object __instance)
@@ -3000,7 +3001,7 @@ internal static class ReplayHooks
                 .Set("outcome", "skip")
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static int _eventDecision;
@@ -3022,7 +3023,7 @@ internal static class ReplayHooks
             _eventDecision = 0;
             _eventId = null;
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void EventPageShown(object __instance)
@@ -3090,7 +3091,7 @@ internal static class ReplayHooks
             StampEventFloor(line, owner);
             line.Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void EventOptionChosen(object __instance, object __0, int __1)
@@ -3120,7 +3121,7 @@ internal static class ReplayHooks
                 .Set("label", label)
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void EventProceedClicked(object __0)
@@ -3135,7 +3136,7 @@ internal static class ReplayHooks
                 .Set("page_index", _eventPageIndex >= 0 ? _eventPageIndex : (int?)null)
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static bool? OptFlag(PropertyInfo? prop, object? opt)
@@ -3202,7 +3203,7 @@ internal static class ReplayHooks
                 })
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void CreatureEscaped(object __0)
@@ -3214,7 +3215,7 @@ internal static class ReplayHooks
                 .Set("tgt_cid", CreatureSlots.Maybe(__0))
                 .Emit();
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static readonly HashSet<object> _doomed = new(ReferenceEqualityComparer.Instance);
@@ -3225,7 +3226,7 @@ internal static class ReplayHooks
         {
             foreach (var c in Enumerate(__0)) _doomed.Add(c);
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void DoomKillDone(object __1)
@@ -3234,7 +3235,7 @@ internal static class ReplayHooks
         {
             foreach (var c in Enumerate(__1)) _doomed.Remove(c);
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static WeakReference<object>? _intentsShownFor;
@@ -3264,7 +3265,7 @@ internal static class ReplayHooks
                 if (move != null) EmitIntent(enemy, move, "turn_start");
             }
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void IntentsCommitted(object __0, object __1)
@@ -3282,7 +3283,7 @@ internal static class ReplayHooks
                 EmitIntent(enemy, move, "turn_end");
             }
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void MoveSetImmediate(object __instance, object __0, object __1)
@@ -3300,7 +3301,7 @@ internal static class ReplayHooks
             MoveOwners.Add(__0, owner);
             EmitIntent(owner, __0, "set", Reflect.GetString(from, "StateId"));
         }
-        catch { }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void EmitIntent(object owner, object move, string at, string? from = null)
