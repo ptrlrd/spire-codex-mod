@@ -28,6 +28,8 @@ public sealed class SpireCodexConfig : SimpleModConfig
 
     [ConfigSection("Hotkeys")]
     public static HotKey OverlayKey { get; set; } = HotKey.F5;
+    public static HotKey SandboxKey { get; set; } = HotKey.F7;
+    public static Key SandboxKeycode => KeyOf(SandboxKey);
 
     public static ControllerToggle OverlayPad { get; set; } = ControllerToggle.StickClick;
 
