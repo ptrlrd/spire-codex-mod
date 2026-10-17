@@ -8,18 +8,46 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # WSL dev uses the Windows dotnet (dotnet.exe); CI on a native runner sets DOTNET=dotnet.
-DOTNET="${DOTNET:-dotnet.exe}"
+# Bash does not expand aliases in a non-interactive shell, so this has to be a variable.
+if [ -z "${DOTNET:-}" ] && command -v wslinfo >/dev/null 2>&1; then
+  DOTNET=dotnet.exe
+  echo "WSL detected, using $DOTNET"
+fi
+DOTNET="${DOTNET:-dotnet}"
 
-VERSION=$(python3 -c "import json; print(json.load(open('SpireCodex.json'))['version'])")
+# Git Bash on Windows resolves python3 to the Microsoft Store stub, which prints an advert
+# and exits 49 without running anything. So each candidate is actually EXECUTED rather than
+# just looked up, because the stub passes a `command -v` test.
+PYTHON=""
+for candidate in python3 python py; do
+  if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c "import json" >/dev/null 2>&1; then
+    PYTHON="$candidate"
+    break
+  fi
+done
+if [ -z "$PYTHON" ]; then
+  echo "need python3, python or py on PATH" >&2
+  exit 1
+fi
+
+VERSION=$("$PYTHON" -c "import json; print(json.load(open('SpireCodex.json'))['version'])")
 echo "Packaging SpireCodex $VERSION"
 
 # Keep Godot from scanning the build/staging dir when it exports the .pck.
 mkdir -p dist && : > dist/.gdignore
 
 # Build the dll and export the .pck (both land in the build output dir).
+OUT=.godot/mono/temp/bin/ExportRelease
+
+# Delete the previous pck FIRST, so the check below tests this run's export rather than
+# whatever was left lying around. The Godot GUI exe on Windows exits -1 even when the export
+# succeeded, and the Exec that runs it is ContinueOnError, so a genuinely failed export does
+# not stop the build. Without this the script would find the stale pck from the last run,
+# zip it, and exit 0 with a release that silently ships the wrong file.
+rm -f "$OUT/SpireCodex.pck"
+
 "$DOTNET" publish SpireCodex.csproj -c ExportRelease
 
-OUT=.godot/mono/temp/bin/ExportRelease
 if [ ! -f "$OUT/SpireCodex.pck" ]; then
     echo "ERROR: $OUT/SpireCodex.pck not found. Did the Godot export run? Check GodotPath in Directory.Build.props." >&2
     exit 1
@@ -34,7 +62,7 @@ cp "$OUT/SpireCodex.pck" "$STAGE/"
 
 OUT="dist/SpireCodex-$VERSION.zip"
 rm -f "$OUT"
-python3 - "$OUT" <<'EOF'
+"$PYTHON" - "$OUT" <<'EOF'
 import sys, zipfile, os
 with zipfile.ZipFile(sys.argv[1], "w", zipfile.ZIP_DEFLATED) as z:
     for root, _, files in os.walk("dist/SpireCodex"):
