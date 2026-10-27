@@ -96,6 +96,8 @@ public partial class MainFile : Node
         // empty slots. Only attaches when there's actually an unmodded save to import.
         Ui.ImportCard.Start();
         Ui.ProfileImportButton.Start();
+        // Autopilot: the sim engine plays the current run through the game's own AutoSlay seams.
+        Autopilot.Autopilot.Start();
 
         // Pre-fetch community Codex Scores so the overlay can annotate the deck/relics,
         // plus community headline stats (portrait/removal tips) and the local personal

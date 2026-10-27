@@ -32,6 +32,9 @@ public sealed class SpireCodexConfig : SimpleModConfig
     public static ControllerToggle OverlayPad { get; set; } = ControllerToggle.StickClick;
 
     public static Key OverlayKeycode => KeyOf(OverlayKey);
+    // Starts and stops the autopilot (the sim engine playing the current run).
+    public static HotKey AutopilotKey { get; set; } = HotKey.F8;
+    public static Key AutopilotKeycode => KeyOf(AutopilotKey);
 
     public static string BracketKey => Stats switch
     {
