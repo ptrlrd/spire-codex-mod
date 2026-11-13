@@ -23,8 +23,9 @@ public sealed class SpireCodexConfig : SimpleModConfig
     public static StatBracket Stats { get; set; } = StatBracket.All;
     public static bool ShowMapDanger { get; set; } = true;
     public static bool ShowDamageMeter { get; set; } = true;
-    public static bool ShowUpcomingEvents { get; set; } = true;
+    public static bool ShowUpcomingEvents { get; set; } = false;
     public static bool ShowPostRunCard { get; set; } = true;
+    public static bool ShowBracketTag { get; set; } = true;
 
     [ConfigSection("Hotkeys")]
     public static HotKey OverlayKey { get; set; } = HotKey.F5;

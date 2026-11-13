@@ -116,6 +116,7 @@ public partial class CardRewardHints : Node
         var mouse = GetViewport().GetMousePosition();
         var seen = new HashSet<ulong>();
         var bounded = 0; var withScore = 0;
+        Rect2? cardRow = null;
 
         // Active game tooltips: plates that would overlap one hide instead of clipping it.
         var tipRects = CardScan.ActiveHoverTipRects(_game);
@@ -126,6 +127,7 @@ public partial class CardRewardHints : Node
             if (bounds is not { } rect) continue;
             bounded++;
             if (Score(found) is { Picks: > 0 }) withScore++;
+            cardRow = cardRow is { } u ? u.Merge(rect) : rect;
 
             // While this card is hovered its native hover-tip shows the full stats and the
             // enlarged card sits over the plate, so hide the plate to avoid it clipping
@@ -158,6 +160,7 @@ public partial class CardRewardHints : Node
         DiagThrottled($"cards={cards.Count} bounded={bounded} withScore={withScore} badges={_badges.Count}"
             + (inShop ? $" ovl=[{CardScan.VisibleOverlayDescription(container)}]" : ""));
         PruneBadges(seen);
+        if (isDraft && withScore > 0 && cardRow is { } row) FirstTips.Offer(Tips.Plates(), row);
     }
 
     // The community numbers for one found item, from whichever score set it belongs to.

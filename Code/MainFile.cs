@@ -87,9 +87,8 @@ public partial class MainFile : Node
         // ask before anything is sent (M3-C trust gate).
         Ui.ConsentPrompt.Start();
 
-        // First-time welcome: points new players at F5, the Settings tab, and the headline
-        // features. Shows once, after the consent choice, so the two cards don't stack.
         Ui.WelcomeCard.Start();
+        Ui.FirstTips.Start();
 
         // "Import vanilla saves" on the profile-select screen (plus the card it opens), so a
         // first-time modder can bring their unmodded profile across right where they notice the

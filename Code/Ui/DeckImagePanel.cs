@@ -23,6 +23,13 @@ public partial class DeckImagePanel : CanvasLayer
     private static readonly string[] Tabs =
         { "deck_tab_leaderboard", "deck_tab_runs", "deck_tab_import", "deck_tab_settings", "deck_tab_about" };
 
+    internal const int TabLeaderboard = 0, TabRuns = 1, TabImport = 2, TabSettings = 3, TabAbout = 4;
+
+    private static readonly string[] SettingsCats =
+        { "set_cat_features", "set_cat_stats", "set_cat_tracking", "set_cat_controls", "set_cat_system" };
+    private const int CatFeatures = 0, CatStats = 1, CatTracking = 2, CatControls = 3;
+    private int _settingsCat;
+
     private static readonly (StatBracket Bracket, string Label, string Tip)[] BracketChoices =
     {
         (StatBracket.All, "deck_bracket_all", "deck_bracket_all_tip"),
@@ -34,7 +41,7 @@ public partial class DeckImagePanel : CanvasLayer
 
     private const string SiteUrl = "https://spire-codex.com";
     private const string GithubUrl = "https://github.com/ptrlrd/spire-codex";
-    private const string DiscordUrl = "https://discord.gg/uged4qFufK";
+    internal const string DiscordUrl = "https://discord.gg/uged4qFufK";
     private const string OverlayUrl = "https://overwolf.com/app/ptrlrd-spire_codex";
     private const string ScoringUrl = "https://spire-codex.com/leaderboards/scoring";
     private const string PatreonUrl = "https://www.patreon.com/cw/SpireCodex";
@@ -42,6 +49,7 @@ public partial class DeckImagePanel : CanvasLayer
 
     private PanelContainer _panel = null!;
     private bool _dragging;
+    private Control? _tabBar;
     private Vector2 _dragOffset;
 
     private static readonly string[] StickClickNames =
@@ -190,19 +198,21 @@ public partial class DeckImagePanel : CanvasLayer
     private Control BuildTabBar()
     {
         var bar = new PanelContainer();
+        _tabBar = bar;
         var bs = new StyleBoxFlat { BgColor = BgSoft, BorderColor = Border };
         bs.BorderWidthBottom = 1;
         bs.ContentMarginLeft = 8; bs.ContentMarginRight = 8;
         bs.ContentMarginTop = 4; bs.ContentMarginBottom = 4;
         bar.AddThemeStyleboxOverride("panel", bs);
 
-        var row = new HBoxContainer();
-        row.AddThemeConstantOverride("separation", 4);
+        var row = new HFlowContainer();
+        row.AddThemeConstantOverride("h_separation", 2);
+        row.AddThemeConstantOverride("v_separation", 0);
         for (var i = 0; i < Tabs.Length; i++)
         {
             var idx = i;
             var b = new Button { Text = Loc.T(Tabs[i]), Flat = true };
-            b.AddThemeFontSizeOverride("font_size", 14);
+            b.AddThemeFontSizeOverride("font_size", 13);
             b.Pressed += () => SetTab(idx);
             _tabButtons.Add(b);
             row.AddChild(b);
@@ -215,7 +225,7 @@ public partial class DeckImagePanel : CanvasLayer
     {
         if (Visible && !SpireCodexConfig.ShowDeckView) Visible = false;
 
-        if (Visible && _tab == 3 && _backfillStatus is { } s && GodotObject.IsInstanceValid(s))
+        if (Visible && _tab == TabSettings && _backfillStatus is { } s && GodotObject.IsInstanceValid(s))
         {
             if (RunUploader.BackfillActive)
             {
@@ -285,7 +295,7 @@ public partial class DeckImagePanel : CanvasLayer
             return;
         }
 
-        if (Visible && _tab == 0 && key.Keycode is Key.Key1 or Key.Key2 or Key.Key3)
+        if (Visible && _tab == TabLeaderboard && key.Keycode is Key.Key1 or Key.Key2 or Key.Key3)
         {
             SetLbSub((int)(key.Keycode - Key.Key1));
             GetViewport().SetInputAsHandled();
@@ -333,7 +343,17 @@ public partial class DeckImagePanel : CanvasLayer
     public static void OpenOverlay()
         => Callable.From(() => { if (_instance is { Visible: false }) _instance.ToggleOverlay(); }).CallDeferred();
 
-    public static void OpenSettings() => OpenOn(3);
+    public static void OpenSettings() => OpenOn(TabSettings);
+
+    public static void OpenTab(int tab) => OpenOn(tab);
+
+    public static void CloseOverlay()
+        => Callable.From(() => { if (_instance is { Visible: true } p) p.ToggleOverlay(); }).CallDeferred();
+
+    public static Rect2? TabBarRect => _instance is { Visible: true, _tabBar: { } bar } ? bar.GetGlobalRect() : null;
+
+    public static Rect2? TabRect(int tab) =>
+        _instance is { Visible: true } p && tab < p._tabButtons.Count ? p._tabButtons[tab].GetGlobalRect() : null;
 
     private static void OpenOn(int tab) => Callable.From(() =>
     {
@@ -388,7 +408,7 @@ public partial class DeckImagePanel : CanvasLayer
         _tab = tab;
         _loadToken++;
         for (var i = 0; i < _tabButtons.Count; i++)
-            _tabButtons[i].AddThemeColorOverride("font_color", i == tab ? Accent : TextMuted);
+            Skin.Pill(_tabButtons[i], i == tab);
 
         foreach (var c in _content.GetChildren()) c.QueueFree();
 
@@ -399,11 +419,11 @@ public partial class DeckImagePanel : CanvasLayer
 
         switch (tab)
         {
-            case 0: BuildLeaderboard(); break;
-            case 1: BuildRuns(); break;
-            case 2: BuildImport(); break;
-            case 3: BuildSettings(); break;
-            case 4: BuildAbout(); break;
+            case TabLeaderboard: BuildLeaderboard(); break;
+            case TabRuns: BuildRuns(); break;
+            case TabImport: BuildImport(); break;
+            case TabSettings: BuildSettings(); break;
+            case TabAbout: BuildAbout(); break;
         }
     }
 
@@ -467,7 +487,7 @@ public partial class DeckImagePanel : CanvasLayer
         _ = LoadAsync(fetch(), b =>
         {
             store(b);
-            if (_tab == 0 && token == _loadToken) { Clear(); BuildLeaderboard(); }
+            if (_tab == TabLeaderboard && token == _loadToken) { Clear(); BuildLeaderboard(); }
         });
     }
 
@@ -503,7 +523,7 @@ public partial class DeckImagePanel : CanvasLayer
         _ = LoadAsync(RunFeeds.PlayerWinsAsync(Config.SteamId, 60), w =>
         {
             _wins = w;
-            if (_tab == 0 && _lbSub == 2 && token == _loadToken) { Clear(); BuildLeaderboard(); }
+            if (_tab == TabLeaderboard && _lbSub == 2 && token == _loadToken) { Clear(); BuildLeaderboard(); }
         });
     }
 
@@ -558,7 +578,7 @@ public partial class DeckImagePanel : CanvasLayer
         _ = LoadAsync(RunFeeds.RecentRunsAsync(Config.SteamId, 20), runs =>
         {
             _runs = runs;
-            if (_tab == 1 && token == _loadToken) { Clear(); RenderRuns(runs); }
+            if (_tab == TabRuns && token == _loadToken) { Clear(); RenderRuns(runs); }
         });
     }
 
@@ -605,42 +625,129 @@ public partial class DeckImagePanel : CanvasLayer
         }
     }
 
+    private Button ShowWelcomeButton()
+    {
+        var b = new Button { Text = Loc.T("deck_settings_show_welcome"), SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
+        StyleSecondary(b);
+        b.Pressed += () => { Visible = false; WelcomeCard.ShowAgain(); };
+        return b;
+    }
+
+    private Button ResetTipsButton()
+    {
+        var b = new Button { Text = Loc.T("guide_reset_tips"), SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
+        StyleSecondary(b);
+        b.Pressed += () => { FirstTips.ResetAll(); b.Text = Loc.T("guide_tips_reset"); b.Disabled = true; };
+        return b;
+    }
+
     private void BuildSettings()
     {
         _importButton = null;
         _importArmed = false;
 
-        AboutHead(Loc.T("deck_settings_community_stats"));
-        AboutText(Loc.T("deck_settings_community_stats_desc"));
-        _content.AddChild(BuildBracketRow());
+        var cats = new HFlowContainer();
+        cats.AddThemeConstantOverride("h_separation", 4);
+        cats.AddThemeConstantOverride("v_separation", 4);
+        for (var i = 0; i < SettingsCats.Length; i++)
+        {
+            var idx = i;
+            var b = new Button { Text = Loc.T(SettingsCats[i]) };
+            Skin.Pill(b, i == _settingsCat);
+            b.Pressed += () => { _settingsCat = idx; SetTab(TabSettings); };
+            cats.AddChild(b);
+        }
+        var catsWrap = new PanelContainer();
+        var cs = new StyleBoxFlat { BgColor = new Color(0, 0, 0, 0), BorderColor = Border };
+        cs.BorderWidthBottom = 1;
+        cs.ContentMarginTop = 6; cs.ContentMarginBottom = 8;
+        catsWrap.AddThemeStyleboxOverride("panel", cs);
+        catsWrap.AddChild(cats);
+        _content.AddChild(catsWrap);
 
-        AboutHead(Loc.T("deck_settings_run_tracking"));
-        AboutText(Loc.T("deck_settings_run_tracking_desc"));
-        _content.AddChild(SettingCheck(Loc.T("deck_toggle_upload_runs"), () => SpireCodexConfig.UploadRuns, v => SpireCodexConfig.UploadRuns = v));
-        _content.AddChild(SettingCheck(Loc.T("deck_toggle_live_status"), () => SpireCodexConfig.ShareLiveStatus, v => SpireCodexConfig.ShareLiveStatus = v));
-        _content.AddChild(BuildBackfillRow());
-
-        AboutHead(Loc.T("deck_settings_onscreen"));
-        _content.AddChild(SettingCheck(Loc.T("deck_toggle_damage_meter"), () => SpireCodexConfig.ShowDamageMeter, v => SpireCodexConfig.ShowDamageMeter = v));
-        _content.AddChild(SettingCheck(Loc.T("deck_toggle_card_reward_hints"), () => SpireCodexConfig.ShowCardRewardHints, v => SpireCodexConfig.ShowCardRewardHints = v));
-        _content.AddChild(SettingCheck(Loc.T("deck_toggle_hover_tips"), () => SpireCodexConfig.ShowHoverTips, v => SpireCodexConfig.ShowHoverTips = v));
-        _content.AddChild(SettingCheck(Loc.T("deck_toggle_map_guidance"), () => SpireCodexConfig.ShowMapDanger, v => SpireCodexConfig.ShowMapDanger = v));
-        _content.AddChild(SettingCheck(Loc.T("deck_toggle_upcoming_events"), () => SpireCodexConfig.ShowUpcomingEvents, v => SpireCodexConfig.ShowUpcomingEvents = v));
-        _content.AddChild(SettingCheck(Loc.T("deck_toggle_post_run_card"), () => SpireCodexConfig.ShowPostRunCard, v => SpireCodexConfig.ShowPostRunCard = v));
-        AboutText(Loc.T("deck_settings_onscreen_desc"));
-
-        AboutHead(Loc.T("deck_settings_controls"));
-        _content.AddChild(BuildHotkeyRow());
-        _content.AddChild(BuildControllerRow());
-
-        var replay = new Button { Text = Loc.T("deck_settings_show_welcome"), SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
-        StyleSecondary(replay);
-        replay.Pressed += () => { Visible = false; WelcomeCard.ShowAgain(); };
-        _content.AddChild(replay);
-
-        AboutHead(Loc.T("deck_settings_localization"));
-        AboutText(Loc.T("deck_settings_localization_desc"));
+        switch (_settingsCat)
+        {
+            case CatFeatures:
+                Section(Loc.T("style_title"));
+                _content.AddChild(BuildPresetRow());
+                FeatureGroup("deck_settings_community_stats", Features.Plates, Features.HoverTips, Features.BracketTag);
+                FeatureGroup("set_group_map", Features.MapRoute, Features.UpcomingEvents);
+                FeatureGroup("deck_combat", Features.DamageMeter);
+                Help(Loc.T("deck_settings_onscreen_desc"));
+                break;
+            case CatStats:
+                Section(Loc.T("deck_settings_community_stats"));
+                Help(Loc.T("deck_settings_community_stats_desc"));
+                _content.AddChild(BuildBracketRow());
+                break;
+            case CatTracking:
+                Section(Loc.T("deck_settings_run_tracking"));
+                Help(Loc.T("deck_settings_run_tracking_desc"));
+                _content.AddChild(SettingCheck(Loc.T("deck_toggle_upload_runs"), () => SpireCodexConfig.UploadRuns, v => SpireCodexConfig.UploadRuns = v, Loc.T("set_upload_help")));
+                _content.AddChild(SettingCheck(Loc.T("deck_toggle_live_status"), () => SpireCodexConfig.ShareLiveStatus, v => SpireCodexConfig.ShareLiveStatus = v, Loc.T("set_live_help")));
+                _content.AddChild(FeatureCheck(Features.RunCard));
+                Section(Loc.T("set_backfill_head"));
+                Help(Loc.T("set_backfill_help"));
+                _content.AddChild(BuildBackfillRow());
+                break;
+            case CatControls:
+                Section(Loc.T("deck_settings_controls"));
+                _content.AddChild(BuildHotkeyRow());
+                _content.AddChild(BuildControllerRow());
+                Help(Loc.T("set_controls_help"));
+                break;
+            default:
+                Section(Loc.T("deck_settings_localization"));
+                Help(Loc.T("deck_settings_localization_desc"));
+                Section(Loc.T("set_help_head"));
+                Help(Loc.T("set_help_desc"));
+                var row = new HBoxContainer();
+                row.AddThemeConstantOverride("separation", 8);
+                row.AddChild(ShowWelcomeButton());
+                row.AddChild(ResetTipsButton());
+                _content.AddChild(row);
+                break;
+        }
     }
+
+    private void FeatureGroup(string titleKey, params Feature[] features)
+    {
+        Section(Loc.T(titleKey));
+        foreach (var f in features)
+            _content.AddChild(FeatureCheck(f));
+    }
+
+    private Control FeatureCheck(Feature f) => SettingCheck(Loc.T(f.Name), f.Get, f.Set, Loc.T(f.What));
+
+    private Control BuildPresetRow()
+    {
+        var current = Features.Current();
+        var flow = new HFlowContainer();
+        flow.AddThemeConstantOverride("h_separation", 6);
+        flow.AddThemeConstantOverride("v_separation", 6);
+        foreach (var (preset, name, desc) in new[]
+        {
+            (Features.Preset.Track, "style_track", "style_track_desc"),
+            (Features.Preset.Stats, "style_stats", "style_stats_desc"),
+            (Features.Preset.Full, "style_full", "style_full_desc"),
+        })
+        {
+            var b = new Button { Text = Loc.T(name), TooltipText = Loc.T(desc) };
+            Skin.Pill(b, preset == current);
+            b.Pressed += () => { Features.Apply(preset); SetTab(TabSettings); };
+            flow.AddChild(b);
+        }
+        return flow;
+    }
+
+    private void Section(string title)
+    {
+        var gap = new Control { CustomMinimumSize = new Vector2(0, 4) };
+        _content.AddChild(gap);
+        _content.AddChild(Skin.SectionHead(title));
+    }
+
+    private void Help(string text) => _content.AddChild(Skin.Muted(text));
 
     private void BuildImport()
     {
@@ -682,34 +789,25 @@ public partial class DeckImagePanel : CanvasLayer
                 "font_color", BracketChoices[i].Bracket == SpireCodexConfig.Stats ? Accent : TextMuted);
     }
 
-    private Control SettingCheck(string label, Func<bool> get, Action<bool> set)
+    private Control SettingCheck(string label, Func<bool> get, Action<bool> set, string? help = null)
     {
-        var cb = new CheckBox { Text = label, ButtonPressed = get() };
-        cb.AddThemeFontSizeOverride("font_size", 14);
-        cb.AddThemeColorOverride("font_color", Text);
-        cb.AddThemeColorOverride("font_hover_color", AccentBright);
-        cb.AddThemeColorOverride("font_pressed_color", Text);
-        cb.AddThemeConstantOverride("h_separation", 10);
-        cb.AddThemeIconOverride("unchecked", CheckIcon(false));
-        cb.AddThemeIconOverride("checked", CheckIcon(true));
-        cb.AddThemeIconOverride("unchecked_disabled", CheckIcon(false));
-        cb.AddThemeIconOverride("checked_disabled", CheckIcon(true));
-        cb.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
+        var box = new VBoxContainer();
+        box.AddThemeConstantOverride("separation", 0);
+        var head = new HBoxContainer();
+        head.AddThemeConstantOverride("separation", 8);
+        var cb = Skin.Check(label, get());
         cb.Toggled += on => { set(on); PersistConfig(); };
-        return cb;
-    }
-
-    private ImageTexture? _checkOn, _checkOff;
-    private ImageTexture CheckIcon(bool on) => on ? (_checkOn ??= MakeCheckIcon(true)) : (_checkOff ??= MakeCheckIcon(false));
-    private static ImageTexture MakeCheckIcon(bool check)
-    {
-        const int size = 22, border = 2, inset = 6;
-        var img = Image.CreateEmpty(size, size, false, Image.Format.Rgba8);
-        img.Fill(Accent);
-        img.FillRect(new Rect2I(border, border, size - 2 * border, size - 2 * border), Field);
-        if (check)
-            img.FillRect(new Rect2I(inset, inset, size - 2 * inset, size - 2 * inset), Accent);
-        return ImageTexture.CreateFromImage(img);
+        head.AddChild(cb);
+        box.AddChild(head);
+        if (help != null)
+        {
+            var pad = new MarginContainer();
+            pad.AddThemeConstantOverride("margin_left", 30);
+            pad.AddThemeConstantOverride("margin_bottom", 6);
+            pad.AddChild(Skin.Muted(help));
+            box.AddChild(pad);
+        }
+        return box;
     }
 
     private Control BuildHotkeyRow()

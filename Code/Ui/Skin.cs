@@ -156,6 +156,82 @@ public static class Skin
         return l;
     }
 
+    public static CheckBox Check(string label, bool on)
+    {
+        var cb = new CheckBox { Text = label, ButtonPressed = on };
+        cb.AddThemeFontSizeOverride("font_size", 14);
+        cb.AddThemeColorOverride("font_color", Text);
+        cb.AddThemeColorOverride("font_hover_color", AccentBright);
+        cb.AddThemeColorOverride("font_pressed_color", Text);
+        cb.AddThemeColorOverride("font_hover_pressed_color", AccentBright);
+        cb.AddThemeColorOverride("font_focus_color", Text);
+        cb.AddThemeConstantOverride("h_separation", 10);
+        cb.AddThemeIconOverride("unchecked", CheckIcon(false));
+        cb.AddThemeIconOverride("checked", CheckIcon(true));
+        cb.AddThemeIconOverride("unchecked_disabled", CheckIcon(false));
+        cb.AddThemeIconOverride("checked_disabled", CheckIcon(true));
+        cb.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
+        return cb;
+    }
+
+    private static ImageTexture? _checkOn, _checkOff;
+    private static ImageTexture CheckIcon(bool on) => on ? (_checkOn ??= MakeCheckIcon(true)) : (_checkOff ??= MakeCheckIcon(false));
+    private static ImageTexture MakeCheckIcon(bool check)
+    {
+        const int size = 20, border = 2, inset = 5;
+        var img = Image.CreateEmpty(size, size, false, Image.Format.Rgba8);
+        img.Fill(Accent);
+        img.FillRect(new Rect2I(border, border, size - 2 * border, size - 2 * border), Field);
+        if (check)
+            img.FillRect(new Rect2I(inset, inset, size - 2 * inset, size - 2 * inset), Accent);
+        return ImageTexture.CreateFromImage(img);
+    }
+
+    public static Label Muted(string text, int size = 12)
+    {
+        var l = new Label { Text = text, AutowrapMode = TextServer.AutowrapMode.WordSmart, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        l.AddThemeColorOverride("font_color", TextMuted);
+        l.AddThemeFontSizeOverride("font_size", size);
+        return l;
+    }
+
+    public static Label SectionHead(string title)
+    {
+        var l = new Label { Text = title.ToUpperInvariant() };
+        l.AddThemeColorOverride("font_color", TextMuted);
+        l.AddThemeFontSizeOverride("font_size", 12);
+        return l;
+    }
+
+    public static StyleBoxFlat RowBox(bool active)
+    {
+        var s = new StyleBoxFlat
+        {
+            BgColor = active ? Accent with { A = 0.12f } : BgSoft,
+            BorderColor = active ? Accent : Border,
+        };
+        s.SetBorderWidthAll(1);
+        s.SetCornerRadiusAll(6);
+        s.ContentMarginLeft = 12; s.ContentMarginRight = 12;
+        s.ContentMarginTop = 8; s.ContentMarginBottom = 8;
+        return s;
+    }
+
+    public static void Pill(Button b, bool active)
+    {
+        var normal = new StyleBoxFlat { BgColor = active ? Accent with { A = 0.15f } : new Color(0, 0, 0, 0) };
+        normal.SetCornerRadiusAll(4);
+        normal.ContentMarginLeft = 10; normal.ContentMarginRight = 10;
+        normal.ContentMarginTop = 4; normal.ContentMarginBottom = 4;
+        foreach (var st in new[] { "normal", "hover", "pressed", "hover_pressed" })
+            b.AddThemeStyleboxOverride(st, normal);
+        b.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
+        b.AddThemeColorOverride("font_color", active ? Accent : TextMuted);
+        b.AddThemeColorOverride("font_hover_color", active ? Accent : Text);
+        b.AddThemeColorOverride("font_pressed_color", Accent);
+        b.AddThemeFontSizeOverride("font_size", 13);
+    }
+
     public static StyleBoxFlat KitBox(Color bg, Color border)
     {
         var s = new StyleBoxFlat { BgColor = bg, BorderColor = border };

@@ -1,182 +1,369 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Godot;
 using SpireCodex.Api;
 
 namespace SpireCodex.Ui;
 
-// First-time welcome (FTUE). Pops once on first launch to point new players at F5, the Settings
-// tab, and the headline features — the discoverability gap ("people don't know about the
-// settings"). Same native card style as ConsentPrompt, but shown only AFTER the consent choice
-// is made so the two never stack. A "seen" marker under %APPDATA%/SpireCodex gates the auto-show;
-// the Settings tab's "Show welcome again" button re-opens it on demand via ShowAgain().
 public partial class WelcomeCard : CanvasLayer
 {
+    private const int StepWelcome = 0, StepTracking = 1, StepOverlay = 2, StepSettings = 3, StepCount = 4;
+    private const float Pad = 6f, Gap = 16f;
+
     private static WelcomeCard? _instance;
-    private PanelContainer _panel = null!;
-    private RichTextLabel _body = null!;
-    private RichTextLabel _saveWarn = null!;
+    private static bool? _done;
+
+    private readonly ColorRect[] _dim = new ColorRect[4];
+    private Panel _ring = null!;
+    private PanelContainer _callout = null!;
+    private VBoxContainer _box = null!;
+    private readonly List<(Features.Preset Preset, PanelContainer Row)> _presetRows = new();
+    private int _step;
     private double _sinceCheck;
-    private bool _settled; // stop polling once shown or already-seen
+    private bool _settled;
+    private bool _skipTracking;
+
+    public static bool Done => _done ??= SeenMarkerExists();
 
     public static void Start()
     {
         if (Engine.GetMainLoop() is not SceneTree tree)
         {
-            MainFile.Logger.Info("no SceneTree; welcome card not started");
+            MainFile.Logger.Info("no SceneTree; welcome tour not started");
             return;
         }
-        var c = new WelcomeCard { Name = "SpireCodexWelcome" };
-        tree.Root.CallDeferred(Node.MethodName.AddChild, c);
+        tree.Root.CallDeferred(Node.MethodName.AddChild, new WelcomeCard { Name = "SpireCodexWelcome" });
     }
 
-    // Re-open from the Settings "Show welcome again" button (deferred for thread safety).
     public static void ShowAgain() => Callable.From(() => _instance?.Open()).CallDeferred();
 
     public override void _Ready()
     {
         _instance = this;
-        Layer = 215; // above the consent prompt (210), below the F5 panel (220)
-        BuildUi();
+        Layer = 225;
+
+        for (var i = 0; i < _dim.Length; i++)
+        {
+            _dim[i] = new ColorRect { Color = new Color(0, 0, 0, 0.62f), MouseFilter = Control.MouseFilterEnum.Stop };
+            AddChild(_dim[i]);
+        }
+
+        _ring = new Panel { MouseFilter = Control.MouseFilterEnum.Ignore };
+        var rs = new StyleBoxFlat { BgColor = new Color(0, 0, 0, 0), BorderColor = Skin.Accent };
+        rs.SetBorderWidthAll(2);
+        rs.SetCornerRadiusAll(8);
+        _ring.AddThemeStyleboxOverride("panel", rs);
+        AddChild(_ring);
+
+        _callout = new PanelContainer();
+        _callout.AddThemeStyleboxOverride("panel", Skin.CardBox());
+        Skin.ApplyFont(_callout);
+        AddChild(_callout);
+
+        _box = new VBoxContainer();
+        _box.AddThemeConstantOverride("separation", 12);
+        _callout.AddChild(_box);
+
         Visible = false;
     }
 
     public override void _Process(double delta)
     {
-        if (_settled || Visible) return;
+        if (Visible) { Layout(); return; }
+        if (_settled) return;
         _sinceCheck += delta;
         if (_sinceCheck < 1.0) return;
-        _sinceCheck = 0;
-
-        if (SeenMarkerExists()) { _settled = true; return; } // shown on a prior launch
-        // Show once, but only after the player has answered the consent prompt, so the two cards
-        // never overlap. Mark seen on show so it never auto-pops again.
-        if (Consent.Answered) { _settled = true; WriteSeenMarker(); Open(); }
+        _settled = true;
+        if (!Done) Open();
     }
 
     private void Open()
     {
-        // Resolve the language now (the card is built at boot, possibly before the game's
-        // LocManager was ready) and re-apply the body before showing.
         Loc.Refresh();
-        _body.Text = BodyText();
-        _saveWarn.Text = SaveWarnText();
         Visible = true;
+        _skipTracking = Consent.Answered;
+        Go(StepWelcome);
     }
 
-    // The welcome body, in the current language, with the player's actual overlay hotkey
-    // (defaults to F5; stays right if rebound).
-    private static string BodyText() => Loc.F("welcome_body", OverlayKeyName());
+    private void Go(int step)
+    {
+        if (step == StepTracking && _skipTracking) step = StepOverlay;
+        _step = step;
+        if (step == StepOverlay) DeckImagePanel.OpenTab(DeckImagePanel.TabLeaderboard);
+        if (step == StepSettings) DeckImagePanel.OpenTab(DeckImagePanel.TabSettings);
+        Build();
+        Layout();
+    }
 
-    // The modded-save callout, which points at the Settings importer behind the same hotkey.
-    private static string SaveWarnText() => Loc.F("welcome_modded_save", OverlayKeyName());
+    private void Finish()
+    {
+        Visible = false;
+        if (!Done) WriteSeenMarker();
+        _done = true;
+        DeckImagePanel.CloseOverlay();
+    }
+
+    private Rect2? Spotlight() => _step switch
+    {
+        StepOverlay => DeckImagePanel.TabBarRect,
+        StepSettings => DeckImagePanel.TabRect(DeckImagePanel.TabSettings),
+        _ => null,
+    };
+
+    private void Layout()
+    {
+        var vp = GetViewport().GetVisibleRect().Size;
+        var size = _callout.GetCombinedMinimumSize();
+
+        if (Spotlight() is not { } r)
+        {
+            _ring.Visible = false;
+            Dim(0, new Rect2(Vector2.Zero, vp));
+            for (var i = 1; i < 4; i++) _dim[i].Visible = false;
+            _callout.Position = (vp - size) / 2;
+            return;
+        }
+
+        var hole = r.Grow(Pad);
+        Dim(0, new Rect2(0, 0, vp.X, hole.Position.Y));
+        Dim(1, new Rect2(0, hole.End.Y, vp.X, vp.Y - hole.End.Y));
+        Dim(2, new Rect2(0, hole.Position.Y, hole.Position.X, hole.Size.Y));
+        Dim(3, new Rect2(hole.End.X, hole.Position.Y, vp.X - hole.End.X, hole.Size.Y));
+        _ring.Position = hole.Position;
+        _ring.Size = hole.Size;
+        _ring.Visible = true;
+
+        var maxX = Mathf.Max(Gap, vp.X - size.X - Gap);
+        var maxY = Mathf.Max(Gap, vp.Y - size.Y - Gap);
+        Vector2 pos;
+        if (hole.End.X + Gap + size.X <= vp.X)
+            pos = new Vector2(hole.End.X + Gap, hole.Position.Y);
+        else if (hole.Position.X - Gap - size.X >= 0)
+            pos = new Vector2(hole.Position.X - Gap - size.X, hole.Position.Y);
+        else
+            pos = new Vector2(hole.Position.X, hole.End.Y + Gap);
+        _callout.Position = new Vector2(Mathf.Clamp(pos.X, Gap, maxX), Mathf.Clamp(pos.Y, Gap, maxY));
+    }
+
+    private void Dim(int i, Rect2 r)
+    {
+        _dim[i].Position = r.Position;
+        _dim[i].Size = new Vector2(Mathf.Max(0, r.Size.X), Mathf.Max(0, r.Size.Y));
+        _dim[i].Visible = true;
+    }
+
+    private void Build()
+    {
+        foreach (var c in _box.GetChildren()) c.QueueFree();
+        _presetRows.Clear();
+        var wide = _step is StepWelcome or StepTracking;
+        _box.CustomMinimumSize = new Vector2(wide ? 560 : 340, 0);
+        _callout.Size = Vector2.Zero;
+
+        var top = new HBoxContainer();
+        top.AddChild(Dots());
+        var spacer = new Control { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        top.AddChild(spacer);
+        top.AddChild(DeckImagePanel.CloseButton(Finish));
+        _box.AddChild(top);
+
+        switch (_step)
+        {
+            case StepWelcome:
+                Title(Loc.T("style_title"));
+                var presets = new HBoxContainer();
+                presets.AddThemeConstantOverride("separation", 8);
+                presets.AddChild(PresetRow(Features.Preset.Track, "style_track", "style_track_desc"));
+                presets.AddChild(PresetRow(Features.Preset.Stats, "style_stats", "style_stats_desc"));
+                presets.AddChild(PresetRow(Features.Preset.Full, "style_full", "style_full_desc"));
+                _box.AddChild(presets);
+                Footer((Loc.T("tour_next"), () => Go(StepTracking)));
+                RefreshPresets();
+                break;
+
+            case StepTracking:
+                Title(Loc.T("tour_tracking_title"));
+                Body(Loc.T("tour_tracking_body"));
+                _box.AddChild(Skin.SectionHead(Loc.T("tour_tracking_more")));
+                var details = Rich(13);
+                details.AddThemeColorOverride("default_color", Skin.TextMuted);
+                details.Text = Loc.T("tour_tracking_details");
+                _box.AddChild(details);
+                Footer((Loc.T("consent_keepoff"), KeepOff), (Loc.T("consent_turnon"), TurnOn));
+                break;
+
+            case StepOverlay:
+                Title(Loc.T("tour_overlay_title"));
+                Body(Loc.F("tour_overlay_body", OverlayKeyName()));
+                Footer((Loc.T("tour_next"), () => Go(StepSettings)));
+                break;
+
+            default:
+                Title(Loc.T("tour_settings_title"));
+                Body(Loc.T("tour_settings_body"));
+                Footer((Loc.T("tour_discord"), () => OS.ShellOpen(DeckImagePanel.DiscordUrl)), (Loc.T("tour_jump_in"), Finish));
+                break;
+        }
+    }
+
+    private void TurnOn()
+    {
+        SpireCodexConfig.UploadRuns = true;
+        Features.Save();
+        Consent.Grant();
+        MainFile.Logger.Info("run tracking turned on from the tour");
+        Go(StepOverlay);
+    }
+
+    private void KeepOff()
+    {
+        SpireCodexConfig.UploadRuns = false;
+        SpireCodexConfig.UploadReplays = false;
+        Features.Save();
+        Consent.Decline();
+        MainFile.Logger.Info("run tracking kept off from the tour");
+        Go(StepOverlay);
+    }
+
+    private Control Dots()
+    {
+        var row = new HBoxContainer { SizeFlagsVertical = Control.SizeFlags.ShrinkCenter };
+        row.AddThemeConstantOverride("separation", 5);
+        for (var i = 0; i < StepCount; i++)
+        {
+            if (i == StepTracking && _skipTracking) continue;
+            var dot = new Panel { CustomMinimumSize = new Vector2(i == _step ? 18 : 7, 7) };
+            var s = new StyleBoxFlat { BgColor = i == _step ? Skin.Accent : Skin.Border };
+            s.SetCornerRadiusAll(999);
+            dot.AddThemeStyleboxOverride("panel", s);
+            row.AddChild(dot);
+        }
+        return row;
+    }
+
+    private void Title(string text)
+    {
+        var l = new Label { Text = text, AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        l.AddThemeColorOverride("font_color", Skin.Text);
+        l.AddThemeFontSizeOverride("font_size", 20);
+        _box.AddChild(l);
+    }
+
+    private void Body(string text)
+    {
+        var l = Rich(14);
+        l.AddThemeColorOverride("default_color", Skin.TextMuted);
+        l.Text = text;
+        _box.AddChild(l);
+    }
+
+    private void Footer(params (string Label, Action Act)[] actions)
+    {
+        var foot = new HBoxContainer();
+        foot.AddThemeConstantOverride("separation", 10);
+        if (_step != StepSettings)
+        {
+            var skip = new Button { Text = Loc.T("tour_skip"), Flat = true };
+            skip.AddThemeFontSizeOverride("font_size", 12);
+            skip.AddThemeColorOverride("font_color", Skin.TextMuted);
+            skip.AddThemeColorOverride("font_hover_color", Skin.Text);
+            skip.Pressed += Finish;
+            foot.AddChild(skip);
+        }
+        foot.AddChild(new Control { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
+        for (var i = 0; i < actions.Length; i++)
+        {
+            var (label, act) = actions[i];
+            var b = new Button { Text = label };
+            if (i == actions.Length - 1) Skin.Primary(b); else Skin.Secondary(b);
+            b.Pressed += () => act();
+            foot.AddChild(b);
+        }
+        _box.AddChild(foot);
+    }
+
+    private Control PresetRow(Features.Preset preset, string nameKey, string descKey)
+    {
+        var row = new PanelContainer
+        {
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            MouseFilter = Control.MouseFilterEnum.Stop,
+            MouseDefaultCursorShape = Control.CursorShape.PointingHand,
+        };
+        var v = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        v.AddThemeConstantOverride("separation", 2);
+        var name = new Label { Text = Loc.T(nameKey), MouseFilter = Control.MouseFilterEnum.Ignore };
+        name.AddThemeColorOverride("font_color", Skin.Text);
+        name.AddThemeFontSizeOverride("font_size", 15);
+        v.AddChild(name);
+        var desc = Skin.Muted(Loc.T(descKey));
+        desc.MouseFilter = Control.MouseFilterEnum.Ignore;
+        desc.CustomMinimumSize = new Vector2(150, 0);
+        v.AddChild(desc);
+        row.AddChild(v);
+        row.GuiInput += e =>
+        {
+            if (e is not InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true }) return;
+            Features.Apply(preset);
+            RefreshPresets();
+            row.AcceptEvent();
+        };
+        _presetRows.Add((preset, row));
+        return row;
+    }
+
+    private void RefreshPresets()
+    {
+        var current = Features.Current();
+        foreach (var (preset, row) in _presetRows)
+        {
+            if (!GodotObject.IsInstanceValid(row)) continue;
+            row.AddThemeStyleboxOverride("panel", Skin.RowBox(preset == current));
+            if (row.GetChild(0).GetChild(0) is Label name)
+                name.AddThemeColorOverride("font_color", preset == current ? Skin.Accent : Skin.Text);
+        }
+    }
 
     private static string OverlayKeyName() =>
         SpireCodexConfig.OverlayKey is var k and not HotKey.None ? k.ToString() : "F5";
 
-    private void BuildUi()
+    private static RichTextLabel Rich(int size)
     {
-        _panel = new PanelContainer
-        {
-            AnchorLeft = 0.5f, AnchorRight = 0.5f, AnchorTop = 0.5f, AnchorBottom = 0.5f,
-            GrowHorizontal = Control.GrowDirection.Both,
-            GrowVertical = Control.GrowDirection.Both,
-        };
-        var style = new StyleBoxFlat
-        {
-            BgColor = new Color(0.09f, 0.11f, 0.14f, 0.98f),
-            BorderColor = new Color(1f, 0.827f, 0.302f, 1f),
-        };
-        style.SetBorderWidthAll(2);
-        style.SetCornerRadiusAll(8);
-        style.ContentMarginLeft = 22; style.ContentMarginRight = 22;
-        style.ContentMarginTop = 16; style.ContentMarginBottom = 16;
-        _panel.AddThemeStyleboxOverride("panel", style);
-        Skin.ApplyFont(_panel);
-        AddChild(_panel);
-
-        var vbox = new VBoxContainer();
-        vbox.AddThemeConstantOverride("separation", 10);
-        _panel.AddChild(vbox);
-
-        _body = new RichTextLabel
+        var l = new RichTextLabel
         {
             BbcodeEnabled = true, FitContent = true, ScrollActive = false,
-            CustomMinimumSize = new Vector2(520, 0),
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        _body.AddThemeColorOverride("default_color", new Color(0.91f, 0.89f, 0.84f));
-        _body.Text = BodyText();
-        vbox.AddChild(_body);
-
-        // Red "your client is now modded" callout: modded STS2 uses a separate save profile, so
-        // reassure the player their vanilla progress isn't gone and send them to the Settings
-        // tab's "Import vanilla saves", which copies it across properly. (Copying the folder by
-        // hand does not survive the game's cloud sync; see Core/SaveImport.)
-        var warn = new PanelContainer();
-        var warnStyle = new StyleBoxFlat
-        {
-            BgColor = new Color(0.20f, 0.07f, 0.07f, 0.55f),
-            BorderColor = new Color(0.78f, 0.29f, 0.29f),
-        };
-        warnStyle.SetBorderWidthAll(1);
-        warnStyle.SetCornerRadiusAll(6);
-        warnStyle.ContentMarginLeft = 14; warnStyle.ContentMarginRight = 14;
-        warnStyle.ContentMarginTop = 10; warnStyle.ContentMarginBottom = 10;
-        warn.AddThemeStyleboxOverride("panel", warnStyle);
-        _saveWarn = new RichTextLabel
-        {
-            BbcodeEnabled = true, FitContent = true, ScrollActive = false,
-            CustomMinimumSize = new Vector2(520, 0),
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-        };
-        _saveWarn.AddThemeColorOverride("default_color", new Color(0.95f, 0.86f, 0.84f));
-        _saveWarn.Text = SaveWarnText();
-        warn.AddChild(_saveWarn);
-        vbox.AddChild(warn);
-
-        var row = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.End };
-        row.AddThemeConstantOverride("separation", 10);
-        vbox.AddChild(row);
-
-        var open = new Button { Text = Loc.T("welcome_open") };
-        open.Pressed += () => { Visible = false; DeckImagePanel.OpenOverlay(); };
-        row.AddChild(open);
-
-        var gotIt = new Button { Text = Loc.T("welcome_gotit") };
-        gotIt.Pressed += () => Visible = false;
-        row.AddChild(gotIt);
+        l.AddThemeColorOverride("default_color", Skin.Text);
+        l.AddThemeFontSizeOverride("normal_font_size", size);
+        l.AddThemeFontSizeOverride("bold_font_size", size);
+        return l;
     }
-
-    // --- "seen" marker (%APPDATA%/SpireCodex/welcome-seen) ---------------------------
 
     private static string? MarkerPath()
     {
         try
         {
-            var dir = Path.Combine(
+            return Path.Combine(
                 System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData),
-                "SpireCodex");
-            return Path.Combine(dir, "welcome-seen");
+                "SpireCodex", "welcome-seen");
         }
         catch { return null; }
     }
 
-    private static bool SeenMarkerExists()
-    {
-        var p = MarkerPath();
-        return p != null && File.Exists(p);
-    }
+    private static bool SeenMarkerExists() => MarkerPath() is { } p && File.Exists(p);
 
     private static void WriteSeenMarker()
     {
         try
         {
-            var p = MarkerPath();
-            if (p == null) return;
+            if (MarkerPath() is not { } p) return;
             Directory.CreateDirectory(Path.GetDirectoryName(p)!);
             File.WriteAllText(p, DateTimeOffset.UtcNow.ToString("o"));
         }
-        catch { /* best-effort; worst case it shows again next launch */ }
+        catch { }
     }
 }
