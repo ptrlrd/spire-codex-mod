@@ -100,6 +100,7 @@ public partial class DamageMeter : Node
             }
         }
         _panel.Visible = true;
+        if (!_dragging) FirstTips.Offer(Tips.Meter(), new Rect2(_panel.Position, _panel.Size));
     }
 
     // --- drag ------------------------------------------------------------------------

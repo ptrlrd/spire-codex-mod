@@ -21,6 +21,10 @@ overlay.
 
 ## Install
 
+The easiest way is to subscribe on the **[Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3747536911)**. Steam asks to add BaseLib along with it and keeps both updated.
+
+To install by hand instead:
+
 1. Install [BaseLib](https://www.nexusmods.com/slaythespire2/mods/103) (the required dependency)
    into the game's `mods/` folder (paths below).
 2. Download the latest release and extract it into the same `mods/` folder, so you end up with

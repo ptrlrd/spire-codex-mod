@@ -75,7 +75,7 @@ public partial class ConsentPrompt : CanvasLayer
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         _body.AddThemeColorOverride("default_color", new Color(0.91f, 0.89f, 0.84f));
-        _body.Text = Loc.T("consent_body");
+        _body.Text = Loc.F("consent_body", OverlayKeyName());
         vbox.AddChild(_body);
 
         _onboardRow = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.End };
@@ -148,6 +148,7 @@ public partial class ConsentPrompt : CanvasLayer
         _sinceCheck += delta;
         if (_sinceCheck < 1.0) return;
         _sinceCheck = 0;
+        if (!WelcomeCard.Done) return;
         // Show the onboarding choice once (until the player answers), AND re-show the
         // disclosure if they later enable uploads in settings without having granted. Once
         // granted, never again; once "Keep off" with uploads off, the condition is false.
@@ -159,9 +160,12 @@ public partial class ConsentPrompt : CanvasLayer
         // Resolve the language now (the card is built at boot, possibly before the game's
         // LocManager was ready) and re-apply the body text before showing.
         Loc.Refresh();
-        _body.Text = Loc.T(onboarding ? "consent_body" : "consent_replays_body");
+        _body.Text = onboarding ? Loc.F("consent_body", OverlayKeyName()) : Loc.T("consent_replays_body");
         _onboardRow.Visible = onboarding;
         _redisclosureRow.Visible = redisclose;
         Visible = true;
     }
+
+    private static string OverlayKeyName() =>
+        SpireCodexConfig.OverlayKey is var k and not HotKey.None ? k.ToString() : "F5";
 }

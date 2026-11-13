@@ -38,7 +38,13 @@ public partial class StatFilterIndicator : Node
         if (_accum < 0.25) return;
         _accum = 0;
 
-        if (CodexScores.CurrentFilter == StatFilter.DefaultKey) { HidePill(); return; }
+        if (CodexScores.CurrentFilter == StatFilter.DefaultKey
+            || !SpireCodexConfig.ShowBracketTag
+            || (!SpireCodexConfig.ShowCardRewardHints && !SpireCodexConfig.ShowHoverTips))
+        {
+            HidePill();
+            return;
+        }
 
         var label = CodexScores.CurrentFilterLabel;
         EnsurePill();

@@ -252,6 +252,8 @@ public partial class MapDangerHints : Node
 
         Prune(_rings, seenRings);
         Prune(_labels, seenLabels);
+        if (safest != null && byModel.TryGetValue(safest, out var pick))
+            FirstTips.Offer(Tips.MapRoute(), pick.Ui.GetGlobalRect());
     }
 
     // The specific encounter name for a combat node at a given seen-count (monster/elite/
@@ -454,9 +456,16 @@ public partial class MapDangerHints : Node
     private void UpdateEventBanner(ActRoute? route)
     {
         var events = route?.Events;
-        if (!SpireCodexConfig.ShowUpcomingEvents || events == null || events.Count == 0)
+        if (events == null || events.Count == 0)
         {
             HideEventBanner();
+            return;
+        }
+        if (!SpireCodexConfig.ShowUpcomingEvents)
+        {
+            HideEventBanner();
+            var view = _layer.GetViewport().GetVisibleRect().Size;
+            FirstTips.Offer(Tips.EventsOff(), new Rect2(view.X - 344f, view.Y - 24f, 320f, 0f));
             return;
         }
 
@@ -490,6 +499,7 @@ public partial class MapDangerHints : Node
         var size = _eventBanner.Size;
         _eventBanner.Position = new Vector2(vp.X - size.X - 24f, vp.Y - size.Y - 24f);
         _eventBanner.Visible = true;
+        FirstTips.Offer(Tips.EventsOn(), new Rect2(_eventBanner.Position, size));
     }
 
     private void HideEventBanner()
