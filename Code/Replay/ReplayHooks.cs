@@ -362,6 +362,10 @@ internal static class ReplayHooks
         attempted++; n += HookPatcher.PatchOn(harmony,
             HookPatcher.FindType("MegaCrit.Sts2.Core.Nodes.Rooms.NEventRoom"),
             "OptionButtonClicked", me, nameof(EventProceedClicked), 2, firstParamType: "EventOption");
+        var sphere = HookPatcher.FindType("MegaCrit.Sts2.Core.Events.Custom.CrystalSphereEvent.CrystalSphereMinigame");
+        attempted++; n += HookPatcher.PatchOn(harmony, sphere, "CellClicked", me, nameof(SphereDug), 1);
+        attempted++; n += HookPatcher.PatchOn(harmony, sphere, "OnItemRevealed", me, nameof(SphereRevealed), 1);
+        attempted++; n += HookPatcher.PatchOn(harmony, sphere, "ForceMinigameEnd", me, nameof(SphereEnding), 0);
 
         var eventOption = HookPatcher.FindType("MegaCrit.Sts2.Core.Events.EventOption");
         _optLockedProp = eventOption?.GetProperty("IsLocked",
@@ -3176,6 +3180,72 @@ internal static class ReplayHooks
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
+
+    // Crystal Sphere (CrystalSphereMinigame, v0.113). Every dig goes through CellClicked,
+    // which the screen calls only for the local owner; rewards are paid from the items
+    // OnItemRevealed appends, in that order. A member that cannot be read throws into Fault,
+    // so a missing dig shows up as a hook_error rather than a row with a guessed value.
+    private static void SphereDug(object __instance, object __0)
+    {
+        try
+        {
+            var owner = Reflect.GetMember(__instance, "Owner");
+            if (LocalPlayer.IsCoop && !LocalPlayer.IsLocalPlayer(owner)) return;
+            if (ReplayRecorder.Line("sphere_dig") is not { } line) return;
+            StampEventFloor(line, owner);
+            SphereRows.Dig(line,
+                    SphereInt(__0, "X"), SphereInt(__0, "Y"),
+                    Reflect.GetString(__instance, "CrystalSphereTool")
+                        ?? throw new InvalidOperationException("CrystalSphereTool unreadable"),
+                    SphereInt(__instance, "DivinationCount"))
+                .Emit();
+        }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
+    }
+
+    private static void SphereRevealed(object __instance, object __0)
+    {
+        try
+        {
+            var owner = Reflect.GetMember(__instance, "Owner");
+            if (LocalPlayer.IsCoop && !LocalPlayer.IsLocalPlayer(owner)) return;
+            if (ReplayRecorder.Line("sphere_reveal") is not { } line) return;
+            StampEventFloor(line, owner);
+            var ser = Reflect.Call(__0, "ToSerializable")
+                      ?? throw new InvalidOperationException("ToSerializable unreadable");
+            var pos = Reflect.GetMember(__0, "Position");
+            SphereRows.Reveal(line,
+                    Reflect.GetString(ser, "type") ?? throw new InvalidOperationException("item type unreadable"),
+                    SphereInt(pos, "X"), SphereInt(pos, "Y"),
+                    Reflect.GetString(ser, "cardRarity"),
+                    Reflect.GetString(ser, "potionRarity"),
+                    Reflect.GetMember(ser, "isBigGold") as bool?)
+                .Emit();
+        }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
+    }
+
+    private static void SphereEnding(object __instance)
+    {
+        try
+        {
+            var owner = Reflect.GetMember(__instance, "Owner");
+            if (LocalPlayer.IsCoop && !LocalPlayer.IsLocalPlayer(owner)) return;
+            if (Reflect.GetMember(Reflect.GetMember(__instance, "_completionSource"), "Task")
+                    is not System.Threading.Tasks.Task done)
+                throw new InvalidOperationException("_completionSource unreadable");
+            if (done.IsCompleted) return;
+            if (ReplayRecorder.Line("sphere_end") is not { } line) return;
+            StampEventFloor(line, owner);
+            SphereRows.Forced(line, SphereInt(__instance, "DivinationCount")).Emit();
+        }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
+    }
+
+    private static int SphereInt(object? target, string name)
+        => Reflect.GetMember(target, name) is int v
+            ? v
+            : throw new InvalidOperationException($"{name} unreadable");
 
     private static bool? OptFlag(PropertyInfo? prop, object? opt)
     {
