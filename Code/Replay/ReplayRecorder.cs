@@ -145,6 +145,7 @@ public static class ReplayRecorder
                     .Set("relics", HeldRelics())
                     .Set("potions", PotionBelt())
                     .Set("rng_state", RngState.Read())
+                    .Set("unlock_state", UnlockStateRow.Read(Core.Sts2Access.LivePlayer))
                     .Emit();
             if (journal.Resumed) EmitDeckRemap(journal);
             RefreshDeckIfChanged(snapshot);
@@ -229,6 +230,7 @@ public static class ReplayRecorder
             .Set("relics", HeldRelics())
             .Set("potions", PotionBelt())
             .Set("rng_state", RngState.Read())
+            .Set("unlock_state", UnlockStateRow.Read(Core.Sts2Access.LivePlayer))
             .Emit();
     }
 
