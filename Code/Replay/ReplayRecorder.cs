@@ -145,6 +145,7 @@ public static class ReplayRecorder
                     .Set("relics", HeldRelics())
                     .Set("potions", PotionBelt())
                     .Set("rng_state", RngState.Read())
+                    .Set("unlock_state", UnlockStateRow.Read(Core.Sts2Access.LivePlayer))
                     .Emit();
             if (journal.Resumed) EmitDeckRemap(journal);
             RefreshDeckIfChanged(snapshot);
@@ -206,7 +207,7 @@ public static class ReplayRecorder
     private static void WriteHeader(Snapshot s, string seed, long startTime)
     {
         Line("header")
-            ?.Set("replay_version", 7)
+            ?.Set("replay_version", 8)
             .Set("run_schema_version", 9)
             .Set("seed", seed)
             .Set("build_id", Core.Sts2Version.Current.Split('+')[0])
@@ -229,6 +230,7 @@ public static class ReplayRecorder
             .Set("relics", HeldRelics())
             .Set("potions", PotionBelt())
             .Set("rng_state", RngState.Read())
+            .Set("unlock_state", UnlockStateRow.Read(Core.Sts2Access.LivePlayer))
             .Emit();
     }
 
