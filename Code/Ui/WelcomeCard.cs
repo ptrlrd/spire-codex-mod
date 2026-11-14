@@ -8,7 +8,7 @@ namespace SpireCodex.Ui;
 
 public partial class WelcomeCard : CanvasLayer
 {
-    private const int StepWelcome = 0, StepTracking = 1, StepOverlay = 2, StepSettings = 3, StepCount = 4;
+    private const int StepWelcome = 0, StepStats = 1, StepTracking = 2, StepOverlay = 3, StepSettings = 4, StepCount = 5;
     private const float Pad = 6f, Gap = 16f;
 
     private static WelcomeCard? _instance;
@@ -19,6 +19,8 @@ public partial class WelcomeCard : CanvasLayer
     private PanelContainer _callout = null!;
     private VBoxContainer _box = null!;
     private readonly List<(Features.Preset Preset, PanelContainer Row)> _presetRows = new();
+    private readonly List<(StatBracket Bracket, PanelContainer Row)> _bracketRows = new();
+    private HBoxContainer _dots = null!;
     private int _step;
     private double _sinceCheck;
     private bool _settled;
@@ -88,6 +90,7 @@ public partial class WelcomeCard : CanvasLayer
 
     private void Go(int step)
     {
+        if (step == StepStats && SkipStats()) step = StepTracking;
         if (step == StepTracking && _skipTracking) step = StepOverlay;
         _step = step;
         if (step == StepOverlay) DeckImagePanel.OpenTab(DeckImagePanel.TabLeaderboard);
@@ -103,6 +106,9 @@ public partial class WelcomeCard : CanvasLayer
         _done = true;
         DeckImagePanel.CloseOverlay();
     }
+
+    private static bool SkipStats() =>
+        !SpireCodexConfig.ShowCardRewardHints && !SpireCodexConfig.ShowHoverTips;
 
     private Rect2? Spotlight() => _step switch
     {
@@ -157,12 +163,16 @@ public partial class WelcomeCard : CanvasLayer
     {
         foreach (var c in _box.GetChildren()) c.QueueFree();
         _presetRows.Clear();
-        var wide = _step is StepWelcome or StepTracking;
+        _bracketRows.Clear();
+        var wide = _step is StepWelcome or StepStats or StepTracking;
         _box.CustomMinimumSize = new Vector2(wide ? 560 : 340, 0);
         _callout.Size = Vector2.Zero;
 
         var top = new HBoxContainer();
-        top.AddChild(Dots());
+        _dots = new HBoxContainer { SizeFlagsVertical = Control.SizeFlags.ShrinkCenter };
+        _dots.AddThemeConstantOverride("separation", 5);
+        FillDots();
+        top.AddChild(_dots);
         var spacer = new Control { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         top.AddChild(spacer);
         top.AddChild(DeckImagePanel.CloseButton(Finish));
@@ -178,8 +188,20 @@ public partial class WelcomeCard : CanvasLayer
                 presets.AddChild(PresetRow(Features.Preset.Stats, "style_stats", "style_stats_desc"));
                 presets.AddChild(PresetRow(Features.Preset.Full, "style_full", "style_full_desc"));
                 _box.AddChild(presets);
-                Footer((Loc.T("tour_next"), () => Go(StepTracking)));
+                Footer((Loc.T("tour_next"), () => Go(StepStats)));
                 RefreshPresets();
+                break;
+
+            case StepStats:
+                Title(Loc.T("tour_stats_title"));
+                Body(Loc.T("deck_settings_community_stats_desc"));
+                var brackets = new VBoxContainer();
+                brackets.AddThemeConstantOverride("separation", 6);
+                foreach (var (bracket, label, tip) in DeckImagePanel.BracketChoices)
+                    brackets.AddChild(BracketRow(bracket, label, tip));
+                _box.AddChild(brackets);
+                Footer((Loc.T("tour_next"), () => Go(StepTracking)));
+                RefreshBrackets();
                 break;
 
             case StepTracking:
@@ -226,20 +248,23 @@ public partial class WelcomeCard : CanvasLayer
         Go(StepOverlay);
     }
 
-    private Control Dots()
+    private void FillDots()
     {
-        var row = new HBoxContainer { SizeFlagsVertical = Control.SizeFlags.ShrinkCenter };
-        row.AddThemeConstantOverride("separation", 5);
+        foreach (var c in _dots.GetChildren())
+        {
+            _dots.RemoveChild(c);
+            c.QueueFree();
+        }
         for (var i = 0; i < StepCount; i++)
         {
+            if (i == StepStats && SkipStats()) continue;
             if (i == StepTracking && _skipTracking) continue;
             var dot = new Panel { CustomMinimumSize = new Vector2(i == _step ? 18 : 7, 7) };
             var s = new StyleBoxFlat { BgColor = i == _step ? Skin.Accent : Skin.Border };
             s.SetCornerRadiusAll(999);
             dot.AddThemeStyleboxOverride("panel", s);
-            row.AddChild(dot);
+            _dots.AddChild(dot);
         }
-        return row;
     }
 
     private void Title(string text)
@@ -313,8 +338,56 @@ public partial class WelcomeCard : CanvasLayer
         return row;
     }
 
+    private Control BracketRow(StatBracket bracket, string labelKey, string tipKey)
+    {
+        var row = new PanelContainer
+        {
+            MouseFilter = Control.MouseFilterEnum.Stop,
+            MouseDefaultCursorShape = Control.CursorShape.PointingHand,
+        };
+        var h = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        h.AddThemeConstantOverride("separation", 12);
+        var name = new Label
+        {
+            Text = Loc.T(labelKey),
+            CustomMinimumSize = new Vector2(130, 0),
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        name.AddThemeColorOverride("font_color", Skin.Text);
+        name.AddThemeFontSizeOverride("font_size", 15);
+        h.AddChild(name);
+        var desc = Skin.Muted(Loc.T(tipKey), 13);
+        desc.MouseFilter = Control.MouseFilterEnum.Ignore;
+        desc.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
+        h.AddChild(desc);
+        row.AddChild(h);
+        row.GuiInput += e =>
+        {
+            if (e is not InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true }) return;
+            SpireCodexConfig.Stats = bracket;
+            Features.Save();
+            RefreshBrackets();
+            row.AcceptEvent();
+        };
+        _bracketRows.Add((bracket, row));
+        return row;
+    }
+
+    private void RefreshBrackets()
+    {
+        foreach (var (bracket, row) in _bracketRows)
+        {
+            if (!GodotObject.IsInstanceValid(row)) continue;
+            var active = bracket == SpireCodexConfig.Stats;
+            row.AddThemeStyleboxOverride("panel", Skin.RowBox(active));
+            if (row.GetChild(0).GetChild(0) is Label name)
+                name.AddThemeColorOverride("font_color", active ? Skin.Accent : Skin.Text);
+        }
+    }
+
     private void RefreshPresets()
     {
+        FillDots();
         var current = Features.Current();
         foreach (var (preset, row) in _presetRows)
         {
