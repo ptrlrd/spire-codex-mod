@@ -309,10 +309,21 @@ internal static class ReplayHooks
         attempted++; n += HookPatcher.PatchOn(harmony, HookPatcher.FindType("MegaCrit.Sts2.Core.Commands.CardCmd"),
                                  "Downgrade", me, nameof(CardDowngraded), 1, postfix: true);
 
-        attempted++; n += HookPatcher.PatchOn(harmony, HookPatcher.FindType("MegaCrit.Sts2.Core.Models.CardModel"),
-                                 "AfterTransformedFrom", me, nameof(TransformedFrom), 0);
-        attempted++; n += HookPatcher.PatchOn(harmony, HookPatcher.FindType("MegaCrit.Sts2.Core.Models.CardModel"),
-                                 "AfterTransformedTo", me, nameof(TransformedTo), 0);
+        // v0.113 renamed the pair to original.AfterThisWasTransformedInto(replacement) then
+        // replacement.AfterThisWasTransformedFrom(original) (CardCmd.cs:359-360); the old
+        // zero-argument names stopped matching and v0.113 journals carry no transform row.
+        // The non-virtual Into carries both cards in one call, so patch it when it exists.
+        attempted++;
+        var transformedInto = HookPatcher.PatchOn(harmony, cardModel,
+            "AfterThisWasTransformedInto", me, nameof(TransformedInto), 1);
+        n += transformedInto;
+        if (transformedInto == 0)
+        {
+            attempted++; n += HookPatcher.PatchOn(harmony, cardModel,
+                                     "AfterTransformedFrom", me, nameof(TransformedFrom), 0);
+            attempted++; n += HookPatcher.PatchOn(harmony, cardModel,
+                                     "AfterTransformedTo", me, nameof(TransformedTo), 0);
+        }
 
         attempted++; n += HookPatcher.PatchOn(harmony, HookPatcher.FindType("MegaCrit.Sts2.Core.Commands.CardCmd"),
                                  "Enchant", me, nameof(CardEnchanted), 3,
@@ -461,6 +472,7 @@ internal static class ReplayHooks
                                  + "play rows will omit `keywords`");
 
         ArrowHooks.Apply(harmony, hook, ref n, ref attempted);
+        BindLiveCards(runManager);
 
         MainFile.Logger.Info($"replay-hooks: {n}/{attempted} patched");
     }
@@ -1268,6 +1280,7 @@ internal static class ReplayHooks
             if (__result is not System.Threading.Tasks.Task { IsCompletedSuccessfully: true } done) return;
             var applied = Reflect.GetMember(done, "Result");
             if (applied == null || __1 == null) return;
+            if (!LiveCards.Record(__1)) return;
             var origin = CardInstances.DeckIdOf(__1);
             ReplayRecorder.Line("afflict")
                 ?.Set("c", CardInstances.Of(__1))
@@ -1288,6 +1301,7 @@ internal static class ReplayHooks
         {
             var affliction = Reflect.GetMember(__0, "Affliction");
             if (affliction == null) return;
+            if (!LiveCards.Record(__0)) return;
             var origin = CardInstances.DeckIdOf(__0);
             ReplayRecorder.Line("unafflict")
                 ?.Set("c", CardInstances.Of(__0))
@@ -2554,6 +2568,7 @@ internal static class ReplayHooks
     {
         try
         {
+            if (!LiveCards.Record(__0)) return;
             ReplayRecorder.MarkDeckChanged();
             var offered = _decisionType == UpgradeSelectType;
             ReplayRecorder.Line("upgrade")
@@ -2582,6 +2597,7 @@ internal static class ReplayHooks
             _levelBeforeDowngrade = 0;
             var after = Reflect.GetInt(__0, "CurrentUpgradeLevel", 0);
             if (after >= before) return;
+            if (!LiveCards.Record(__0)) return;
             ReplayRecorder.MarkDeckChanged();
             ReplayRecorder.Line("downgrade")
                 ?.Set("decision_id", _decisionType == "event" && _decision > 0 ? _decision : (int?)null)
@@ -2599,6 +2615,7 @@ internal static class ReplayHooks
         try
         {
             if (__result == null) return;
+            if (!LiveCards.Record(__1)) return;
 
             var offered = _decisionType == EnchantSelectType;
             var optionIndex = offered ? SelectIndexOf(__1) : null;
@@ -2625,7 +2642,28 @@ internal static class ReplayHooks
         return (type ?? "unknown").ToLowerInvariant();
     }
 
-    private static object? _transformFrom;
+    // Card rows (transform, upgrade, downgrade, enchant, afflict) are written only for cards of
+    // the live run; see LiveCards. DebugOnlyGetState is public on both RunManager and
+    // CombatManager in the pre-v0.113 decompile and in v0.113 (RunManager.cs:1686, CombatManager.cs:179).
+    private static void BindLiveCards(Type? runManager)
+    {
+        var runInstance = Reflect.StaticProperty(runManager, "Instance");
+        var combatInstance = Reflect.StaticProperty(_combatManagerType, "Instance");
+        var runGet = runManager?.GetMethod("DebugOnlyGetState", Type.EmptyTypes);
+        var combatGet = _combatManagerType?.GetMethod("DebugOnlyGetState", Type.EmptyTypes);
+        if (runInstance == null || combatInstance == null || runGet == null || combatGet == null)
+            MainFile.Logger.Info("replay-hooks: RunManager/CombatManager.DebugOnlyGetState not found; "
+                                 + "transform rows are omitted (no card can be proven live)");
+        LiveCards.Bind(
+            runInstance == null || runGet == null ? null
+                : () => Reflect.Read(runInstance) is { } rm ? runGet.Invoke(rm, null) : null,
+            combatInstance == null || combatGet == null ? null
+                : () => Reflect.Read(combatInstance) is { } cm ? combatGet.Invoke(cm, null) : null);
+    }
+
+    // Thread-static: a simulating mod can run CardCmd.Transform on clones off the main
+    // thread, and a shared slot let its originals overwrite the live one (rows with no from_c).
+    [ThreadStatic] private static object? _transformFrom;
 
     private static void TransformedFrom(object __instance)
     {
@@ -2636,8 +2674,16 @@ internal static class ReplayHooks
     {
         var from = _transformFrom;
         _transformFrom = null;
+        EmitTransform(from, __instance);
+    }
+
+    private static void TransformedInto(object __instance, object __0) => EmitTransform(__instance, __0);
+
+    private static void EmitTransform(object? from, object __instance)
+    {
         try
         {
+            if (!LiveCards.RecordTransform(__instance)) return;
             var offered = _decisionType == TransformSelectType;
             ReplayRecorder.Line("transform")
                 ?.Set("decision_id", _decision > 0 && (offered || _decisionType is "event" or "rest")

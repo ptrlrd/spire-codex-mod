@@ -26,5 +26,6 @@
     <Compile Include="../../Code/Core/Reflect.cs" Link="Core/Reflect.cs" />
     <Compile Include="../../Code/Replay/SphereRows.cs" Link="Replay/SphereRows.cs" />
     <Compile Include="../../Code/Replay/UnlockStateRow.cs" Link="Replay/UnlockStateRow.cs" />
+    <Compile Include="../../Code/Replay/LiveCards.cs" Link="Replay/LiveCards.cs" />
   </ItemGroup>
 </Project>
