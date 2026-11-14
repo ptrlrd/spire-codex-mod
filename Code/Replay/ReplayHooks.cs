@@ -456,6 +456,8 @@ internal static class ReplayHooks
             MainFile.Logger.Info("replay-hooks: CardModel.Keywords not found; "
                                  + "play rows will omit `keywords`");
 
+        ArrowHooks.Apply(harmony, hook, ref n, ref attempted);
+
         MainFile.Logger.Info($"replay-hooks: {n}/{attempted} patched");
     }
 
