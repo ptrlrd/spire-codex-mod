@@ -270,7 +270,8 @@
     "tour_discord": "Join the Discord",
     "deck_toggle_bracket_tag": "Bracket tag",
     "feat_bracket_what": "Reminds you which players the numbers come from.",
-    "set_group_map": "Map"
+    "set_group_map": "Map",
+    "tour_stats_title": "Whose stats do you want to see?"
   },
   "deu": {
     "consent_body": "[color=#ffd34d][b]Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color] [color=#ffd966][b]Run-Tracking[/b][/color]\nWenn du das einschaltest, bekommt jeder abgeschlossene Run eine eigene Seite auf [color=#8fd0ff]spire-codex.com[/color] mit Wiederholung, Score und einem Platz in den Bestenlisten. Deine Runs fließen auch in die Community-Statistiken, die alle sehen. Standardmäßig ist es aus. Mitmachen hilft, aber es ist deine Entscheidung.\n\nWas gesendet wird, wenn du es einschaltest:\n- Jeder abgeschlossene Run (Charakter, Deck, Relikte, Score, Seed, Ergebnis) und seine Wiederholung\n- Deine Steam-ID, damit Runs in deinem öffentlichen Profil und in den Bestenlisten erscheinen\n- Dein laufender Run (Charakter, Ebene, TP) auf [color=#8fd0ff]spire-codex.com/live[/color], während du spielst, das kannst du separat ausschalten\n- Deine älteren lokalen Runs, einmalig, wenn du Vergangene Runs nutzt\n\nJederzeit änderbar: Drück [color=#ffd34d][b]{0}[/b][/color], öffne [b]Einstellungen[/b], dann [b]Run-Tracking[/b].",
@@ -543,7 +544,8 @@
     "tour_discord": "Tritt dem Discord bei",
     "deck_toggle_bracket_tag": "Bracket-Hinweis",
     "feat_bracket_what": "Erinnert dich, von welchen Spielern die Zahlen stammen.",
-    "set_group_map": "Karte"
+    "set_group_map": "Karte",
+    "tour_stats_title": "Wessen Statistiken möchtest du sehen?"
   },
   "fra": {
     "consent_body": "[color=#ffd34d][b]Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color] [color=#ffd966][b]suivi des parties[/b][/color]\nActivez-le et chaque partie terminée aura sa propre page sur [color=#8fd0ff]spire-codex.com[/color] avec une relecture, un score et une place dans les classements. Vos parties alimentent aussi les stats de la communauté que tout le monde voit. C'est désactivé par défaut. Contribuer aide, mais c'est vous qui décidez.\n\nCe qui est envoyé si vous l'activez :\n- Chaque partie terminée (personnage, deck, reliques, score, code de partie, résultat) et sa relecture\n- Votre identifiant Steam, pour que les parties apparaissent sur votre profil public et dans les classements\n- Votre partie en cours (personnage, étage, PV) sur [color=#8fd0ff]spire-codex.com/live[/color] pendant que vous jouez, que vous pouvez désactiver à part\n- Vos anciennes parties locales, une seule fois, si vous utilisez Parties passées\n\nModifiable à tout moment : appuyez sur [color=#ffd34d][b]{0}[/b][/color], ouvrez [b]Paramètres[/b], puis [b]Suivi des parties[/b].",
@@ -816,7 +818,8 @@
     "tour_discord": "Rejoindre le Discord",
     "deck_toggle_bracket_tag": "Étiquette de tranche",
     "feat_bracket_what": "Vous rappelle de quels joueurs viennent les chiffres.",
-    "set_group_map": "Carte"
+    "set_group_map": "Carte",
+    "tour_stats_title": "Les stats de quels joueurs voulez-vous voir ?"
   },
   "ita": {
     "consent_body": "[color=#ffd34d][b]Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color] [color=#ffd966][b]tracciamento partite[/b][/color]\nAttivalo e ogni partita completata avrà la sua pagina su [color=#8fd0ff]spire-codex.com[/color] con un replay, un punteggio e un posto nelle classifiche. Le tue partite alimentano anche le statistiche della comunità che vedono tutti. È disattivato di default. Contribuire aiuta, ma decidi tu.\n\nCosa viene inviato se lo attivi:\n- Ogni partita completata (personaggio, mazzo, reliquie, punteggio, seed, risultato) e il suo replay\n- Il tuo id Steam, così le partite appaiono sul tuo profilo pubblico e nelle classifiche\n- La tua partita in corso (personaggio, piano, PV) su [color=#8fd0ff]spire-codex.com/live[/color] mentre giochi, che puoi disattivare a parte\n- Le tue vecchie partite locali, una volta sola, se usi Partite passate\n\nPuoi cambiarlo quando vuoi: premi [color=#ffd34d][b]{0}[/b][/color], apri [b]Impostazioni[/b], poi [b]Tracciamento partite[/b].",
@@ -1089,7 +1092,8 @@
     "tour_discord": "Entra nel Discord",
     "deck_toggle_bracket_tag": "Etichetta fascia",
     "feat_bracket_what": "Ti ricorda da quali giocatori vengono i numeri.",
-    "set_group_map": "Mappa"
+    "set_group_map": "Mappa",
+    "tour_stats_title": "Di quali giocatori vuoi vedere le statistiche?"
   },
   "spa": {
     "consent_body": "[color=#ffd34d][b]Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color] [color=#ffd966][b]seguimiento de partidas[/b][/color]\nActívalo y cada partida terminada tendrá su propia página en [color=#8fd0ff]spire-codex.com[/color] con una repetición, una puntuación y un lugar en las clasificaciones. Tus partidas también alimentan las estadísticas de la comunidad que ven todos. Está desactivado de forma predeterminada. Contribuir ayuda, pero tú decides.\n\nQué se envía si lo activas:\n- Cada partida terminada (personaje, mazo, reliquias, puntuación, código de partida, resultado) y su repetición\n- Tu ID de Steam, para que las partidas aparezcan en tu perfil público y en las clasificaciones\n- Tu partida en curso (personaje, piso, PV) en [color=#8fd0ff]spire-codex.com/live[/color] mientras juegas, que puedes desactivar por separado\n- Tus partidas locales anteriores, una sola vez, si usas Partidas anteriores\n\nCámbialo cuando quieras: pulsa [color=#ffd34d][b]{0}[/b][/color], abre [b]Ajustes[/b] y luego [b]Seguimiento de partidas[/b].",
@@ -1362,7 +1366,8 @@
     "tour_discord": "Únete al Discord",
     "deck_toggle_bracket_tag": "Etiqueta de rango",
     "feat_bracket_what": "Te recuerda de qué jugadores salen los números.",
-    "set_group_map": "Mapa"
+    "set_group_map": "Mapa",
+    "tour_stats_title": "¿De qué jugadores quieres ver las estadísticas?"
   },
   "esp": {
     "consent_body": "[color=#ffd34d][b]Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color] [color=#ffd966][b]seguimiento de partidas[/b][/color]\nActívalo y cada partida terminada tendrá su propia página en [color=#8fd0ff]spire-codex.com[/color] con una repetición, una puntuación y un sitio en las clasificaciones. Tus partidas también alimentan las estadísticas de la comunidad que ve todo el mundo. Está desactivado de forma predeterminada. Contribuir ayuda, pero tú decides.\n\nQué se envía si lo activas:\n- Cada partida terminada (personaje, mazo, reliquias, puntuación, semilla, resultado) y su repetición\n- Tu id de Steam, para que las partidas aparezcan en tu perfil público y en las clasificaciones\n- Tu partida en curso (personaje, piso, PV) en [color=#8fd0ff]spire-codex.com/live[/color] mientras juegas, que puedes desactivar por separado\n- Tus partidas locales anteriores, una sola vez, si usas Partidas anteriores\n\nCámbialo cuando quieras: presiona [color=#ffd34d][b]{0}[/b][/color], abre [b]Ajustes[/b] y luego [b]Seguimiento de partidas[/b].",
@@ -1635,7 +1640,8 @@
     "tour_discord": "Unirse al Discord",
     "deck_toggle_bracket_tag": "Etiqueta de rango",
     "feat_bracket_what": "Te recuerda de qué jugadores salen los números.",
-    "set_group_map": "Mapa"
+    "set_group_map": "Mapa",
+    "tour_stats_title": "¿De qué jugadores quieres ver las estadísticas?"
   },
   "ptb": {
     "consent_body": "[color=#ffd34d][b]Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color] [color=#ffd966][b]rastreamento de partidas[/b][/color]\nAtive e cada partida concluída ganha sua própria página no [color=#8fd0ff]spire-codex.com[/color] com repetição, pontuação e um lugar nas tabelas de classificação. Suas partidas também alimentam as estatísticas da comunidade que todo mundo vê. Vem desativado por padrão. Contribuir ajuda, mas a escolha é sua.\n\nO que é enviado se você ativar:\n- Cada partida concluída (personagem, baralho, relíquias, pontuação, semente, resultado) e a repetição dela\n- Seu Steam id, para que as partidas apareçam no seu perfil público e nas tabelas de classificação\n- Sua partida atual (personagem, andar, PV) em [color=#8fd0ff]spire-codex.com/live[/color] enquanto você joga, o que dá para desativar separadamente\n- Suas partidas locais antigas, uma vez, se você usar Partidas anteriores\n\nMude quando quiser: aperte [color=#ffd34d][b]{0}[/b][/color], abra [b]Configurações[/b] e depois [b]Rastreamento de partidas[/b].",
@@ -1908,7 +1914,8 @@
     "tour_discord": "Entre no Discord",
     "deck_toggle_bracket_tag": "Etiqueta de faixa",
     "feat_bracket_what": "Lembra de quais jogadores vêm os números.",
-    "set_group_map": "Mapa"
+    "set_group_map": "Mapa",
+    "tour_stats_title": "De quais jogadores você quer ver as estatísticas?"
   },
   "rus": {
     "consent_body": "[color=#ffd34d][b]Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color] [color=#ffd966][b]отслеживание вылазок[/b][/color]\nВключите его, и у каждой завершенной вылазки появится своя страница на [color=#8fd0ff]spire-codex.com[/color] с повтором, очками и местом в таблицах лидеров. Ваши вылазки также пополняют статистику сообщества, которую видят все. По умолчанию выключено. Участие помогает, но решать вам.\n\nЧто отправляется, если включить:\n- Каждая завершенная вылазка (персонаж, колода, реликвии, очки, сид, результат) и ее повтор\n- Ваш Steam id, чтобы вылазки показывались в вашем публичном профиле и в таблицах лидеров\n- Ваша текущая вылазка (персонаж, этаж, ОЗ) на [color=#8fd0ff]spire-codex.com/live[/color], пока вы играете, это можно выключить отдельно\n- Ваши старые локальные вылазки, один раз, если вы используете Прошлые вылазки\n\nИзменить можно в любой момент: нажмите [color=#ffd34d][b]{0}[/b][/color], откройте [b]Настройки[/b], затем [b]Отслеживание вылазок[/b].",
@@ -2181,7 +2188,8 @@
     "tour_discord": "Присоединиться к Discord",
     "deck_toggle_bracket_tag": "Метка группы",
     "feat_bracket_what": "Напоминает, от каких игроков эти цифры.",
-    "set_group_map": "Карта"
+    "set_group_map": "Карта",
+    "tour_stats_title": "Статистику каких игроков показывать?"
   },
   "pol": {
     "consent_body": "[color=#ffd34d][b]Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color] [color=#ffd966][b]śledzenie wypraw[/b][/color]\nWłącz to, a każda ukończona wyprawa dostanie własną stronę na [color=#8fd0ff]spire-codex.com[/color] z powtórką, wynikiem i miejscem w rankingach. Twoje wyprawy zasilają też statystyki społeczności, które widzą wszyscy. Domyślnie jest wyłączone. Współtworzenie pomaga, ale decyzja należy do ciebie.\n\nCo jest wysyłane po włączeniu:\n- Każda ukończona wyprawa (postać, talia, artefakty, wynik, ziarno, rezultat) i jej powtórka\n- Twój identyfikator Steam, aby wyprawy pokazywały się na twoim publicznym profilu i w rankingach\n- Twoja bieżąca wyprawa (postać, piętro, PŻ) na [color=#8fd0ff]spire-codex.com/live[/color] podczas gry, co możesz wyłączyć osobno\n- Twoje starsze lokalne wyprawy, jednorazowo, jeśli użyjesz opcji Wcześniejsze wyprawy\n\nZmienisz to w każdej chwili: naciśnij [color=#ffd34d][b]{0}[/b][/color], otwórz [b]Ustawienia[/b], a potem [b]Śledzenie wypraw[/b].",
@@ -2454,7 +2462,8 @@
     "tour_discord": "Dołącz do serwera Discord",
     "deck_toggle_bracket_tag": "Znacznik przedziału",
     "feat_bracket_what": "Przypomina, od jakich graczy pochodzą liczby.",
-    "set_group_map": "Mapa"
+    "set_group_map": "Mapa",
+    "tour_stats_title": "Statystyki których graczy chcesz widzieć?"
   },
   "tur": {
     "consent_body": "[color=#ffd34d][b]Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color] [color=#ffd966][b]oyun takibi[/b][/color]\nBunu açarsan biten her oyunun [color=#8fd0ff]spire-codex.com[/color] üzerinde tekrarı, puanı ve lider tablolarında yeri olan kendi sayfası olur. Oyunların ayrıca herkesin gördüğü topluluk istatistiklerini de besler. Varsayılan olarak kapalıdır. Katkı yardımcı olur ama karar senin.\n\nAçarsan neler gönderilir:\n- Biten her oyun (karakter, deste, kalıntılar, puan, seed, sonuç) ve tekrarı\n- Steam kimliğin, böylece oyunlar herkese açık profilinde ve lider tablolarında görünür\n- Sen oynarken [color=#8fd0ff]spire-codex.com/live[/color] adresinde mevcut oyunun (karakter, kat, CP), bunu ayrıca kapatabilirsin\n- Geçmiş oyunlar'ı kullanırsan eski yerel oyunların, bir kez\n\nBunu istediğin zaman değiştirebilirsin: [color=#ffd34d][b]{0}[/b][/color] tuşuna bas, [b]Ayarlar[/b]'ı aç, sonra [b]Oyun takibi[/b].",
@@ -2727,7 +2736,8 @@
     "tour_discord": "Discord'a katıl",
     "deck_toggle_bracket_tag": "Grup etiketi",
     "feat_bracket_what": "Rakamların hangi oyunculardan geldiğini hatırlatır.",
-    "set_group_map": "Harita"
+    "set_group_map": "Harita",
+    "tour_stats_title": "Hangi oyuncuların istatistiklerini görmek istersin?"
   },
   "jpn": {
     "consent_body": "[color=#ffd34d][b]Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color] [color=#ffd966][b]プレイ記録[/b][/color]\nオンにすると、完了したプレイごとに[color=#8fd0ff]spire-codex.com[/color]に専用ページができ、リプレイ、スコア、ランキングの順位が載ります。あなたのプレイはみんなが見るコミュニティ統計にも反映されます。デフォルトはオフです。協力してもらえると助かりますが、決めるのはあなたです。\n\nオンにすると送信されるもの:\n- 完了した各プレイ（キャラクター、デッキ、レリック、スコア、シード値、結果）とそのリプレイ\n- あなたのSteam ID（公開プロフィールとランキングにプレイを表示するため）\n- プレイ中の現在のプレイ（キャラクター、階、HP）を[color=#8fd0ff]spire-codex.com/live[/color]に表示。これだけ個別にオフにできます\n- 「過去のプレイ」を使った場合、古いローカルのプレイを一度だけ\n\nいつでも変更できます。[color=#ffd34d][b]{0}[/b][/color]を押して[b]設定[/b]を開き、[b]プレイ記録[/b]へ。",
@@ -3000,7 +3010,8 @@
     "tour_discord": "Discordに参加する",
     "deck_toggle_bracket_tag": "ブラケット表示",
     "feat_bracket_what": "数値がどのプレイヤーのものかを示します。",
-    "set_group_map": "マップ"
+    "set_group_map": "マップ",
+    "tour_stats_title": "どのプレイヤーの統計を表示しますか？"
   },
   "kor": {
     "consent_body": "[color=#ffd34d][b]Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color] [color=#ffd966][b]도전 추적[/b][/color]\n켜면 완료한 도전마다 [color=#8fd0ff]spire-codex.com[/color]에 리플레이, 점수, 리더보드 순위가 있는 페이지가 생깁니다. 내 도전은 모두가 보는 커뮤니티 통계에도 반영됩니다. 기본값은 꺼짐입니다. 기여하면 도움이 되지만 선택은 자유입니다.\n\n켜면 전송되는 정보:\n- 완료한 각 도전(캐릭터, 덱, 유물, 점수, 시드, 결과)과 리플레이\n- Steam id (공개 프로필과 리더보드에 도전을 표시하기 위해)\n- 플레이 중 [color=#8fd0ff]spire-codex.com/live[/color]에 표시되는 현재 도전(캐릭터, 층, 체력), 이것만 따로 끌 수 있습니다\n- 지난 도전을 사용하면 예전 로컬 도전을 한 번\n\n언제든 바꿀 수 있습니다: [color=#ffd34d][b]{0}[/b][/color] 키를 누르고 [b]설정[/b]을 연 다음 [b]도전 추적[/b]으로 가세요.",
@@ -3273,7 +3284,8 @@
     "tour_discord": "Discord 참여하기",
     "deck_toggle_bracket_tag": "구간 표시",
     "feat_bracket_what": "수치가 어떤 플레이어들에게서 나왔는지 알려줍니다.",
-    "set_group_map": "지도"
+    "set_group_map": "지도",
+    "tour_stats_title": "어떤 플레이어의 통계를 볼까요?"
   },
   "zhs": {
     "consent_body": "[color=#ffd34d][b]Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color] [color=#ffd966][b]对局记录[/b][/color]\n开启后，每场完成的对局都会在 [color=#8fd0ff]spire-codex.com[/color] 上拥有自己的页面，包含回放、分数和排行榜名次。你的对局也会计入大家看到的社区数据。此功能默认关闭。参与贡献会有帮助，但由你决定。\n\n开启后会发送：\n- 每场完成的对局（角色、牌组、遗物、分数、种子、结果）及其回放\n- 你的 Steam id，用于在你的公开主页和排行榜上显示对局\n- 你游玩时在 [color=#8fd0ff]spire-codex.com/live[/color] 显示的当前对局（角色、层数、生命值），可单独关闭\n- 如果使用“过往对局”，会一次性上传你较早的本地对局\n\n随时可以更改：按 [color=#ffd34d][b]{0}[/b][/color]，打开 [b]设置[/b]，然后进入 [b]对局记录[/b]。",
@@ -3546,7 +3558,8 @@
     "tour_discord": "加入 Discord",
     "deck_toggle_bracket_tag": "分段标签",
     "feat_bracket_what": "提醒你这些数据来自哪些玩家。",
-    "set_group_map": "地图"
+    "set_group_map": "地图",
+    "tour_stats_title": "你想看哪些玩家的数据？"
   },
   "tha": {
     "consent_body": "[color=#ffd34d][b]Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color] [color=#ffd966][b]การติดตามการเดินทาง[/b][/color]\nเมื่อเปิด การเดินทางที่จบแต่ละครั้งจะมีหน้าของตัวเองบน [color=#8fd0ff]spire-codex.com[/color] พร้อมรีเพลย์ คะแนน และอันดับในตารางอันดับ การเดินทางของคุณยังช่วยเติมสถิติชุมชนที่ทุกคนเห็นด้วย ค่านี้ปิดไว้ตั้งแต่แรก การมีส่วนร่วมช่วยได้ แต่ขึ้นอยู่กับคุณ\n\nสิ่งที่จะถูกส่งถ้าคุณเปิด:\n- การเดินทางที่จบแล้วแต่ละครั้ง (ตัวละคร กองการ์ด เครื่องราง คะแนน รหัสแผนที่ ผลลัพธ์) และรีเพลย์\n- Steam id ของคุณ เพื่อให้การเดินทางแสดงบนโปรไฟล์สาธารณะและตารางอันดับ\n- การเดินทางปัจจุบันของคุณ (ตัวละคร ชั้น HP) ที่ [color=#8fd0ff]spire-codex.com/live[/color] ขณะที่คุณเล่น ซึ่งปิดแยกได้\n- การเดินทางเก่าในเครื่องของคุณ หนึ่งครั้ง ถ้าคุณใช้ การเดินทางที่ผ่านมา\n\nเปลี่ยนได้ทุกเมื่อ: กด [color=#ffd34d][b]{0}[/b][/color] เปิด [b]การตั้งค่า[/b] แล้วไปที่ [b]การติดตามการเดินทาง[/b]",
@@ -3819,7 +3832,8 @@
     "tour_discord": "เข้าร่วม Discord",
     "deck_toggle_bracket_tag": "ป้ายกลุ่มสถิติ",
     "feat_bracket_what": "เตือนว่าตัวเลขมาจากผู้เล่นกลุ่มไหน",
-    "set_group_map": "แผนที่"
+    "set_group_map": "แผนที่",
+    "tour_stats_title": "อยากดูสถิติของผู้เล่นกลุ่มไหน?"
   },
   "zht": {
     "consent_body": "[color=#ffd34d][b]Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color] [color=#ffd966][b]對局記錄[/b][/color]\n開啟後，每場完成的對局都會在 [color=#8fd0ff]spire-codex.com[/color] 上擁有自己的頁面，包含重播、分數和排行榜名次。你的對局也會計入大家看到的社群數據。此功能預設關閉。參與貢獻會有幫助，但由你決定。\n\n開啟後會傳送：\n- 每場完成的對局（角色、牌組、遺物、分數、種子、結果）及其重播\n- 你的 Steam id，用於在你的公開個人頁面和排行榜上顯示對局\n- 你遊玩時在 [color=#8fd0ff]spire-codex.com/live[/color] 顯示的目前對局（角色、樓層、生命值），可單獨關閉\n- 如果使用「過往對局」，會一次性上傳你較早的本地對局\n\n隨時可以變更：按 [color=#ffd34d][b]{0}[/b][/color]，開啟 [b]設定[/b]，然後進入 [b]對局記錄[/b]。",
@@ -4092,6 +4106,7 @@
     "tour_discord": "加入 Discord",
     "deck_toggle_bracket_tag": "分段標籤",
     "feat_bracket_what": "提醒你這些數據來自哪些玩家。",
-    "set_group_map": "地圖"
+    "set_group_map": "地圖",
+    "tour_stats_title": "你想看哪些玩家的數據？"
   }
 }

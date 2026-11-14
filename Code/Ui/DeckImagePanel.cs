@@ -30,7 +30,7 @@ public partial class DeckImagePanel : CanvasLayer
     private const int CatFeatures = 0, CatStats = 1, CatTracking = 2, CatControls = 3;
     private int _settingsCat;
 
-    private static readonly (StatBracket Bracket, string Label, string Tip)[] BracketChoices =
+    internal static readonly (StatBracket Bracket, string Label, string Tip)[] BracketChoices =
     {
         (StatBracket.All, "deck_bracket_all", "deck_bracket_all_tip"),
         (StatBracket.A10, "deck_bracket_a10", "deck_bracket_a10_tip"),
