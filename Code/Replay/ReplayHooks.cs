@@ -104,35 +104,18 @@ internal static class ReplayHooks
     private static int _purchaseSeq;
     private static int? _pendingPurchase;
 
-    private static bool IsBlitzEntry(object entry)
-    {
-        for (var t = entry.GetType(); t != null; t = t.BaseType)
-            if (t.Name == "BlitzMerchantEntry") return true;
-        return false;
-    }
-
     private static string ShopKind(object entry)
     {
-        if (IsBlitzEntry(entry)) return "blitz";
-        var type = entry.GetType().Name;
-        return type.Contains("Relic") ? "relic"
-            : type.Contains("Potion") ? "potion"
-            : type.Contains("CardRemoval") ? "removal_service"
-            : type.Contains("Card") ? "card" : "other";
+        var chain = new List<string>();
+        for (var t = entry.GetType(); t != null; t = t.BaseType) chain.Add(t.Name);
+        return ShopRows.Kind(chain);
     }
 
     private static ReplayLine EntryFields(ReplayLine line, object entry, object? player, string kind, string? id)
-    {
-        line.Set("purchase_id", _pendingPurchase)
-            .Set("kind", kind)
-            .Set("slot", player == null ? null : ShopSlot(player, entry, kind))
-            .Set("id", id)
-            .Set("entry_id", Reflect.GetMember(entry, "Id") is uint entryId ? (long)entryId : (long?)null)
-            .Set("entry_class", entry.GetType().Name);
-        if (kind == "blitz")
-            line.Set("blitz_entry", Reflect.GetString(entry, "MerchantEntryType"));
-        return line;
-    }
+        => ShopRows.Entry(line, _pendingPurchase, kind,
+            player == null ? null : ShopSlot(player, entry, kind), id,
+            Reflect.GetMember(entry, "Id") as uint?, entry.GetType().Name,
+            Reflect.GetString(entry, "MerchantEntryType"));
 
     private static Dictionary<string, int>? _offerIndex;
 
