@@ -30,6 +30,23 @@ internal static class ShopRows
             : type.Contains("Card") ? "card" : "other";
     }
 
+    // The Blitz merchant's offers on the `shop` row, in MerchantInventory.BlitzEntries order, so
+    // `slot` here is the `slot` a blitz `buy` row names. Status is the entry's
+    // BlitzEntryStatus: Used once picked, Disabled for the rest once BlitzChoicesRemaining
+    // reaches 0 (MerchantInventory.UpdateEntries).
+    public static List<ReplayLine>? BlitzOffers(IReadOnlyList<(string? Entry, string Class, string? Status)> offers)
+    {
+        if (offers.Count == 0) return null;
+        var rows = new List<ReplayLine>(offers.Count);
+        for (var i = 0; i < offers.Count; i++)
+            rows.Add(new ReplayLine("i")
+                .Set("slot", i)
+                .Set("blitz_entry", offers[i].Entry)
+                .Set("entry_class", offers[i].Class)
+                .Set("status", offers[i].Status?.ToLowerInvariant()));
+        return rows;
+    }
+
     // `entryId` is MerchantEntry.Id, what MerchantInventory.TryPurchaseEntryWithIdUnsynchronized
     // takes. `blitzEntry` is BlitzMerchantEntry.MerchantEntryType, written for a Blitz entry only.
     // For a Blitz entry `slot` is the index in MerchantInventory.BlitzEntries.

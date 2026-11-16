@@ -2481,7 +2481,7 @@ internal static class ReplayHooks
         {
             if (kind == "removal_service") return null;
             var room = Reflect.GetMember(Reflect.GetMember(player, "RunState"), "CurrentRoom");
-            var inv = Reflect.Call(room, "GetLocalInventory");
+            var inv = Core.RoomExport.MerchantInventory(room, player);
             if (inv == null) return null;
 
             var lists = kind switch

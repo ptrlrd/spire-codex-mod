@@ -308,7 +308,8 @@ public static class ReplayRecorder
             shop.Cards.Select(c => $"c{c.Id}:{c.Cost}:{c.Stocked}:{c.OnSale}")
                 .Concat(shop.Relics.Select(r => $"r{r.Id}:{r.Cost}:{r.Stocked}"))
                 .Concat(shop.Potions.Select(p => $"p{p.Id}:{p.Cost}:{p.Stocked}")))
-            + $"|{shop.Removal?.Cost}:{shop.Removal?.Stocked}";
+            + $"|{shop.Removal?.Cost}:{shop.Removal?.Stocked}"
+            + $"|{string.Join(",", (shop.Blitz ?? new()).Select(b => $"{b.Class}:{b.Status}"))}:{shop.BlitzChoicesLeft}";
         if (sig == _shopSig) return;
         _shopSig = sig;
 
@@ -331,6 +332,9 @@ public static class ReplayRecorder
             .Set("cards", Items(shop.Cards))
             .Set("relics", Items(shop.Relics))
             .Set("potions", Items(shop.Potions))
+            .Set("blitz", ShopRows.BlitzOffers(
+                (shop.Blitz ?? new()).Select(b => (b.Entry, b.Class, b.Status)).ToList()))
+            .Set("blitz_choices_left", shop.BlitzChoicesLeft)
             .Emit();
     }
 

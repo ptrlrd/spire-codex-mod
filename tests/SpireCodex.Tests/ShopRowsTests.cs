@@ -39,6 +39,31 @@ public sealed class ShopRowsTests
     }
 
     [Fact]
+    public void BlitzOffersAreListedInInventoryOrderWithTheirStatus()
+    {
+        var rows = ShopRows.BlitzOffers(new (string?, string, string?)[]
+        {
+            ("UpgradedRareCard", "BlitzMerchantUpgradedRareCardEntry", "Used"),
+            ("CardRemoval", "BlitzMerchantCardRemovalEntry", "Disabled"),
+            ("Glam", "BlitzMerchantGlamEntry", "Available"),
+        })!;
+
+        Assert.Equal(3, rows.Count);
+        Assert.Equal(new Dictionary<string, object?>
+                     {
+                         ["slot"] = 1, ["blitz_entry"] = "CardRemoval",
+                         ["entry_class"] = "BlitzMerchantCardRemovalEntry", ["status"] = "disabled",
+                     },
+                     rows[1].Fields);
+        Assert.Equal("used", rows[0].Fields["status"]);
+        Assert.Equal(2, rows[2].Fields["slot"]);
+    }
+
+    [Fact]
+    public void ANormalShopWritesNoBlitzList()
+        => Assert.Null(ShopRows.BlitzOffers(Array.Empty<(string?, string, string?)>()));
+
+    [Fact]
     public void ANormalRowKeepsItsIdAndSlotAndHasNoBlitzEntry()
     {
         var row = ShopRows.Entry(new ReplayLine("buy"), 1, "card", 4, "CRIMSON_MANTLE", null,
