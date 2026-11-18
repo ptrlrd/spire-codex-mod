@@ -117,10 +117,13 @@ internal static class ReplayHooks
 
     private static ReplayLine EntryFields(ReplayLine line, object entry, object? player, string kind, string? id,
                                           long? purchaseId)
-        => ShopRows.Entry(line, purchaseId, kind,
+    {
+        var (model, amount) = kind == "blitz" ? Core.RoomExport.BlitzDetail(entry) : (null, null);
+        return ShopRows.Entry(line, purchaseId, kind,
             player == null ? null : ShopSlot(player, entry, kind), id,
             Reflect.GetMember(entry, "Id") as uint?, entry.GetType().Name,
-            Reflect.GetString(entry, "MerchantEntryType"));
+            Reflect.GetString(entry, "MerchantEntryType"), model, amount);
+    }
 
     private static Dictionary<string, int>? _offerIndex;
 
@@ -2463,8 +2466,9 @@ internal static class ReplayHooks
             var line = ReplayRecorder.Line("buy");
             if (line != null)
             {
-                line.Set("decision_id",
-                    kind == "removal_service" && _decision > 0 ? _decision : (int?)null);
+                var selects = ShopRows.OpensCardSelect(kind, Reflect.GetString(__2, "MerchantEntryType"))
+                              && (kind == "removal_service" || _decisionType?.StartsWith("deck_select") == true);
+                line.Set("decision_id", selects && _decision > 0 ? _decision : (int?)null);
                 EntryFields(line, __2, __1, kind, pending?.Id, pending?.StartSeq)
                     .Set("mine", Mine(__1))
                     .Set("cost_current", __3)

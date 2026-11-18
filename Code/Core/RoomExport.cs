@@ -123,12 +123,28 @@ internal static class RoomExport
         if (Reflect.GetMember(inv, "BlitzEntries") is IEnumerable offers)
             foreach (var e in offers)
                 if (e != null)
+                {
+                    var (model, amount) = BlitzDetail(e);
                     blitz.Add(new BlitzOfferInfo(Reflect.GetString(e, "MerchantEntryType"), e.GetType().Name,
-                                                 Reflect.GetString(e, "Status")));
+                                                 Reflect.GetString(e, "Status"), model, amount));
+                }
         int? choicesLeft = blitz.Count > 0 && Reflect.GetMember(inv, "BlitzChoicesRemaining") is int left
             ? left : null;
 
         return new ShopInfo(cards, relics, potions, removal, blitz, choicesLeft);
+    }
+
+    // What a Blitz entry carries beyond its type. The model id is the one the game's own run
+    // history keeps (BlitzMerchantEntry.GenerateHistoryEntry: the enchantment of a Card Enchant
+    // offer, the character of a Prismatic one, null for the rest). The amount is a Card Enchant
+    // offer's (BlitzMerchantCardEnchantEntry._enchantment, an (EnchantmentModel, int) pair).
+    // GenerateHistoryEntry only builds a struct, so calling it with wasPicked: false is safe.
+    public static (string? ModelId, int? Amount) BlitzDetail(object entry)
+    {
+        var history = Reflect.CallWith(entry, "GenerateHistoryEntry", false);
+        var model = Ids.Bare(Reflect.GetMember(history, "modelId")?.ToString());
+        var amount = Reflect.GetMember(Reflect.GetMember(entry, "_enchantment"), "Item2") as int?;
+        return (model, amount);
     }
 
     private static object? FirstInventory(object room)

@@ -33,8 +33,11 @@ internal static class ShopRows
     // The Blitz merchant's offers on the `shop` row, in MerchantInventory.BlitzEntries order, so
     // `slot` here is the `slot` a blitz `buy` row names. Status is the entry's
     // BlitzEntryStatus: Used once picked, Disabled for the rest once BlitzChoicesRemaining
-    // reaches 0 (MerchantInventory.UpdateEntries).
-    public static List<ReplayLine>? BlitzOffers(IReadOnlyList<(string? Entry, string Class, string? Status)> offers)
+    // reaches 0 (MerchantInventory.UpdateEntries). `model_id` and `amount` say which variant an
+    // offer is (RoomExport.BlitzDetail): Card Enchant's enchantment and amount, Prismatic's
+    // character.
+    public static List<ReplayLine>? BlitzOffers(
+        IReadOnlyList<(string? Entry, string Class, string? Status, string? ModelId, int? Amount)> offers)
     {
         if (offers.Count == 0) return null;
         var rows = new List<ReplayLine>(offers.Count);
@@ -43,9 +46,22 @@ internal static class ShopRows
                 .Set("slot", i)
                 .Set("blitz_entry", offers[i].Entry)
                 .Set("entry_class", offers[i].Class)
+                .Set("model_id", offers[i].ModelId)
+                .Set("amount", offers[i].Amount)
                 .Set("status", offers[i].Status?.ToLowerInvariant()));
         return rows;
     }
+
+    // The Blitz entries whose purchase opens a deck selection (their OnTrySelect calls
+    // CardSelectCmd.FromDeckForRemoval / ForTransformation / ForUpgrade / ForEnchantment), so
+    // the buy can name that decision as a removal_service buy does.
+    private static readonly HashSet<string> CardSelectEntries = new()
+    {
+        "CardRemoval", "CardTransform", "CardUpgrade", "CardEnchant", "Glam",
+    };
+
+    public static bool OpensCardSelect(string kind, string? blitzEntry)
+        => kind == "removal_service" || kind == "blitz" && blitzEntry != null && CardSelectEntries.Contains(blitzEntry);
 
     // MerchantEntry.OnTryPurchaseUnsynchronized's own gate: out of stock fails, and too little
     // gold fails unless ignoreCost. Lord's Parasol buys the whole shop with ignoreCost: true
@@ -60,7 +76,8 @@ internal static class ShopRows
     // takes. `blitzEntry` is BlitzMerchantEntry.MerchantEntryType, written for a Blitz entry only.
     // For a Blitz entry `slot` is the index in MerchantInventory.BlitzEntries.
     public static ReplayLine Entry(ReplayLine line, long? purchaseId, string kind, int? slot, string? id,
-                                   uint? entryId, string entryClass, string? blitzEntry)
+                                   uint? entryId, string entryClass, string? blitzEntry,
+                                   string? modelId = null, int? amount = null)
     {
         line.Set("purchase_id", purchaseId)
             .Set("kind", kind)
@@ -68,7 +85,8 @@ internal static class ShopRows
             .Set("id", id)
             .Set("entry_id", entryId is { } e ? (long)e : (long?)null)
             .Set("entry_class", entryClass);
-        if (kind == "blitz") line.Set("blitz_entry", blitzEntry);
+        if (kind == "blitz")
+            line.Set("blitz_entry", blitzEntry).Set("model_id", modelId).Set("amount", amount);
         return line;
     }
 }

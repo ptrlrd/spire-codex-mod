@@ -139,8 +139,11 @@ public sealed record ShopRemovalInfo(int Cost, bool Stocked);
 
 // One Blitz merchant offer, in MerchantInventory.BlitzEntries order: Entry the
 // BlitzMerchantEntry.MerchantEntryType name, Class the entry's class, Status
-// Available / Used / Disabled (BlitzMerchantEntry.BlitzEntryStatus).
-public sealed record BlitzOfferInfo(string? Entry, string Class, string? Status);
+// Available / Used / Disabled (BlitzMerchantEntry.BlitzEntryStatus). ModelId is what the game's
+// own history keeps for the offer (the enchantment of a Card Enchant offer, the character of a
+// Prismatic one), Amount a Card Enchant offer's enchantment amount.
+public sealed record BlitzOfferInfo(string? Entry, string Class, string? Status,
+                                    string? ModelId = null, int? Amount = null);
 
 // Blitz is empty and BlitzChoicesLeft null at a normal merchant.
 public sealed record ShopInfo(
