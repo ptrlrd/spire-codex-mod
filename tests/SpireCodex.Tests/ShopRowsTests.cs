@@ -26,17 +26,26 @@ public sealed class ShopRowsTests
     [Fact]
     public void ABlitzRowNamesTheEntryTypeItsClassItsSlotAndItsGameId()
     {
-        var row = ShopRows.Entry(new ReplayLine("buy"), 3, "blitz", 1, null, 7u,
+        var row = ShopRows.Entry(new ReplayLine("buy"), 271L, "blitz", 1, null, 7u,
                                  "BlitzMerchantColorlessCardRewardEntry", "ColorlessCardReward");
 
         Assert.Equal(new Dictionary<string, object?>
                      {
-                         ["purchase_id"] = 3, ["kind"] = "blitz", ["slot"] = 1, ["entry_id"] = 7L,
+                         ["purchase_id"] = 271L, ["kind"] = "blitz", ["slot"] = 1, ["entry_id"] = 7L,
                          ["entry_class"] = "BlitzMerchantColorlessCardRewardEntry",
                          ["blitz_entry"] = "ColorlessCardReward",
                      },
                      row.Fields);
     }
+
+    // Lord's Parasol buys every entry with ignoreCost: true, affordable or not.
+    [Theory]
+    [InlineData(true, true, false, true)]
+    [InlineData(true, false, false, false)]
+    [InlineData(true, false, true, true)]
+    [InlineData(false, true, true, false)]
+    public void APurchaseStartsWhenTheGameWouldTryIt(bool stocked, bool enoughGold, bool ignoreCost, bool starts)
+        => Assert.Equal(starts, ShopRows.PurchaseCanStart(stocked, enoughGold, ignoreCost));
 
     [Fact]
     public void BlitzOffersAreListedInInventoryOrderWithTheirStatus()

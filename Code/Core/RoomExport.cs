@@ -88,14 +88,17 @@ internal static class RoomExport
     public static object? MerchantInventory(object? room, object? player = null)
     {
         if (room == null) return null;
-        var inv = Reflect.Call(room, "GetLocalInventory") ?? FirstInventory(room);
-        if (inv != null) return inv;
         var mgr = Reflect.GetStatic(
             room.GetType().Assembly.GetType("MegaCrit.Sts2.Core.Runs.RunManager"), "Instance");
         var sync = Reflect.GetMember(mgr, "MerchantSynchronizer");
-        if (sync == null) return null;
-        return (player != null ? Reflect.CallWith(sync, "GetInventoryFor", player) : null)
-            ?? Reflect.Call(sync, "GetLocalInventory");
+        foreach (var holder in new[] { room, sync })
+        {
+            if (holder == null) continue;
+            var inv = (player != null ? Reflect.CallWith(holder, "GetInventoryFor", player) : null)
+                ?? Reflect.Call(holder, "GetLocalInventory");
+            if (inv != null) return inv;
+        }
+        return FirstInventory(room);
     }
 
     private static ShopInfo? ReadShop(object room)

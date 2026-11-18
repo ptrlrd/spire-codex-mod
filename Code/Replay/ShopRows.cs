@@ -47,10 +47,19 @@ internal static class ShopRows
         return rows;
     }
 
+    // MerchantEntry.OnTryPurchaseUnsynchronized's own gate: out of stock fails, and too little
+    // gold fails unless ignoreCost. Lord's Parasol buys the whole shop with ignoreCost: true
+    // (LordsParasol.PurchaseEverythingLocked), so an item the player could not afford still
+    // starts a purchase.
+    public static bool PurchaseCanStart(bool isStocked, bool enoughGold, bool ignoreCost)
+        => isStocked && (enoughGold || ignoreCost);
+
+    // `purchaseId` on a buy is the `s` of the buy_start that opened it. `s` is unique within a
+    // journal across save-and-quit reloads; a counter of our own would restart on reload.
     // `entryId` is MerchantEntry.Id, what MerchantInventory.TryPurchaseEntryWithIdUnsynchronized
     // takes. `blitzEntry` is BlitzMerchantEntry.MerchantEntryType, written for a Blitz entry only.
     // For a Blitz entry `slot` is the index in MerchantInventory.BlitzEntries.
-    public static ReplayLine Entry(ReplayLine line, int? purchaseId, string kind, int? slot, string? id,
+    public static ReplayLine Entry(ReplayLine line, long? purchaseId, string kind, int? slot, string? id,
                                    uint? entryId, string entryClass, string? blitzEntry)
     {
         line.Set("purchase_id", purchaseId)
