@@ -207,7 +207,7 @@ public static class ReplayRecorder
     private static void WriteHeader(Snapshot s, string seed, long startTime)
     {
         Line("header")
-            ?.Set("replay_version", 8)
+            ?.Set("replay_version", 9)
             .Set("run_schema_version", 9)
             .Set("seed", seed)
             .Set("build_id", Core.Sts2Version.Current.Split('+')[0])
@@ -308,7 +308,8 @@ public static class ReplayRecorder
             shop.Cards.Select(c => $"c{c.Id}:{c.Cost}:{c.Stocked}:{c.OnSale}")
                 .Concat(shop.Relics.Select(r => $"r{r.Id}:{r.Cost}:{r.Stocked}"))
                 .Concat(shop.Potions.Select(p => $"p{p.Id}:{p.Cost}:{p.Stocked}")))
-            + $"|{shop.Removal?.Cost}:{shop.Removal?.Stocked}";
+            + $"|{shop.Removal?.Cost}:{shop.Removal?.Stocked}"
+            + $"|{string.Join(",", (shop.Blitz ?? new()).Select(b => $"{b.Class}:{b.ModelId}:{b.Amount}:{b.Status}"))}:{shop.BlitzChoicesLeft}";
         if (sig == _shopSig) return;
         _shopSig = sig;
 
@@ -331,6 +332,9 @@ public static class ReplayRecorder
             .Set("cards", Items(shop.Cards))
             .Set("relics", Items(shop.Relics))
             .Set("potions", Items(shop.Potions))
+            .Set("blitz", ShopRows.BlitzOffers(
+                (shop.Blitz ?? new()).Select(b => (b.Entry, b.Class, b.Status, b.ModelId, b.Amount)).ToList()))
+            .Set("blitz_choices_left", shop.BlitzChoicesLeft)
             .Emit();
     }
 

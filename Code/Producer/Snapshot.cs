@@ -137,8 +137,18 @@ public sealed record ShopItemInfo(string? Id, int Cost, bool Stocked, bool OnSal
 
 public sealed record ShopRemovalInfo(int Cost, bool Stocked);
 
+// One Blitz merchant offer, in MerchantInventory.BlitzEntries order: Entry the
+// BlitzMerchantEntry.MerchantEntryType name, Class the entry's class, Status
+// Available / Used / Disabled (BlitzMerchantEntry.BlitzEntryStatus). ModelId is what the game's
+// own history keeps for the offer (the enchantment of a Card Enchant offer, the character of a
+// Prismatic one), Amount a Card Enchant offer's enchantment amount.
+public sealed record BlitzOfferInfo(string? Entry, string Class, string? Status,
+                                    string? ModelId = null, int? Amount = null);
+
+// Blitz is empty and BlitzChoicesLeft null at a normal merchant.
 public sealed record ShopInfo(
-    List<ShopItemInfo> Cards, List<ShopItemInfo> Relics, List<ShopItemInfo> Potions, ShopRemovalInfo? Removal);
+    List<ShopItemInfo> Cards, List<ShopItemInfo> Relics, List<ShopItemInfo> Potions, ShopRemovalInfo? Removal,
+    List<BlitzOfferInfo>? Blitz = null, int? BlitzChoicesLeft = null);
 
 // The combat rewards/loot screen: the gold on offer, the card choices, and any relic/potion
 // rewards (bare ids). CardRemoval flags a card-removal reward (e.g. from certain encounters).

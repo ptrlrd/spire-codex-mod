@@ -26,8 +26,6 @@ internal static class ReplayHooks
 
     public static bool PlayerDied { get; private set; }
 
-    private static string? _pendingBuyId;
-    private static string? _pendingBuyKind;
 
     public static void CloseOpenDecision() => DemoteDecision();
 
@@ -54,8 +52,7 @@ internal static class ReplayHooks
     public static void ResetRun()
     {
         PlayerDied = false;
-        _pendingBuyId = null;
-        _pendingBuyKind = null;
+        _pendingBuys.Clear();
         _combatId = null;
         _combatFloorKey = null;
         _floorEncounters = null;
@@ -74,20 +71,58 @@ internal static class ReplayHooks
         _treasureOfferIds = null;
     }
 
-    private static void PurchaseAttempt(object __instance)
+    private static void PurchaseAttempt(object __instance, bool __1) => StartPurchase(__instance, __1);
+
+    private static void PurchaseAttemptLegacy(object __instance) => StartPurchase(__instance, false);
+
+    private static void StartPurchase(object entry, bool ignoreCost)
     {
         try
         {
-            var type = __instance.GetType().Name;
-            _pendingBuyKind = type.Contains("Relic") ? "relic"
-                : type.Contains("Potion") ? "potion"
-                : type.Contains("CardRemoval") ? "removal_service"
-                : type.Contains("Card") ? "card" : "other";
-            _pendingBuyId = Ids.Bare(Reflect.GetString(Reflect.GetMember(__instance, "Model"), "Id"))
+            var kind = ShopKind(entry);
+            var id = Ids.Bare(Reflect.GetString(Reflect.GetMember(entry, "Model"), "Id"))
                 ?? Ids.Bare(Reflect.GetString(
-                       Reflect.GetMember(Reflect.GetMember(__instance, "CreationResult"), "Card"), "Id"));
+                       Reflect.GetMember(Reflect.GetMember(entry, "CreationResult"), "Card"), "Id"));
+            var pending = new PendingBuy(kind, id, null);
+            _pendingBuys[entry] = pending;
+
+            if (!ShopRows.PurchaseCanStart(Reflect.GetBool(entry, "IsStocked", true),
+                    Reflect.GetBool(entry, "EnoughGold", true), ignoreCost)) return;
+
+            var player = Reflect.GetMember(entry, "Player");
+            var line = ReplayRecorder.Line("buy_start");
+            if (line == null) return;
+            EntryFields(line, entry, player, kind, id, null)
+                .Set("mine", Mine(player))
+                .Set("price", Reflect.GetInt(entry, "Cost", 0))
+                .Set("cost_resource", "gold")
+                .Set("gold_before", Reflect.GetInt(player, "Gold", 0))
+                .SetFlag("ignore_cost", ignoreCost)
+                .Emit();
+            if (line.Seq > 0) _pendingBuys[entry] = pending with { StartSeq = line.Seq };
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
+    }
+
+    private sealed record PendingBuy(string Kind, string? Id, long? StartSeq);
+
+    private static readonly Dictionary<object, PendingBuy> _pendingBuys = new(ReferenceEqualityComparer.Instance);
+
+    private static string ShopKind(object entry)
+    {
+        var chain = new List<string>();
+        for (var t = entry.GetType(); t != null; t = t.BaseType) chain.Add(t.Name);
+        return ShopRows.Kind(chain);
+    }
+
+    private static ReplayLine EntryFields(ReplayLine line, object entry, object? player, string kind, string? id,
+                                          long? purchaseId)
+    {
+        var (model, amount) = kind == "blitz" ? Core.RoomExport.BlitzDetail(entry) : (null, null);
+        return ShopRows.Entry(line, purchaseId, kind,
+            player == null ? null : ShopSlot(player, entry, kind), id,
+            Reflect.GetMember(entry, "Id") as uint?, entry.GetType().Name,
+            Reflect.GetString(entry, "MerchantEntryType"), model, amount);
     }
 
     private static Dictionary<string, int>? _offerIndex;
@@ -290,9 +325,13 @@ internal static class ReplayHooks
 
         attempted++; n += HookPatcher.Patch(harmony, hook, "BeforeCardRemoved", me, nameof(CardRemoved));
         attempted++; n += HookPatcher.Patch(harmony, hook, "AfterItemPurchased", me, nameof(ItemPurchased));
-        attempted++; n += HookPatcher.PatchOn(harmony,
-            HookPatcher.FindType("MegaCrit.Sts2.Core.Entities.Merchant.MerchantEntry"),
-            "OnTryPurchaseWrapper", me, nameof(PurchaseAttempt), 2);
+        var merchantEntry = HookPatcher.FindType("MegaCrit.Sts2.Core.Entities.Merchant.MerchantEntry");
+        var purchaseHooked = HookPatcher.PatchOn(harmony, merchantEntry,
+            "OnTryPurchaseUnsynchronized", me, nameof(PurchaseAttempt), 2);
+        if (purchaseHooked == 0)
+            purchaseHooked = HookPatcher.PatchOn(harmony, merchantEntry,
+                "OnTryPurchaseWrapper", me, nameof(PurchaseAttemptLegacy), 2);
+        attempted++; n += purchaseHooked;
         attempted++; n += HookPatcher.Patch(harmony, hook, "AfterCardGeneratedForCombat", me, nameof(CardGenerated));
         attempted++; n += HookPatcher.PatchOn(harmony,
             HookPatcher.FindType("MegaCrit.Sts2.Core.Combat.CombatState"),
@@ -552,8 +591,7 @@ internal static class ReplayHooks
         try
         {
             DemoteDecision();
-            _pendingBuyId = null;
-            _pendingBuyKind = null;
+            _pendingBuys.Clear();
 
             var kind = __1.GetType().Name.Replace("Room", "").ToLowerInvariant();
             var roomType = Reflect.GetMember(__1, "RoomType")?.ToString()?.ToLowerInvariant();
@@ -2422,22 +2460,22 @@ internal static class ReplayHooks
     {
         try
         {
-            var kind = _pendingBuyKind
-                ?? (__2.GetType().Name.Contains("CardRemoval") ? "removal_service" : "other");
-            var id = _pendingBuyId;
-            _pendingBuyId = null;
-            _pendingBuyKind = null;
+            _pendingBuys.Remove(__2, out var pending);
+            var kind = pending?.Kind ?? ShopKind(__2);
 
-            ReplayRecorder.Line("buy")
-                ?.Set("decision_id",
-                    kind == "removal_service" && _decision > 0 ? _decision : (int?)null)
-                .Set("kind", kind)
-                .Set("slot", ShopSlot(__1, __2, kind))
-                .Set("id", id)
-                .Set("cost_current", __3)
-                .Set("cost_resource", "gold")
-                .Set("gold_on_hand", Reflect.GetInt(__1, "Gold", 0))
-                .Emit();
+            var line = ReplayRecorder.Line("buy");
+            if (line != null)
+            {
+                var selects = ShopRows.OpensCardSelect(kind, Reflect.GetString(__2, "MerchantEntryType"))
+                              && (kind == "removal_service" || _decisionType?.StartsWith("deck_select") == true);
+                line.Set("decision_id", selects && _decision > 0 ? _decision : (int?)null);
+                EntryFields(line, __2, __1, kind, pending?.Id, pending?.StartSeq)
+                    .Set("mine", Mine(__1))
+                    .Set("cost_current", __3)
+                    .Set("cost_resource", "gold")
+                    .Set("gold_on_hand", Reflect.GetInt(__1, "Gold", 0))
+                    .Emit();
+            }
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
@@ -2448,7 +2486,7 @@ internal static class ReplayHooks
         {
             if (kind == "removal_service") return null;
             var room = Reflect.GetMember(Reflect.GetMember(player, "RunState"), "CurrentRoom");
-            var inv = Reflect.Call(room, "GetLocalInventory");
+            var inv = Core.RoomExport.MerchantInventory(room, player);
             if (inv == null) return null;
 
             var lists = kind switch
@@ -2456,6 +2494,7 @@ internal static class ReplayHooks
                 "card" => new[] { "CharacterCardEntries", "ColorlessCardEntries" },
                 "relic" => new[] { "RelicEntries" },
                 "potion" => new[] { "PotionEntries" },
+                "blitz" => new[] { "BlitzEntries" },
                 _ => Array.Empty<string>(),
             };
             var i = 0;
@@ -2702,7 +2741,7 @@ internal static class ReplayHooks
     {
         try
         {
-            var fromShelf = _pendingBuyKind != null;
+            var fromShelf = _pendingBuys.Count > 0;
             var grantable = _decisionType is "event" or "rest"
                 || _decisionType == TreasureType && _treasureOfferIds?.Contains(Ids.Bare(Reflect.GetString(__0, "Id")) ?? "") == true;
             ReplayRecorder.Line("relic")
