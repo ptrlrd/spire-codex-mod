@@ -86,6 +86,7 @@ public static class ReplayRecorder
             }
 
             _seed = seed;
+            Competitive.EndRun();
             _lastInRun = null;
             _deckSnapshot = null;
             _deckCount = -1;
@@ -127,12 +128,17 @@ public static class ReplayRecorder
 
             lock (Gate) _journal = journal;
             ResetFaults();
+            var reloads = Reloads();
+            Competitive.BeginRun(journal.Path, journal.Resumed, snapshot.TotalFloor, reloads);
+            if (Competitive.On && Competitive.RunFlag is not ("late" or "gap"))
+                Api.CompetitiveStart.Send(runSeed, startTime, snapshot.Character, snapshot.GameMode,
+                    snapshot.Ascension, snapshot.PlayerCount, snapshot.Modifiers.Count);
             WriteHeader(snapshot, runSeed, startTime);
 
-            var reloads = Reloads();
             AttemptId = reloads;
             NoteFloor(snapshot.TotalFloor, snapshot.Act);
             var resumedCombat = ReplayHooks.ResumeCombatIfInFight();
+            Competitive.NoteResumedCombat(resumedCombat);
             if (journal.Resumed || reloads > 0)
                 Line("resume")
                     ?.Set("reloads", reloads)
@@ -225,6 +231,12 @@ public static class ReplayRecorder
             .Set("platform_type", "steam")
             .Set("player_count", s.PlayerCount)
             .Set("reloads", Reloads())
+            .SetFlag("competitive", Competitive.On)
+            .Set("competitive_flag", Competitive.On ? Competitive.RunFlag : null)
+            .Set("competitive_bracket", Competitive.On
+                ? ReplayJournalScan.Bracket(s.GameMode, s.Ascension, s.PlayerCount, s.Modifiers.Count) : null)
+            .Set("crash_recoveries", Competitive.Crashes > 0 ? Competitive.Crashes : (int?)null)
+            .Set("unexplained_exits", Competitive.Unexplained > 0 ? Competitive.Unexplained : (int?)null)
             .Set("starting_deck", StartingDeck())
             .Set("starting_relics", s.Relics.Select(r => r.Id).ToList())
             .Set("relics", HeldRelics())
@@ -270,7 +282,7 @@ public static class ReplayRecorder
         catch { return null; }
     }
 
-    private static bool? FullConsole()
+    public static bool? FullConsole()
     {
         try
         {
@@ -731,15 +743,77 @@ public static class ReplayRecorder
                 if (!EndsWithNewline(file)) File.AppendAllText(file, "\n");
                 var last = ReplayJournal.LastSequence(file);
                 var open = ReplayJournalScan.OpenCombat(file);
+                var exit = ExitOf(file);
                 File.AppendAllText(file,
                     "{\"t\":\"end\",\"s\":" + (last + 1) + ",\"terminal_reason\":\"interrupted\"," +
-                    "\"capture_status\":\"truncated\"" +
+                    "\"capture_status\":\"truncated\",\"exit\":\"" + exit + "\"" +
                     (last >= 0 ? ",\"last_s\":" + last : "") +
                     (open != null ? ",\"open_combat\":" + JsonSerializer.Serialize(open) : "") + "}\n");
                 MainFile.Logger.Info($"replay: recovered {Path.GetFileName(file)} (interrupted)");
             }
             catch {  }
         }
+    }
+
+    private static string ExitOf(string journal)
+    {
+        try
+        {
+            var logs = Path.Combine(Godot.OS.GetUserDataDir(), "logs");
+            var log = Directory.GetFiles(logs, "godot2*.log")
+                .Select(f => new FileInfo(f))
+                .OrderByDescending(f => f.LastWriteTimeUtc)
+                .FirstOrDefault();
+            if (log == null) return "unknown";
+            var ended = log.LastWriteTimeUtc;
+            var written = File.GetLastWriteTimeUtc(journal);
+            if (written > ended.AddMinutes(1) || written < ended.AddMinutes(-30)) return "unknown";
+
+            string tail;
+            using (var fs = new FileStream(log.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            {
+                var take = (int)Math.Min(fs.Length, 16384);
+                fs.Seek(-take, SeekOrigin.End);
+                var buf = new byte[take];
+                var read = fs.Read(buf, 0, take);
+                tail = System.Text.Encoding.UTF8.GetString(buf, 0, read);
+            }
+            var kind = ReplayJournalScan.ExitKind(tail);
+            if (kind == "killed" && CrashReportSince(ended.AddMinutes(-2))) kind = "crash";
+            return kind;
+        }
+        catch { return "unknown"; }
+    }
+
+    private static bool CrashReportSince(DateTime since)
+    {
+        try
+        {
+            var sentry = Path.Combine(Godot.OS.GetUserDataDir(), "sentry", "reports");
+            if (Directory.Exists(sentry)
+                && Directory.EnumerateFiles(sentry, "*", SearchOption.AllDirectories)
+                    .Any(f => File.GetLastWriteTimeUtc(f) >= since))
+                return true;
+        }
+        catch { }
+        foreach (var root in new[]
+        {
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Microsoft", "Windows", "WER"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "Windows", "WER"),
+        })
+            foreach (var kind in new[] { "ReportArchive", "ReportQueue" })
+            {
+                try
+                {
+                    var dir = Path.Combine(root, kind);
+                    if (Directory.Exists(dir)
+                        && Directory.EnumerateDirectories(dir, "App*_SlayTheSpire2*")
+                            .Any(d => Directory.GetLastWriteTimeUtc(d) >= since))
+                        return true;
+                }
+                catch { }
+            }
+        return false;
     }
 
     private static bool EndsWithNewline(string file)

@@ -13,13 +13,13 @@ namespace SpireCodex.Api;
 //  - UpdateAvailable: a newer mod version published at GET /api/mod/latest (null when
 //    current or the endpoint is not deployed).
 //  - Sts2Untested: the running game build is newer than the newest tested one. The tested
-//    version ships as a baked-in fallback and the server value overrides it, so after a
-//    game patch the warning can be cleared (or raised) without shipping a new mod build.
+//    version ships baked in and the server can only raise it, so after a game patch the
+//    warning can be cleared without shipping a new mod build.
 // Surfaced in the F9 overlay header; everything degrades silently when offline.
 public static class ModVersion
 {
     // Bump when a release is verified against a newer game build.
-    private const string FallbackTestedSts2 = "v0.107.1";
+    private const string FallbackTestedSts2 = "v0.114.0";
 
     public static string Current { get; } = ReadManifestVersion() ?? "v0.0.0";
     public static string? UpdateAvailable { get; private set; }
@@ -51,8 +51,15 @@ public static class ModVersion
                 MainFile.Logger.Info($"update available: {latest} (running {Current})");
             }
 
+            if (root.TryGetProperty("competitive_approved_mods", out var mods)
+                && mods.ValueKind == JsonValueKind.Array)
+                Core.Competitive.SetApproved(mods.EnumerateArray()
+                    .Where(m => m.ValueKind == JsonValueKind.String)
+                    .Select(m => m.GetString()!));
+
             if (root.TryGetProperty("sts2_tested", out var t) && t.GetString() is { Length: > 0 } tested)
-                Sts2Untested = Compare(sts2Version, tested) > 0;
+                Sts2Untested = Compare(sts2Version, tested) > 0
+                    && Compare(sts2Version, FallbackTestedSts2) > 0;
         }
         catch { /* endpoint not deployed yet, or offline; the baked-in fallback applies */ }
     }

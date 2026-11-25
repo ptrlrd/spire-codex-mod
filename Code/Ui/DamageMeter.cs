@@ -16,11 +16,11 @@ namespace SpireCodex.Ui;
 public partial class DamageMeter : Node
 {
     // Unified Spire Codex palette (matches the F5 companion panel): brand gold on a warm dark card.
-    private static readonly Color Bg = Color.FromHtml("171c24");
-    private static readonly Color Border = Color.FromHtml("2c313c");
-    private const string Accent = "#ffd34d"; // brand gold
-    private const string Text = "#e8e3d6";
-    private const string Muted = "#c8ccd5";
+    private static readonly Color Bg = Color.FromHtml("132028");
+    private static readonly Color Border = Color.FromHtml("2a4555");
+    private const string Accent = "#e8b830"; // brand gold
+    private const string Text = "#e0ddd8";
+    private const string Muted = "#bfc4ca";
 
     private double _accum;
     private CanvasLayer _layer = null!;
@@ -64,7 +64,7 @@ public partial class DamageMeter : Node
 
         // Stand down when the Overwolf overlay is up: it has its own damage meter (fed by this
         // mod's live-state), so showing ours too would stack two meters.
-        var combat = (SpireCodexConfig.ShowDamageMeter && !OverwolfActive())
+        var combat = (Features.DamageMeter.On && !OverwolfActive())
             ? LiveStateProducer.Latest?.Combat : null;
         if (combat == null) { HidePanel(); return; }
 

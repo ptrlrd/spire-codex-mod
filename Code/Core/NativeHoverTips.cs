@@ -105,7 +105,7 @@ internal static class NativeHoverTips
     {
         try
         {
-            if (!SpireCodexConfig.ShowHoverTips) return;
+            if (!Ui.Features.HoverTips.On) return;
             if (__instance is not Godot.Control owner) return;
             _hoverTipRemove?.Invoke(null, new object[] { owner });
             var text = BuildRestText(__instance);
@@ -163,7 +163,7 @@ internal static class NativeHoverTips
     {
         try
         {
-            if (!SpireCodexConfig.ShowHoverTips) return;
+            if (!Ui.Features.HoverTips.On) return;
             if (!Reflect.GetBool(__instance, "ShowTip") && __instance is Godot.Control c)
                 c.FocusMode = Godot.Control.FocusModeEnum.All;
         }
@@ -174,7 +174,7 @@ internal static class NativeHoverTips
     {
         try
         {
-            if (!SpireCodexConfig.ShowHoverTips) return;
+            if (!Ui.Features.HoverTips.On) return;
             if (Reflect.GetBool(__instance, "ShowTip")) return;
             if (_createAndShowSingle == null || __instance is not Godot.Control owner) return;
             var text = BuildCharacterText();
@@ -218,14 +218,14 @@ internal static class NativeHoverTips
                 && m.GetParameters()[1].ParameterType == enumerableOfTip);
     }
 
-    private const string Logo = "[color=#ffd34d][b]Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color]";
+    private const string Logo = "[color=#e8b830][b]Spire[/b][/color] [color=#ffffff][b]Codex[/b][/color]";
 
     private static void Prefix(object[] __args)
     {
         try
         {
             if (_iHoverTipType == null || __args.Length < 2) return;
-            if (!SpireCodexConfig.ShowHoverTips) return;
+            if (!Ui.Features.HoverTips.On) return;
             var owner = __args[0];
             if (owner == null) return;
             if (ContainsOurTip(__args[1])) return;
@@ -316,7 +316,7 @@ internal static class NativeHoverTips
         var character = RewardContext.Character;
         var sb = new StringBuilder();
         sb.Append(Logo).Append('\n');
-        if (isBest) sb.Append($"[color=#ffd34d]{Loc.T("hover_best_pick")}[/color]\n");
+        if (isBest) sb.Append($"[color=#e8b830]{Loc.T("hover_best_pick")}[/color]\n");
         sb.Append($"[color={TierHex(tier)}]{Loc.F("hover_tier", tier)}[/color]\n");
         if (m is { Lift: { } lift }) AppendLift(sb, lift, m.LiftN);
         var elo = sc.Elo ?? m?.Elo;
@@ -545,8 +545,8 @@ internal static class NativeHoverTips
 
     private static string TierHex(string tier) => tier switch
     {
-        "S" => "#ffd34d", "A" => "#86e08a", "B" => "#6bd3c7",
-        "C" => "#e8e3d6", "D" => "#e0b070", _ => "#e08a86",
+        "S" => "#e8b830", "A" => "#86e08a", "B" => "#6bd3c7",
+        "C" => "#e0ddd8", "D" => "#e0b070", _ => "#e08a86",
     };
 
     private static string Pretty(string id)

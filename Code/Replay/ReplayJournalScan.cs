@@ -128,6 +128,154 @@ public static class ReplayJournalScan
         return best;
     }
 
+    public readonly record struct CompetitiveHistory(bool StartedOn, string? Flag, int CrashRecoveries, int UnexplainedExits);
+
+    private static readonly string[] CrashMarks =
+    {
+        "Program crashed", "Dumping the backtrace", "CrashHandlerException", "Unhandled exception",
+        "FATAL:", "Fatal error", "Out of memory", "Parameter \"mem\" is null",
+    };
+
+    private static readonly string[] CleanMarks =
+    {
+        "leaked at exit", "still in use at exit",
+    };
+
+    public static string ExitKind(string logTail)
+    {
+        foreach (var mark in CrashMarks)
+            if (logTail.Contains(mark, StringComparison.OrdinalIgnoreCase)) return "crash";
+        foreach (var mark in CleanMarks)
+            if (logTail.Contains(mark, StringComparison.Ordinal)) return "clean";
+        return "killed";
+    }
+
+    public static CompetitiveHistory CompetitiveOf(string path)
+    {
+        var headers = 0;
+        var startedOn = false;
+        string? flag = null;
+        var crashes = 0;
+        var unexplained = 0;
+        string? open = null;
+        var quit = false;
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var reader = new StreamReader(stream);
+            while (reader.ReadLine() is { } line)
+            {
+                var header = line.Contains("\"t\":\"header\"", StringComparison.Ordinal);
+                var end = line.Contains("\"t\":\"end\"", StringComparison.Ordinal);
+                var mark = line.Contains("\"t\":\"competitive\"", StringComparison.Ordinal);
+                var starts = line.Contains("\"t\":\"combat_start\"", StringComparison.Ordinal);
+                var ends = line.Contains("\"t\":\"combat_end\"", StringComparison.Ordinal);
+                if (!header && !end && !mark && !starts && !ends) continue;
+                try
+                {
+                    using var doc = JsonDocument.Parse(line);
+                    var root = doc.RootElement;
+                    if (starts) open = Text(root, "combat_id");
+                    else if (ends) open = null;
+                    else if (header)
+                    {
+                        headers++;
+                        var on = root.TryGetProperty("competitive", out var c) && c.ValueKind == JsonValueKind.True;
+                        if (headers == 1) startedOn = on;
+                        else if (!on && startedOn) flag ??= "toggled";
+                        flag ??= Text(root, "competitive_flag");
+                    }
+                    else if (mark)
+                    {
+                        flag ??= Text(root, "flag");
+                        if (Text(root, "event") == "quit") quit = true;
+                    }
+                    else
+                    {
+                        var reason = Text(root, "terminal_reason");
+                        if (reason == "left_run") flag ??= open != null ? "reload" : "quit";
+                        else if (reason == "interrupted")
+                        {
+                            var exit = Text(root, "exit");
+                            if (quit || exit == "clean") flag ??= open != null ? "reload" : "quit";
+                            else if (open != null && exit == "killed")
+                            {
+                                unexplained++;
+                                if (unexplained > 1) flag ??= "killed";
+                            }
+                            else if (exit != "clean") crashes++;
+                        }
+                        quit = false;
+                        open = null;
+                    }
+                }
+                catch { }
+            }
+        }
+        catch { }
+        return new CompetitiveHistory(startedOn, flag, crashes, unexplained);
+    }
+
+    public readonly record struct Progress(int MaxFloor, int MaxReloads, HashSet<string> EndedCombats);
+
+    public static Progress ProgressOf(string path)
+    {
+        var floor = -1;
+        var reloads = -1;
+        var ended = new HashSet<string>(StringComparer.Ordinal);
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var reader = new StreamReader(stream);
+            while (reader.ReadLine() is { } line)
+            {
+                floor = Math.Max(floor, TopFloor(line));
+                var ends = line.Contains("\"t\":\"combat_end\"", StringComparison.Ordinal);
+                var counts = line.Contains("\"t\":\"header\"", StringComparison.Ordinal)
+                    || line.Contains("\"t\":\"resume\"", StringComparison.Ordinal);
+                if (!ends && !counts) continue;
+                try
+                {
+                    using var doc = JsonDocument.Parse(line);
+                    var root = doc.RootElement;
+                    if (ends)
+                    {
+                        if (Text(root, "combat_id") is { } id) ended.Add(id);
+                    }
+                    else if (root.TryGetProperty("reloads", out var r) && r.ValueKind == JsonValueKind.Number)
+                        reloads = Math.Max(reloads, r.GetInt32());
+                }
+                catch { }
+            }
+        }
+        catch { }
+        return new Progress(floor, reloads, ended);
+    }
+
+    public static bool RolledBack(Progress seen, int floor, int reloads)
+        => (floor > 0 && floor < seen.MaxFloor) || reloads < seen.MaxReloads;
+
+    public static string? Bracket(string? gameMode, int ascension, int players, int modifiers)
+    {
+        if (players != 1) return null;
+        if (string.Equals(gameMode, "Dread", StringComparison.OrdinalIgnoreCase)) return "dread_solo";
+        if (string.Equals(gameMode, "Standard", StringComparison.OrdinalIgnoreCase)
+            && ascension == 10 && modifiers == 0)
+            return "a10_solo";
+        return null;
+    }
+
+    private static int TopFloor(string line)
+    {
+        const string needle = "\"floor\":";
+        var at = line.IndexOf(needle, StringComparison.Ordinal);
+        if (at < 0) return -1;
+        var nested = line.IndexOfAny(new[] { '{', '[' }, 1);
+        if (nested >= 0 && nested < at) return -1;
+        var upTo = Math.Min(line.Length, at + needle.Length + 12);
+        return (int)MaxField(line.Substring(0, upTo), "floor", -1);
+    }
+
     public static string? OpenCombat(string path)
     {
         string? open = null;

@@ -10,18 +10,20 @@ namespace SpireCodex.Ui;
 // should pull from here rather than write its own Color literals.
 public static class Skin
 {
-    public static readonly Color Bg = Hex("171c24");          // card / panel body
-    public static readonly Color BgSoft = Hex("1d2430");      // raised row
-    public static readonly Color BgSofter = Hex("242a35");    // secondary button face
-    public static readonly Color Border = Hex("2c313c");
-    public static readonly Color Text = Hex("e8e3d6");
-    public static readonly Color TextMuted = Hex("c8ccd5");
-    public static readonly Color Accent = Hex("ffd34d");      // brand gold
-    public static readonly Color AccentBright = Hex("ffe073"); // gold hover
-    public static readonly Color AccentDim = Hex("d9ad33");    // gold pressed
-    public static readonly Color Field = Hex("0f1217");        // inset field / checkbox interior
-    public static readonly Color Good = Hex("4ec977");
-    public static readonly Color Danger = Hex("c74b4b");
+    public static readonly Color Bg = Hex("132028");
+    public static readonly Color BgSoft = Hex("0f1920");
+    public static readonly Color BgSofter = Hex("1a2b35");
+    public static readonly Color Border = Hex("2a4555");
+    public static readonly Color Line = Hex("1e3040");
+    public static readonly Color Link = Hex("45cfd8");
+    public static readonly Color Text = Hex("e0ddd8");
+    public static readonly Color TextMuted = Hex("bfc4ca");
+    public static readonly Color Accent = Hex("e8b830");      // brand gold
+    public static readonly Color AccentBright = Hex("fbd91e"); // gold hover
+    public static readonly Color AccentDim = Hex("c19a24");    // gold pressed
+    public static readonly Color Field = Hex("0a1118");        // inset field / checkbox interior
+    public static readonly Color Good = Hex("34d399");
+    public static readonly Color Danger = Hex("f87171");
 
     // Gold call-to-action: solid gold face, dark text. For the one action a surface exists for.
     public static void Primary(Button b)
@@ -64,9 +66,12 @@ public static class Skin
     // The overlay's card shell: dark body, gold hairline, generous padding.
     public static StyleBoxFlat CardBox()
     {
-        var s = new StyleBoxFlat { BgColor = Bg with { A = 0.98f }, BorderColor = Accent };
-        s.SetBorderWidthAll(2);
+        var s = new StyleBoxFlat { BgColor = Bg with { A = 0.98f }, BorderColor = Border };
+        s.SetBorderWidthAll(1);
         s.SetCornerRadiusAll(8);
+        s.ShadowColor = new Color(0, 0, 0, 0.6f);
+        s.ShadowSize = 18;
+        s.ShadowOffset = new Vector2(0, 8);
         s.ContentMarginLeft = 22; s.ContentMarginRight = 22;
         s.ContentMarginTop = 16; s.ContentMarginBottom = 16;
         return s;
@@ -94,6 +99,8 @@ public static class Skin
         "res://themes/kreon_bold_glyph_space_one.tres",
         "res://fonts/kreon_bold.ttf",
     };
+
+    public static Font? Bold { get; private set; }
 
     private static Theme? _gameTheme;
     private static bool _themeResolved;
@@ -129,6 +136,7 @@ public static class Skin
         theme.SetFont("italics_font", "RichTextLabel", regular);
         theme.SetFont("bold_italics_font", "RichTextLabel", bold);
 
+        Bold = bold;
         _gameTheme = theme;
         return _gameTheme;
     }
@@ -201,6 +209,123 @@ public static class Skin
         l.AddThemeColorOverride("font_color", TextMuted);
         l.AddThemeFontSizeOverride("font_size", 12);
         return l;
+    }
+
+    public static Label Title(string text)
+    {
+        var l = new Label { Text = text, AutowrapMode = TextServer.AutowrapMode.WordSmart, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        l.AddThemeColorOverride("font_color", Text);
+        l.AddThemeFontSizeOverride("font_size", 16);
+        if (Bold != null) l.AddThemeFontOverride("font", Bold);
+        return l;
+    }
+
+    public static void Tab(Button b, bool active)
+    {
+        var box = new StyleBoxFlat { BgColor = new Color(0, 0, 0, 0), BorderColor = active ? Accent : new Color(0, 0, 0, 0) };
+        box.BorderWidthBottom = 3;
+        box.ContentMarginLeft = 14; box.ContentMarginRight = 14;
+        box.ContentMarginTop = 8; box.ContentMarginBottom = 6;
+        foreach (var st in new[] { "normal", "hover", "pressed", "hover_pressed" })
+            b.AddThemeStyleboxOverride(st, box);
+        var focus = new StyleBoxFlat { BgColor = new Color(0, 0, 0, 0), BorderColor = Link };
+        focus.SetBorderWidthAll(1);
+        focus.SetCornerRadiusAll(4);
+        b.AddThemeStyleboxOverride("focus", focus);
+        b.AddThemeColorOverride("font_color", active ? Accent : TextMuted);
+        b.AddThemeColorOverride("font_hover_color", active ? Accent : Text);
+        b.AddThemeColorOverride("font_pressed_color", Accent);
+        b.AddThemeColorOverride("font_focus_color", active ? Accent : Text);
+        b.AddThemeFontSizeOverride("font_size", 15);
+        if (active && Bold != null) b.AddThemeFontOverride("font", Bold);
+        else b.RemoveThemeFontOverride("font");
+    }
+
+    public static void Segment(Button b, bool active)
+    {
+        var face = active ? Accent : BgSoft;
+        var normal = ButtonBox(face, active ? Accent : Border);
+        normal.ContentMarginTop = 6; normal.ContentMarginBottom = 6;
+        var hover = ButtonBox(active ? AccentBright : BgSofter, active ? AccentBright : Accent);
+        hover.ContentMarginTop = 6; hover.ContentMarginBottom = 6;
+        b.AddThemeStyleboxOverride("normal", normal);
+        b.AddThemeStyleboxOverride("hover", hover);
+        b.AddThemeStyleboxOverride("pressed", normal);
+        b.AddThemeStyleboxOverride("disabled", normal);
+        b.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
+        foreach (var p in new[] { "font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_disabled_color" })
+            b.AddThemeColorOverride(p, active ? Field : TextMuted);
+        if (!active) b.AddThemeColorOverride("font_hover_color", Text);
+        b.AddThemeFontSizeOverride("font_size", 13);
+    }
+
+    public static CheckButton Switch(bool on)
+    {
+        var sw = new CheckButton { ButtonPressed = on, SizeFlagsVertical = Control.SizeFlags.ShrinkCenter };
+        foreach (var icon in new[] { "checked", "checked_disabled", "checked_mirrored", "checked_disabled_mirrored" })
+            sw.AddThemeIconOverride(icon, SwitchIcon(true));
+        foreach (var icon in new[] { "unchecked", "unchecked_disabled", "unchecked_mirrored", "unchecked_disabled_mirrored" })
+            sw.AddThemeIconOverride(icon, SwitchIcon(false));
+        foreach (var st in new[] { "normal", "hover", "pressed", "hover_pressed", "disabled" })
+            sw.AddThemeStyleboxOverride(st, new StyleBoxEmpty());
+        var focus = new StyleBoxFlat { BgColor = new Color(0, 0, 0, 0), BorderColor = Link };
+        focus.SetBorderWidthAll(1);
+        focus.SetCornerRadiusAll(12);
+        sw.AddThemeStyleboxOverride("focus", focus);
+        return sw;
+    }
+
+    private static ImageTexture? _switchOn, _switchOff;
+    private static ImageTexture SwitchIcon(bool on) => on ? (_switchOn ??= MakeSwitchIcon(true)) : (_switchOff ??= MakeSwitchIcon(false));
+    private static ImageTexture MakeSwitchIcon(bool on)
+    {
+        const int w = 42, h = 24;
+        var img = Image.CreateEmpty(w, h, false, Image.Format.Rgba8);
+        var track = on ? Hex("3d3212") : Field;
+        var rim = on ? Accent : Border;
+        var knob = on ? Accent : TextMuted;
+        var knobX = on ? w - 12f : 12f;
+        for (var y = 0; y < h; y++)
+        for (var x = 0; x < w; x++)
+        {
+            var px = x + 0.5f;
+            var py = y + 0.5f;
+            var cx = Mathf.Clamp(px, h / 2f, w - h / 2f);
+            var d = new Vector2(px - cx, py - h / 2f).Length();
+            var c = new Color(0, 0, 0, 0);
+            if (d <= h / 2f) c = d > h / 2f - 1.5f ? rim : track;
+            if (new Vector2(px - knobX, py - h / 2f).Length() <= 8.5f) c = knob;
+            img.SetPixel(x, y, c);
+        }
+        return ImageTexture.CreateFromImage(img);
+    }
+
+    private static ImageTexture? _logo;
+    private static bool _logoResolved;
+    public static ImageTexture? Logo()
+    {
+        if (_logoResolved) return _logo;
+        _logoResolved = true;
+        try
+        {
+            var asm = typeof(Skin).Assembly;
+            foreach (var name in asm.GetManifestResourceNames())
+            {
+                if (!name.EndsWith("codex_logo.png", System.StringComparison.Ordinal)) continue;
+                using var stream = asm.GetManifestResourceStream(name);
+                if (stream == null) break;
+                using var copy = new System.IO.MemoryStream();
+                stream.CopyTo(copy);
+                var img = new Image();
+                if (img.LoadPngFromBuffer(copy.ToArray()) == Error.Ok) _logo = ImageTexture.CreateFromImage(img);
+                break;
+            }
+        }
+        catch (System.Exception e)
+        {
+            MainFile.Logger.Info($"skin: logo load failed: {e.Message}");
+        }
+        return _logo;
     }
 
     public static StyleBoxFlat RowBox(bool active)

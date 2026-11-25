@@ -49,13 +49,7 @@ public partial class ConsentPrompt : CanvasLayer
             GrowHorizontal = Control.GrowDirection.Both,
             GrowVertical = Control.GrowDirection.Both,
         };
-        var style = new StyleBoxFlat
-        {
-            BgColor = new Color(0.09f, 0.11f, 0.14f, 0.98f),
-            BorderColor = new Color(1f, 0.827f, 0.302f, 1f),
-        };
-        style.SetBorderWidthAll(2);
-        style.SetCornerRadiusAll(8);
+        var style = Skin.CardBox();
         style.ContentMarginLeft = 22; style.ContentMarginRight = 22;
         style.ContentMarginTop = 16; style.ContentMarginBottom = 16;
         _panel.AddThemeStyleboxOverride("panel", style);

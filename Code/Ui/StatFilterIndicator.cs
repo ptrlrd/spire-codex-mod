@@ -39,8 +39,8 @@ public partial class StatFilterIndicator : Node
         _accum = 0;
 
         if (CodexScores.CurrentFilter == StatFilter.DefaultKey
-            || !SpireCodexConfig.ShowBracketTag
-            || (!SpireCodexConfig.ShowCardRewardHints && !SpireCodexConfig.ShowHoverTips))
+            || !Features.BracketTag.On
+            || (!Features.Plates.On && !Features.HoverTips.On))
         {
             HidePill();
             return;
@@ -50,7 +50,7 @@ public partial class StatFilterIndicator : Node
         EnsurePill();
         if (label != _shown)
         {
-            _pill!.Text = $"[color=#ffd34d][b]{Loc.T("sf_stats")}[/b][/color] [color=#e8e3d6]{label}[/color]";
+            _pill!.Text = $"[color=#e8b830][b]{Loc.T("sf_stats")}[/b][/color] [color=#e0ddd8]{label}[/color]";
             _shown = label;
         }
 
@@ -64,7 +64,7 @@ public partial class StatFilterIndicator : Node
     private void EnsurePill()
     {
         if (_pill != null && GodotObject.IsInstanceValid(_pill)) return;
-        var style = new StyleBoxFlat { BgColor = new Color(0.06f, 0.07f, 0.09f, 0.88f) };
+        var style = new StyleBoxFlat { BgColor = new Color(0.039f, 0.067f, 0.094f, 0.88f) };
         style.SetCornerRadiusAll(5);
         style.ContentMarginLeft = 10; style.ContentMarginRight = 10;
         style.ContentMarginTop = 5; style.ContentMarginBottom = 5;

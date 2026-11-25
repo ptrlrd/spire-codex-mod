@@ -56,6 +56,7 @@
         <!-- Mod-chrome translations (tabs, labels, prose). Compiled into the dll so they are
              available even in a no-pck dev build; read by Loc via GetManifestResourceStream. -->
         <EmbeddedResource Include="Code/Loc/mod_ui.json" />
+        <EmbeddedResource Include="Code/Ui/Assets/codex_logo.png" />
     </ItemGroup>
 
     <ItemGroup>

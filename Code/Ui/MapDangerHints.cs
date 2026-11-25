@@ -73,7 +73,7 @@ public partial class MapDangerHints : Node
         // node actually being visible. The tree search is throttled to once a second while
         // unresolved; once cached, per-tick cost is a visibility check.
         var snap = Producer.LiveStateProducer.Latest;
-        if (!SpireCodexConfig.ShowMapDanger || snap is not { InRun: true })
+        if (!Features.MapRoute.On || snap is not { InRun: true })
         {
             ClearAll();
             return;
@@ -414,7 +414,7 @@ public partial class MapDangerHints : Node
         var key = node.GetInstanceId();
         if (!_labels.TryGetValue(key, out var label) || !GodotObject.IsInstanceValid(label))
         {
-            var pill = new StyleBoxFlat { BgColor = new Color(0.06f, 0.07f, 0.09f, 0.82f) };
+            var pill = new StyleBoxFlat { BgColor = new Color(0.039f, 0.067f, 0.094f, 0.82f) };
             pill.SetCornerRadiusAll(4);
             pill.ContentMarginLeft = 5; pill.ContentMarginRight = 5;
             pill.ContentMarginTop = 0; pill.ContentMarginBottom = 1;
@@ -461,7 +461,7 @@ public partial class MapDangerHints : Node
             HideEventBanner();
             return;
         }
-        if (!SpireCodexConfig.ShowUpcomingEvents)
+        if (!Features.UpcomingEvents.On)
         {
             HideEventBanner();
             var view = _layer.GetViewport().GetVisibleRect().Size;
@@ -471,7 +471,7 @@ public partial class MapDangerHints : Node
 
         if (_eventBanner == null || !GodotObject.IsInstanceValid(_eventBanner))
         {
-            var pill = new StyleBoxFlat { BgColor = new Color(0.06f, 0.07f, 0.09f, 0.88f) };
+            var pill = new StyleBoxFlat { BgColor = new Color(0.039f, 0.067f, 0.094f, 0.88f) };
             pill.SetCornerRadiusAll(5);
             pill.ContentMarginLeft = 10; pill.ContentMarginRight = 10;
             pill.ContentMarginTop = 6; pill.ContentMarginBottom = 6;
@@ -489,7 +489,7 @@ public partial class MapDangerHints : Node
         }
 
         var sb = new System.Text.StringBuilder();
-        sb.Append($"[color=#ffd34d][b]{Loc.T("map_upcoming_events")}[/b][/color]");
+        sb.Append($"[color=#e8b830][b]{Loc.T("map_upcoming_events")}[/b][/color]");
         for (var i = 0; i < events.Count && i < 3; i++)
             sb.Append($"\n[color={(i == 0 ? "#e8e8e8" : "#9aa0a8")}]{events[i].Name}[/color]");
         _eventBanner.Text = sb.ToString();

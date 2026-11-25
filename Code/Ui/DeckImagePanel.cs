@@ -21,14 +21,19 @@ public partial class DeckImagePanel : CanvasLayer
     private static readonly Color Danger = Skin.Danger;
 
     private static readonly string[] Tabs =
-        { "deck_tab_leaderboard", "deck_tab_runs", "deck_tab_import", "deck_tab_settings", "deck_tab_about" };
+        { "deck_tab_home", "deck_tab_runs", "deck_tab_leaderboard", "deck_tab_competitive", "deck_tab_settings", "deck_tab_about" };
 
-    internal const int TabLeaderboard = 0, TabRuns = 1, TabImport = 2, TabSettings = 3, TabAbout = 4;
+    internal const int TabHome = 0, TabRuns = 1, TabLeaderboard = 2, TabCompetitive = 3, TabSettings = 4, TabAbout = 5;
 
-    private static readonly string[] SettingsCats =
-        { "set_cat_features", "set_cat_stats", "set_cat_tracking", "set_cat_controls", "set_cat_system" };
-    private const int CatFeatures = 0, CatStats = 1, CatTracking = 2, CatControls = 3;
-    private int _settingsCat;
+    private static readonly (Feature Feature, FeatureThumb.Kind Kind)[] HomeFeatures =
+    {
+        (Features.Plates, FeatureThumb.Kind.Plates),
+        (Features.HoverTips, FeatureThumb.Kind.Hover),
+        (Features.BracketTag, FeatureThumb.Kind.Bracket),
+        (Features.MapRoute, FeatureThumb.Kind.Map),
+        (Features.UpcomingEvents, FeatureThumb.Kind.Events),
+        (Features.DamageMeter, FeatureThumb.Kind.Meter),
+    };
 
     internal static readonly (StatBracket Bracket, string Label, string Tip)[] BracketChoices =
     {
@@ -41,9 +46,10 @@ public partial class DeckImagePanel : CanvasLayer
 
     private const string SiteUrl = "https://spire-codex.com";
     private const string GithubUrl = "https://github.com/ptrlrd/spire-codex";
+    private const string ModGithubUrl = "https://github.com/ptrlrd/spire-codex-mod";
+    private const string KofiUrl = "https://ko-fi.com/spirecodex";
     internal const string DiscordUrl = "https://discord.gg/uged4qFufK";
     private const string OverlayUrl = "https://overwolf.com/app/ptrlrd-spire_codex";
-    private const string ScoringUrl = "https://spire-codex.com/leaderboards/scoring";
     private const string PatreonUrl = "https://www.patreon.com/cw/SpireCodex";
     private const string ImportCreditUrl = "https://github.com/Ind-E/ImportVanillaSaves";
 
@@ -65,6 +71,8 @@ public partial class DeckImagePanel : CanvasLayer
     private VBoxContainer _content = null!;
     private Label _hint = null!;
     private Label? _backfillStatus;
+    private Label? _replayStatus;
+    private Label? _compStatus;
     private Button? _importButton;
     private int _importSource = 1, _importTarget = 1;
     private bool _importArmed;
@@ -72,7 +80,8 @@ public partial class DeckImagePanel : CanvasLayer
 
     public static bool IsOpen => _instance is { Visible: true };
     private readonly List<Button> _tabButtons = new();
-    private readonly List<Button> _bracketButtons = new();
+    private readonly List<(Features.Preset Preset, Button Button)> _presetButtons = new();
+    private Label? _presetDesc;
     private int _tab;
     private int _loadToken;
 
@@ -113,9 +122,10 @@ public partial class DeckImagePanel : CanvasLayer
         _panel = panel;
         var style = new StyleBoxFlat { BgColor = Bg, BorderColor = Border };
         style.SetBorderWidthAll(1);
-        style.SetCornerRadiusAll(10);
+        style.SetCornerRadiusAll(8);
         style.ShadowColor = new Color(0, 0, 0, 0.6f);
         style.ShadowSize = 24;
+        style.ShadowOffset = new Vector2(0, 10);
         style.ContentMarginLeft = 0; style.ContentMarginRight = 0;
         style.ContentMarginTop = 0; style.ContentMarginBottom = 0;
         panel.AddThemeStyleboxOverride("panel", style);
@@ -138,12 +148,12 @@ public partial class DeckImagePanel : CanvasLayer
         root.AddChild(scroll);
 
         _content = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        _content.AddThemeConstantOverride("separation", 10);
+        _content.AddThemeConstantOverride("separation", 8);
         var pad = new MarginContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        pad.AddThemeConstantOverride("margin_left", 12);
-        pad.AddThemeConstantOverride("margin_right", 12);
-        pad.AddThemeConstantOverride("margin_top", 4);
-        pad.AddThemeConstantOverride("margin_bottom", 14);
+        pad.AddThemeConstantOverride("margin_left", 16);
+        pad.AddThemeConstantOverride("margin_right", 16);
+        pad.AddThemeConstantOverride("margin_top", 12);
+        pad.AddThemeConstantOverride("margin_bottom", 18);
         pad.AddChild(_content);
         scroll.AddChild(pad);
 
@@ -162,23 +172,36 @@ public partial class DeckImagePanel : CanvasLayer
                 header.AcceptEvent();
             }
         };
-        var hs = new StyleBoxFlat { BgColor = BgSoft, BorderColor = Accent };
-        hs.BorderWidthBottom = 2;
-        hs.CornerRadiusTopLeft = 10; hs.CornerRadiusTopRight = 10;
+        var hs = new StyleBoxFlat { BgColor = BgSoft };
+        hs.CornerRadiusTopLeft = 8; hs.CornerRadiusTopRight = 8;
         hs.ContentMarginLeft = 14; hs.ContentMarginRight = 14;
         hs.ContentMarginTop = 12; hs.ContentMarginBottom = 12;
         header.AddThemeStyleboxOverride("panel", hs);
 
         var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 10);
+        if (Skin.Logo() is { } logo)
+        {
+            row.AddChild(new TextureRect
+            {
+                Texture = logo,
+                ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                CustomMinimumSize = new Vector2(30, 30),
+                SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
+                MouseFilter = Control.MouseFilterEnum.Ignore,
+            });
+        }
         var brand = new RichTextLabel
         {
             BbcodeEnabled = true, FitContent = true, ScrollActive = false,
             AutowrapMode = TextServer.AutowrapMode.Off,
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        brand.AddThemeFontSizeOverride("normal_font_size", 18);
-        brand.AddThemeFontSizeOverride("bold_font_size", 18);
+        brand.AddThemeFontSizeOverride("normal_font_size", 19);
+        brand.AddThemeFontSizeOverride("bold_font_size", 19);
         brand.Text = Loc.T("deck_brand_wordmark");
         row.AddChild(brand);
 
@@ -199,20 +222,20 @@ public partial class DeckImagePanel : CanvasLayer
     {
         var bar = new PanelContainer();
         _tabBar = bar;
-        var bs = new StyleBoxFlat { BgColor = BgSoft, BorderColor = Border };
+        var bs = new StyleBoxFlat { BgColor = BgSoft, BorderColor = Skin.Line };
         bs.BorderWidthBottom = 1;
-        bs.ContentMarginLeft = 8; bs.ContentMarginRight = 8;
-        bs.ContentMarginTop = 4; bs.ContentMarginBottom = 4;
+        bs.ContentMarginLeft = 6; bs.ContentMarginRight = 6;
+        bs.ContentMarginTop = 0; bs.ContentMarginBottom = 0;
         bar.AddThemeStyleboxOverride("panel", bs);
 
         var row = new HFlowContainer();
-        row.AddThemeConstantOverride("h_separation", 2);
+        row.AddThemeConstantOverride("h_separation", 0);
         row.AddThemeConstantOverride("v_separation", 0);
         for (var i = 0; i < Tabs.Length; i++)
         {
             var idx = i;
             var b = new Button { Text = Loc.T(Tabs[i]), Flat = true };
-            b.AddThemeFontSizeOverride("font_size", 13);
+            Skin.Tab(b, i == _tab);
             b.Pressed += () => SetTab(idx);
             _tabButtons.Add(b);
             row.AddChild(b);
@@ -241,6 +264,26 @@ public partial class DeckImagePanel : CanvasLayer
                 s.Text = Loc.F("deck_backfill_done", RunUploader.BackfillAdded, RunUploader.BackfillDuplicate);
                 s.AddThemeColorOverride("font_color", Good);
                 s.Visible = true;
+            }
+        }
+
+        if (Visible && _tab == TabCompetitive) RefreshCompStatus();
+
+        if (Visible && _tab == TabSettings && _replayStatus is { } r && GodotObject.IsInstanceValid(r))
+        {
+            if (Replay.ReplayUploader.BackfillActive)
+            {
+                r.Text = Loc.F("deck_replays_progress", Replay.ReplayUploader.BackfillDone, Replay.ReplayUploader.BackfillTotal);
+                r.AddThemeColorOverride("font_color", Accent);
+                r.Visible = true;
+            }
+            else if (Replay.ReplayUploader.BackfillHasRun)
+            {
+                r.Text = Replay.ReplayUploader.BackfillTotal == 0
+                    ? Loc.T("deck_replays_none")
+                    : Loc.F("deck_replays_done", Replay.ReplayUploader.BackfillSent);
+                r.AddThemeColorOverride("font_color", Good);
+                r.Visible = true;
             }
         }
     }
@@ -408,8 +451,10 @@ public partial class DeckImagePanel : CanvasLayer
         _tab = tab;
         _loadToken++;
         for (var i = 0; i < _tabButtons.Count; i++)
-            Skin.Pill(_tabButtons[i], i == tab);
+            Skin.Tab(_tabButtons[i], i == tab);
 
+        _presetButtons.Clear();
+        _presetDesc = null;
         foreach (var c in _content.GetChildren()) c.QueueFree();
 
         if (ModVersion.UpdateAvailable is { } up)
@@ -419,9 +464,10 @@ public partial class DeckImagePanel : CanvasLayer
 
         switch (tab)
         {
-            case TabLeaderboard: BuildLeaderboard(); break;
+            case TabHome: BuildHome(); break;
             case TabRuns: BuildRuns(); break;
-            case TabImport: BuildImport(); break;
+            case TabLeaderboard: BuildLeaderboard(); break;
+            case TabCompetitive: BuildCompetitive(); break;
             case TabSettings: BuildSettings(); break;
             case TabAbout: BuildAbout(); break;
         }
@@ -613,7 +659,7 @@ public partial class DeckImagePanel : CanvasLayer
                 : r.Win ? Loc.T("deck_result_victory")
                 : Loc.F("deck_result_death", EncName(r.KilledBy));
             line.Text =
-                $"[color=#e8e3d6][b]{CharName(r.Character)}[/b][/color]   A{r.Ascension}   {result}\n" +
+                $"[color=#e0ddd8][b]{CharName(r.Character)}[/b][/color]   A{r.Ascension}   {result}\n" +
                 Loc.F("deck_runs_meta", r.Floors, FmtTime(r.RunTime), FmtDate(r.Date));
             row.AddChild(line);
 
@@ -641,173 +687,385 @@ public partial class DeckImagePanel : CanvasLayer
         return b;
     }
 
+    private void BuildHome()
+    {
+        _content.AddChild(BuildStatusBox());
+
+        Section(Loc.T("style_title"));
+        var presets = BuildPresetRow();
+        _content.AddChild(presets);
+        _presetDesc = Skin.Muted("");
+        _content.AddChild(_presetDesc);
+        RefreshPreset();
+        if (Core.Competitive.On)
+        {
+            presets.Modulate = new Color(1, 1, 1, 0.4f);
+            _presetDesc.Modulate = new Color(1, 1, 1, 0.4f);
+        }
+
+        Section(Loc.T("home_on_screen"));
+        if (Core.Competitive.On)
+        {
+            var banner = new PanelContainer();
+            var bs = new StyleBoxFlat { BgColor = BgSoft, BorderColor = Accent };
+            bs.SetBorderWidthAll(1);
+            bs.SetCornerRadiusAll(6);
+            bs.ContentMarginLeft = 12; bs.ContentMarginRight = 12;
+            bs.ContentMarginTop = 8; bs.ContentMarginBottom = 8;
+            banner.AddThemeStyleboxOverride("panel", bs);
+            var line = new HBoxContainer();
+            line.AddThemeConstantOverride("separation", 12);
+            var note = Skin.Muted(Loc.T("home_comp_note"), 13);
+            note.AddThemeColorOverride("font_color", Accent);
+            note.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
+            line.AddChild(note);
+            var open = new Button { Text = Loc.T("deck_tab_competitive") };
+            StyleSecondary(open);
+            open.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
+            open.Pressed += () => SetTab(TabCompetitive);
+            line.AddChild(open);
+            banner.AddChild(line);
+            _content.AddChild(banner);
+        }
+        foreach (var (feature, kind) in HomeFeatures)
+            _content.AddChild(FeatureRow(feature, kind));
+        Help(Loc.T("deck_settings_onscreen_desc"));
+    }
+
+    private Control BuildStatusBox()
+    {
+        var box = StatusPanel(out var rows);
+
+        var signedIn = !string.IsNullOrEmpty(Config.SteamId);
+        rows.AddChild(StatusRow(Loc.T("home_account"),
+            Loc.T(signedIn ? "home_signed_in" : "home_signin_pending"), signedIn ? Good : TextMuted, null));
+        rows.AddChild(Divider());
+
+        var upload = Skin.Switch(SpireCodexConfig.UploadRuns);
+        upload.Toggled += on => { SpireCodexConfig.UploadRuns = on; PersistConfig(); };
+        rows.AddChild(StatusRow(null, Loc.T("deck_toggle_upload_runs"), Text, upload));
+        rows.AddChild(Divider());
+
+        string last;
+        Control? view = null;
+        if (!signedIn) last = Loc.T("home_none_yet");
+        else if (_runs == null)
+        {
+            last = Loc.T("deck_loading");
+            var token = _loadToken;
+            _ = LoadAsync(RunFeeds.RecentRunsAsync(Config.SteamId, 20), runs =>
+            {
+                _runs = runs;
+                if (_tab == TabHome && token == _loadToken) SetTab(TabHome);
+            });
+        }
+        else if (_runs.Count == 0) last = Loc.T("home_none_yet");
+        else
+        {
+            var r = _runs[0];
+            last = $"{CharName(r.Character)}  A{r.Ascension}  {Plain(ResultText(r))}";
+            if (r.Hash is { } hash) view = ViewButton(Config.RunUrl(hash));
+        }
+        rows.AddChild(StatusRow(Loc.T("home_last_run"), last, Text, view));
+        rows.AddChild(Divider());
+
+        var brackets = Array.ConvertAll(BracketChoices, c => c.Bracket);
+        var pick = new MarginContainer();
+        pick.AddThemeConstantOverride("margin_top", 6);
+        pick.AddThemeConstantOverride("margin_bottom", 6);
+        pick.AddChild(SettingDropdown(Loc.T("home_stats_from"), brackets,
+            b => Loc.T(Array.Find(BracketChoices, c => c.Bracket == b).Label),
+            SpireCodexConfig.Stats, b => { SpireCodexConfig.Stats = b; PersistConfig(); }));
+        rows.AddChild(pick);
+        rows.AddChild(Divider());
+
+        var verdict = Core.Competitive.Current();
+        var open = new Button { Text = Loc.T("deck_tab_competitive") };
+        StyleSecondary(open);
+        open.Pressed += () => SetTab(TabCompetitive);
+        rows.AddChild(StatusRow(Loc.T("deck_tab_competitive"), Loc.T(verdict.State switch
+        {
+            Core.Competitive.State.Cleared => "comp_cleared",
+            Core.Competitive.State.Flagged => "comp_flagged",
+            _ => "comp_status_off",
+        }), VerdictColor(verdict.State), open));
+        return box;
+    }
+
+    private static Color VerdictColor(Core.Competitive.State state) => state switch
+    {
+        Core.Competitive.State.Cleared => Good,
+        Core.Competitive.State.Flagged => Danger,
+        _ => TextMuted,
+    };
+
+    private static PanelContainer StatusPanel(out VBoxContainer rows)
+    {
+        var box = new PanelContainer();
+        var style = new StyleBoxFlat { BgColor = BgSoft, BorderColor = Skin.Line };
+        style.SetBorderWidthAll(1);
+        style.SetCornerRadiusAll(6);
+        style.ContentMarginLeft = 12; style.ContentMarginRight = 12;
+        style.ContentMarginTop = 2; style.ContentMarginBottom = 2;
+        box.AddThemeStyleboxOverride("panel", style);
+        rows = new VBoxContainer();
+        rows.AddThemeConstantOverride("separation", 0);
+        box.AddChild(rows);
+        return box;
+    }
+
+    private static string Plain(string text) =>
+        System.Text.RegularExpressions.Regex.Replace(text, @"\[/?[a-z]+(=[^\]]*)?\]", "");
+
+    private static string ResultText(RunSummary r) => r.Abandoned
+        ? Loc.T("deck_result_abandoned")
+        : r.Win ? Loc.T("deck_result_victory")
+        : Loc.F("deck_result_death", EncName(r.KilledBy));
+
+    private static Control StatusRow(string? key, string value, Color valueColor, Control? trailing)
+    {
+        var pad = new MarginContainer();
+        pad.AddThemeConstantOverride("margin_top", 7);
+        pad.AddThemeConstantOverride("margin_bottom", 7);
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 10);
+        if (key != null)
+        {
+            var k = new Label { Text = key, CustomMinimumSize = new Vector2(108, 0), VerticalAlignment = VerticalAlignment.Center };
+            k.AddThemeColorOverride("font_color", TextMuted);
+            k.AddThemeFontSizeOverride("font_size", 12);
+            row.AddChild(k);
+        }
+        var v = new Label
+        {
+            Text = value,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            VerticalAlignment = VerticalAlignment.Center,
+            ClipText = true,
+            TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
+        };
+        v.AddThemeColorOverride("font_color", valueColor);
+        v.AddThemeFontSizeOverride("font_size", 14);
+        row.AddChild(v);
+        if (trailing != null) row.AddChild(trailing);
+        pad.AddChild(row);
+        return pad;
+    }
+
+    private static Control Divider() => new ColorRect
+    {
+        Color = Skin.Line,
+        CustomMinimumSize = new Vector2(0, 1),
+        MouseFilter = Control.MouseFilterEnum.Ignore,
+    };
+
+    private Control FeatureRow(Feature f, FeatureThumb.Kind kind)
+    {
+        var pad = new MarginContainer();
+        pad.AddThemeConstantOverride("margin_top", 2);
+        pad.AddThemeConstantOverride("margin_bottom", 2);
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 12);
+        row.AddChild(new FeatureThumb(kind));
+
+        var text = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        text.AddThemeConstantOverride("separation", 0);
+        var name = new Label { Text = Loc.T(f.Name) };
+        name.AddThemeColorOverride("font_color", Text);
+        name.AddThemeFontSizeOverride("font_size", 14);
+        text.AddChild(name);
+        text.AddChild(Skin.Muted(Loc.T(f.What)));
+        row.AddChild(text);
+
+        var locked = Core.Competitive.On;
+        var sw = Skin.Switch(f.Get() && !locked);
+        sw.Disabled = locked;
+        if (locked) pad.Modulate = new Color(1, 1, 1, 0.4f);
+        sw.Toggled += on => { f.Set(on); PersistConfig(); RefreshPreset(); };
+        row.AddChild(sw);
+        pad.AddChild(row);
+        return pad;
+    }
+
+    private void RefreshPreset()
+    {
+        var current = Features.Current();
+        foreach (var (preset, button) in _presetButtons)
+            if (GodotObject.IsInstanceValid(button)) Skin.Segment(button, preset == current);
+        if (_presetDesc is { } desc && GodotObject.IsInstanceValid(desc))
+            desc.Text = Loc.T(current switch
+            {
+                Features.Preset.Track => "style_track_desc",
+                Features.Preset.Stats => "style_stats_desc",
+                Features.Preset.Full => "style_full_desc",
+                _ => "style_custom_desc",
+            });
+    }
+
     private void BuildSettings()
     {
         _importButton = null;
         _importArmed = false;
 
-        var cats = new HFlowContainer();
-        cats.AddThemeConstantOverride("h_separation", 4);
-        cats.AddThemeConstantOverride("v_separation", 4);
-        for (var i = 0; i < SettingsCats.Length; i++)
-        {
-            var idx = i;
-            var b = new Button { Text = Loc.T(SettingsCats[i]) };
-            Skin.Pill(b, i == _settingsCat);
-            b.Pressed += () => { _settingsCat = idx; SetTab(TabSettings); };
-            cats.AddChild(b);
-        }
-        var catsWrap = new PanelContainer();
-        var cs = new StyleBoxFlat { BgColor = new Color(0, 0, 0, 0), BorderColor = Border };
-        cs.BorderWidthBottom = 1;
-        cs.ContentMarginTop = 6; cs.ContentMarginBottom = 8;
-        catsWrap.AddThemeStyleboxOverride("panel", cs);
-        catsWrap.AddChild(cats);
-        _content.AddChild(catsWrap);
+        Section(Loc.T("deck_settings_run_tracking"), first: true);
+        Help(Loc.T("deck_settings_run_tracking_desc"));
+        _content.AddChild(SettingCheck(Loc.T("deck_toggle_upload_runs"), () => SpireCodexConfig.UploadRuns, v => SpireCodexConfig.UploadRuns = v, Loc.T("set_upload_help")));
+        _content.AddChild(SettingCheck(Loc.T("deck_toggle_live_status"), () => SpireCodexConfig.ShareLiveStatus, v => SpireCodexConfig.ShareLiveStatus = v, Loc.T("set_live_help")));
+        _content.AddChild(FeatureCheck(Features.RunCard));
 
-        switch (_settingsCat)
-        {
-            case CatFeatures:
-                Section(Loc.T("style_title"));
-                _content.AddChild(BuildPresetRow());
-                FeatureGroup("deck_settings_community_stats", Features.Plates, Features.HoverTips, Features.BracketTag);
-                FeatureGroup("set_group_map", Features.MapRoute, Features.UpcomingEvents);
-                FeatureGroup("deck_combat", Features.DamageMeter);
-                Help(Loc.T("deck_settings_onscreen_desc"));
-                break;
-            case CatStats:
-                Section(Loc.T("deck_settings_community_stats"));
-                Help(Loc.T("deck_settings_community_stats_desc"));
-                _content.AddChild(BuildBracketRow());
-                break;
-            case CatTracking:
-                Section(Loc.T("deck_settings_run_tracking"));
-                Help(Loc.T("deck_settings_run_tracking_desc"));
-                _content.AddChild(SettingCheck(Loc.T("deck_toggle_upload_runs"), () => SpireCodexConfig.UploadRuns, v => SpireCodexConfig.UploadRuns = v, Loc.T("set_upload_help")));
-                _content.AddChild(SettingCheck(Loc.T("deck_toggle_live_status"), () => SpireCodexConfig.ShareLiveStatus, v => SpireCodexConfig.ShareLiveStatus = v, Loc.T("set_live_help")));
-                _content.AddChild(FeatureCheck(Features.RunCard));
-                Section(Loc.T("set_backfill_head"));
-                Help(Loc.T("set_backfill_help"));
-                _content.AddChild(BuildBackfillRow());
-                break;
-            case CatControls:
-                Section(Loc.T("deck_settings_controls"));
-                _content.AddChild(BuildHotkeyRow());
-                _content.AddChild(BuildControllerRow());
-                Help(Loc.T("set_controls_help"));
-                break;
-            default:
-                Section(Loc.T("deck_settings_localization"));
-                Help(Loc.T("deck_settings_localization_desc"));
-                Section(Loc.T("set_help_head"));
-                Help(Loc.T("set_help_desc"));
-                var row = new HBoxContainer();
-                row.AddThemeConstantOverride("separation", 8);
-                row.AddChild(ShowWelcomeButton());
-                row.AddChild(ResetTipsButton());
-                _content.AddChild(row);
-                break;
-        }
+        Section(Loc.T("set_backfill_head"));
+        Help(Loc.T("set_backfill_help"));
+        _content.AddChild(BuildBackfillRow());
+
+        Section(Loc.T("set_replays_head"));
+        Help(Loc.T("set_replays_help"));
+        _content.AddChild(BuildReplayBackfillRow());
+
+        Section(Loc.T("deck_settings_controls"));
+        _content.AddChild(BuildHotkeyRow());
+        _content.AddChild(BuildControllerRow());
+        Help(Loc.T("set_controls_help"));
+
+        Section(Loc.T("deck_settings_import"));
+        Help(Loc.T("deck_settings_import_desc"));
+        _content.AddChild(BuildImportRow());
+        Help(Loc.T("deck_import_credit"));
+        _content.AddChild(LinkButton(Loc.T("deck_import_credit_link"), ImportCreditUrl));
+
+        Section(Loc.T("deck_settings_localization"));
+        Help(Loc.T("deck_settings_localization_desc"));
+
+        Section(Loc.T("set_help_head"));
+        Help(Loc.T("set_help_desc"));
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 8);
+        row.AddChild(ShowWelcomeButton());
+        row.AddChild(ResetTipsButton());
+        _content.AddChild(row);
     }
 
-    private void FeatureGroup(string titleKey, params Feature[] features)
+    private static readonly string[] CompDoes = { "comp_does_stats", "comp_does_seed", "comp_does_badge", "comp_does_live" };
+    private static readonly string[] CompRules = { "comp_rule_mods", "comp_rule_reload", "comp_rule_gap", "comp_rule_quit", "comp_rule_console" };
+
+    private void BuildCompetitive()
     {
-        Section(Loc.T(titleKey));
-        foreach (var f in features)
-            _content.AddChild(FeatureCheck(f));
+        var box = StatusPanel(out var rows);
+        var sw = Skin.Switch(SpireCodexConfig.CompetitiveMode);
+        sw.Toggled += on =>
+        {
+            SpireCodexConfig.CompetitiveMode = on;
+            PersistConfig();
+            Core.Competitive.Sync();
+            RefreshCompStatus();
+        };
+        rows.AddChild(StatusRow(null, Loc.T("comp_toggle"), Text, sw));
+        rows.AddChild(Divider());
+        rows.AddChild(StatusRow(Loc.T("comp_brackets_head"),
+            Loc.T("comp_bracket_a10_solo") + "  ·  " + Loc.T("comp_bracket_dread_solo"), Text, null));
+        rows.AddChild(Divider());
+
+        var pad = new MarginContainer();
+        pad.AddThemeConstantOverride("margin_top", 7);
+        pad.AddThemeConstantOverride("margin_bottom", 7);
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 10);
+        var key = new Label { Text = Loc.T("comp_status"), CustomMinimumSize = new Vector2(108, 0) };
+        key.AddThemeColorOverride("font_color", TextMuted);
+        key.AddThemeFontSizeOverride("font_size", 12);
+        row.AddChild(key);
+        _compStatus = new Label
+        {
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+        };
+        _compStatus.AddThemeFontSizeOverride("font_size", 14);
+        row.AddChild(_compStatus);
+        pad.AddChild(row);
+        rows.AddChild(pad);
+        _content.AddChild(box);
+        RefreshCompStatus();
+
+        Help(Loc.T("comp_help"));
+        var restart = Skin.Muted(Loc.T("comp_restart"));
+        restart.AddThemeColorOverride("font_color", Accent);
+        _content.AddChild(restart);
+
+        Section(Loc.T("comp_does_head"));
+        foreach (var line in CompDoes)
+            Help("•  " + Loc.T(line));
+
+        Section(Loc.T("comp_rules_head"));
+        foreach (var rule in CompRules)
+            Help("•  " + Loc.T(rule));
+
+        Help(Loc.T("comp_expect"));
+    }
+
+    private void RefreshCompStatus()
+    {
+        if (_compStatus is not { } label || !GodotObject.IsInstanceValid(label)) return;
+        var verdict = Core.Competitive.Current();
+        var text = verdict.State == Core.Competitive.State.Off
+            ? Loc.T("comp_status_off")
+            : CompetitiveBadge.Describe(verdict);
+        if (label.Text != text) label.Text = text;
+        label.AddThemeColorOverride("font_color", VerdictColor(verdict.State));
     }
 
     private Control FeatureCheck(Feature f) => SettingCheck(Loc.T(f.Name), f.Get, f.Set, Loc.T(f.What));
 
     private Control BuildPresetRow()
     {
-        var current = Features.Current();
-        var flow = new HFlowContainer();
-        flow.AddThemeConstantOverride("h_separation", 6);
-        flow.AddThemeConstantOverride("v_separation", 6);
-        foreach (var (preset, name, desc) in new[]
+        _presetButtons.Clear();
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 4);
+        foreach (var (preset, name) in new[]
         {
-            (Features.Preset.Track, "style_track", "style_track_desc"),
-            (Features.Preset.Stats, "style_stats", "style_stats_desc"),
-            (Features.Preset.Full, "style_full", "style_full_desc"),
+            (Features.Preset.Track, "style_track"),
+            (Features.Preset.Stats, "style_stats"),
+            (Features.Preset.Full, "style_full"),
+            (Features.Preset.Custom, "style_custom"),
         })
         {
-            var b = new Button { Text = Loc.T(name), TooltipText = Loc.T(desc) };
-            Skin.Pill(b, preset == current);
-            b.Pressed += () => { Features.Apply(preset); SetTab(TabSettings); };
-            flow.AddChild(b);
+            var b = new Button
+            {
+                Text = Loc.T(name),
+                SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+                ClipText = true,
+            };
+            b.Disabled = Core.Competitive.On;
+            if (preset != Features.Preset.Custom)
+                b.Pressed += () => { Features.Apply(preset); SetTab(_tab); };
+            _presetButtons.Add((preset, b));
+            row.AddChild(b);
         }
-        return flow;
+        return row;
     }
 
-    private void Section(string title)
+    private void Section(string title, bool first = false)
     {
-        var gap = new Control { CustomMinimumSize = new Vector2(0, 4) };
-        _content.AddChild(gap);
-        _content.AddChild(Skin.SectionHead(title));
+        if (!first) _content.AddChild(new Control { CustomMinimumSize = new Vector2(0, 10) });
+        _content.AddChild(Skin.Title(title));
     }
 
     private void Help(string text) => _content.AddChild(Skin.Muted(text));
 
-    private void BuildImport()
-    {
-        AboutHead(Loc.T("deck_settings_import"));
-        AboutText(Loc.T("deck_settings_import_desc"));
-        _content.AddChild(BuildImportRow());
-
-        AboutHead(Loc.T("deck_import_credit_head"));
-        AboutText(Loc.T("deck_import_credit"));
-        _content.AddChild(LinkButton(Loc.T("deck_import_credit_link"), ImportCreditUrl));
-    }
-
-    private Control BuildBracketRow()
-    {
-        _bracketButtons.Clear();
-        var flow = new HFlowContainer();
-        flow.AddThemeConstantOverride("h_separation", 6);
-        flow.AddThemeConstantOverride("v_separation", 6);
-        foreach (var (bracket, label, tip) in BracketChoices)
-        {
-            var pick = bracket;
-            var b = new Button { Text = Loc.T(label), TooltipText = Loc.T(tip) };
-            b.AddThemeFontSizeOverride("font_size", 13);
-            b.AddThemeStyleboxOverride("normal", ButtonBox(BgSofter, Border));
-            b.AddThemeStyleboxOverride("hover", ButtonBox(Border, Accent));
-            b.AddThemeStyleboxOverride("pressed", ButtonBox(Border, Accent));
-            b.Pressed += () => { SpireCodexConfig.Stats = pick; PersistConfig(); RefreshBracketRow(); };
-            _bracketButtons.Add(b);
-            flow.AddChild(b);
-        }
-        RefreshBracketRow();
-        return flow;
-    }
-
-    private void RefreshBracketRow()
-    {
-        for (var i = 0; i < _bracketButtons.Count && i < BracketChoices.Length; i++)
-            _bracketButtons[i].AddThemeColorOverride(
-                "font_color", BracketChoices[i].Bracket == SpireCodexConfig.Stats ? Accent : TextMuted);
-    }
-
     private Control SettingCheck(string label, Func<bool> get, Action<bool> set, string? help = null)
     {
-        var box = new VBoxContainer();
-        box.AddThemeConstantOverride("separation", 0);
-        var head = new HBoxContainer();
-        head.AddThemeConstantOverride("separation", 8);
-        var cb = Skin.Check(label, get());
-        cb.Toggled += on => { set(on); PersistConfig(); };
-        head.AddChild(cb);
-        box.AddChild(head);
-        if (help != null)
-        {
-            var pad = new MarginContainer();
-            pad.AddThemeConstantOverride("margin_left", 30);
-            pad.AddThemeConstantOverride("margin_bottom", 6);
-            pad.AddChild(Skin.Muted(help));
-            box.AddChild(pad);
-        }
-        return box;
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 12);
+        var text = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        text.AddThemeConstantOverride("separation", 0);
+        var name = new Label { Text = label, AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        name.AddThemeColorOverride("font_color", Text);
+        name.AddThemeFontSizeOverride("font_size", 14);
+        text.AddChild(name);
+        if (help != null) text.AddChild(Skin.Muted(help));
+        row.AddChild(text);
+        var sw = Skin.Switch(get());
+        sw.Toggled += on => { set(on); PersistConfig(); };
+        row.AddChild(sw);
+        return row;
     }
 
     private Control BuildHotkeyRow()
@@ -856,6 +1114,38 @@ public partial class DeckImagePanel : CanvasLayer
                 RunUploader.BackfillStart.NeedSignIn => "deck_backfill_need_signin",
                 _ => "deck_backfill_need_uploads",
             });
+            status.AddThemeColorOverride("font_color", Accent);
+            status.Visible = true;
+        };
+        return box;
+    }
+
+    private Control BuildReplayBackfillRow()
+    {
+        var box = new VBoxContainer();
+        box.AddThemeConstantOverride("separation", 4);
+
+        var btn = new Button { Text = Loc.T("deck_replays_button"), SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
+        StyleSecondary(btn);
+        box.AddChild(btn);
+
+        var status = new Label
+        {
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            Visible = false,
+        };
+        status.AddThemeFontSizeOverride("font_size", 12);
+        box.AddChild(status);
+        _replayStatus = status;
+
+        btn.Pressed += () =>
+        {
+            var start = Replay.ReplayUploader.BackfillNow();
+            if (start == Replay.ReplayUploader.BackfillStart.Started) return;
+            status.Text = Loc.T(start == Replay.ReplayUploader.BackfillStart.NeedSignIn
+                ? "deck_backfill_need_signin"
+                : "deck_backfill_need_uploads");
             status.AddThemeColorOverride("font_color", Accent);
             status.Visible = true;
         };
@@ -973,61 +1263,75 @@ public partial class DeckImagePanel : CanvasLayer
 
     private void BuildAbout()
     {
-        var brand = InfoLabel();
-        brand.AddThemeFontSizeOverride("normal_font_size", 20);
-        brand.Text = Loc.T("deck_brand_wordmark") + Loc.T("deck_about_tagline");
-        _content.AddChild(brand);
+        var blurb = InfoLabel();
+        blurb.AddThemeFontSizeOverride("normal_font_size", 15);
+        blurb.Text = Loc.T("about_blurb");
+        _content.AddChild(blurb);
 
-        var links = new HBoxContainer();
-        links.AddThemeConstantOverride("separation", 8);
-        links.AddChild(LinkButton("spire-codex.com", SiteUrl));
-        links.AddChild(LinkButton("GitHub", GithubUrl));
-        links.AddChild(LinkButton("Discord", DiscordUrl));
-        links.AddChild(LinkButton("Patreon", PatreonUrl));
-        _content.AddChild(links);
+        Section(Loc.T("deck_about_support"));
+        var support = new HBoxContainer();
+        support.AddThemeConstantOverride("separation", 8);
+        support.AddChild(LinkCard("Ko-fi", Loc.T("about_kofi_sub"), KofiUrl, gold: true));
+        support.AddChild(LinkCard("Patreon", Loc.T("about_patreon_sub"), PatreonUrl, gold: true));
+        _content.AddChild(support);
 
-        var note = InfoLabel();
-        note.Text = Loc.T("deck_about_companion");
-        _content.AddChild(note);
+        Section(Loc.T("about_help_head"));
+        _content.AddChild(LinkCard("Discord", Loc.T("about_discord_sub"), DiscordUrl));
 
-        var overlayCta = new Button { Text = Loc.T("deck_about_download_overlay"), SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
-        StylePrimary(overlayCta);
-        overlayCta.Pressed += () => OS.ShellOpen(OverlayUrl);
-        _content.AddChild(overlayCta);
+        Section(Loc.T("about_find_head"));
+        _content.AddChild(LinkCard("spire-codex.com", Loc.T("about_site_sub"), SiteUrl));
+        _content.AddChild(LinkCard(Loc.T("about_overwolf"), Loc.T("about_overwolf_sub"), OverlayUrl));
+        _content.AddChild(LinkCard(Loc.T("about_mod_github"), Loc.T("about_mod_github_sub"), ModGithubUrl));
+        _content.AddChild(LinkCard(Loc.T("about_site_github"), Loc.T("about_site_github_sub"), GithubUrl));
 
-        AboutHead(Loc.T("deck_about_whatitis"));
-        AboutText(Loc.T("deck_about_whatitis_body"));
-
-        AboutHead(Loc.T("deck_about_data"));
-        AboutText(Loc.T("deck_about_data_body"));
-
-        AboutHead(Loc.T("deck_about_scoring"));
-        AboutText(Loc.T("deck_about_scoring_body"));
-        _content.AddChild(LinkButton(Loc.T("deck_about_read_scoring"), ScoringUrl));
-
-        AboutHead(Loc.T("deck_about_support"));
-        AboutText(Loc.T("deck_about_support_body"));
-        _content.AddChild(LinkButton(Loc.T("deck_about_support_patreon"), PatreonUrl));
-
-        AboutHead(Loc.T("deck_about_feedback"));
-        AboutText(Loc.T("deck_about_feedback_body"));
-        _content.AddChild(LinkButton(Loc.T("deck_about_join_discord"), DiscordUrl));
+        Help(Loc.F("about_version", ModVersion.Current));
     }
 
-    private void AboutHead(string title)
+    private static Control LinkCard(string title, string sub, string url, bool gold = false)
     {
-        var l = new Label { Text = title.ToUpperInvariant() };
-        l.AddThemeColorOverride("font_color", Accent);
-        l.AddThemeFontSizeOverride("font_size", 12);
-        _content.AddChild(l);
+        var b = new Button
+        {
+            CustomMinimumSize = new Vector2(0, 52),
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            ClipContents = true,
+        };
+        b.AddThemeStyleboxOverride("normal", CardFace(BgSoft, gold ? Accent : Border));
+        b.AddThemeStyleboxOverride("hover", CardFace(BgSofter, Accent));
+        b.AddThemeStyleboxOverride("pressed", CardFace(BgSofter, AccentDim));
+        b.AddThemeStyleboxOverride("focus", CardFace(new Color(0, 0, 0, 0), Skin.Link));
+
+        var pad = new MarginContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        pad.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        pad.AddThemeConstantOverride("margin_left", 12);
+        pad.AddThemeConstantOverride("margin_right", 12);
+        pad.AddThemeConstantOverride("margin_top", 6);
+        pad.AddThemeConstantOverride("margin_bottom", 6);
+        var col = new VBoxContainer
+        {
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            Alignment = BoxContainer.AlignmentMode.Center,
+        };
+        col.AddThemeConstantOverride("separation", 0);
+        var name = new Label { Text = title, ClipText = true, TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis };
+        name.AddThemeColorOverride("font_color", Text);
+        name.AddThemeFontSizeOverride("font_size", 14);
+        col.AddChild(name);
+        var what = new Label { Text = sub, ClipText = true, TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis };
+        what.AddThemeColorOverride("font_color", TextMuted);
+        what.AddThemeFontSizeOverride("font_size", 12);
+        col.AddChild(what);
+        pad.AddChild(col);
+        b.AddChild(pad);
+        b.Pressed += () => OS.ShellOpen(url);
+        return b;
     }
 
-    private void AboutText(string text)
+    private static StyleBoxFlat CardFace(Color bg, Color border)
     {
-        var l = InfoLabel();
-        l.AddThemeColorOverride("default_color", TextMuted);
-        l.Text = text;
-        _content.AddChild(l);
+        var s = new StyleBoxFlat { BgColor = bg, BorderColor = border };
+        s.SetBorderWidthAll(1);
+        s.SetCornerRadiusAll(6);
+        return s;
     }
 
     private RichTextLabel InfoLabel()
