@@ -8,7 +8,7 @@ namespace SpireCodex.Ui;
 
 public partial class WelcomeCard : CanvasLayer
 {
-    private const int StepWelcome = 0, StepStats = 1, StepTracking = 2, StepOverlay = 3, StepSettings = 4, StepCount = 5;
+    private const int StepWelcome = 0, StepStats = 1, StepTracking = 2, StepOverlay = 3, StepCompetitive = 4, StepSettings = 5, StepCount = 6;
     private const float Pad = 6f, Gap = 16f;
 
     private static WelcomeCard? _instance;
@@ -93,7 +93,8 @@ public partial class WelcomeCard : CanvasLayer
         if (step == StepStats && SkipStats()) step = StepTracking;
         if (step == StepTracking && _skipTracking) step = StepOverlay;
         _step = step;
-        if (step == StepOverlay) DeckImagePanel.OpenTab(DeckImagePanel.TabLeaderboard);
+        if (step == StepOverlay) DeckImagePanel.OpenTab(DeckImagePanel.TabHome);
+        if (step == StepCompetitive) DeckImagePanel.OpenTab(DeckImagePanel.TabCompetitive);
         if (step == StepSettings) DeckImagePanel.OpenTab(DeckImagePanel.TabSettings);
         Build();
         Layout();
@@ -113,6 +114,7 @@ public partial class WelcomeCard : CanvasLayer
     private Rect2? Spotlight() => _step switch
     {
         StepOverlay => DeckImagePanel.TabBarRect,
+        StepCompetitive => DeckImagePanel.TabRect(DeckImagePanel.TabCompetitive),
         StepSettings => DeckImagePanel.TabRect(DeckImagePanel.TabSettings),
         _ => null,
     };
@@ -218,6 +220,12 @@ public partial class WelcomeCard : CanvasLayer
             case StepOverlay:
                 Title(Loc.T("tour_overlay_title"));
                 Body(Loc.F("tour_overlay_body", OverlayKeyName()));
+                Footer((Loc.T("tour_next"), () => Go(StepCompetitive)));
+                break;
+
+            case StepCompetitive:
+                Title(Loc.T("tour_comp_title"));
+                Body(Loc.T("tour_comp_body"));
                 Footer((Loc.T("tour_next"), () => Go(StepSettings)));
                 break;
 

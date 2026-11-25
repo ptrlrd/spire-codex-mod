@@ -50,13 +50,7 @@ public partial class RunCompleteCard : CanvasLayer
             GrowVertical = Control.GrowDirection.Begin,
             OffsetBottom = -40,
         };
-        var style = new StyleBoxFlat
-        {
-            BgColor = new Color(0.09f, 0.11f, 0.14f, 0.98f),
-            BorderColor = new Color(1f, 0.827f, 0.302f, 1f),
-        };
-        style.SetBorderWidthAll(2);
-        style.SetCornerRadiusAll(8);
+        var style = Skin.CardBox();
         style.ContentMarginLeft = 18; style.ContentMarginRight = 18;
         style.ContentMarginTop = 12; style.ContentMarginBottom = 12;
         _panel.AddThemeStyleboxOverride("panel", style);
@@ -106,7 +100,7 @@ public partial class RunCompleteCard : CanvasLayer
             ? ""
             : $"\n[color=#ff9a7a]{damageLine}[/color]";
         _text.Text =
-            $"[color=#ffd34d][b]{Loc.T("rc_run_tracked")}[/b][/color]\n" +
+            $"[color=#e8b830][b]{Loc.T("rc_run_tracked")}[/b][/color]\n" +
             Loc.T("rc_live_on") + "\n" +
             $"[color=#8fd0ff]{url}[/color]" + rank + damage;
         Visible = true;

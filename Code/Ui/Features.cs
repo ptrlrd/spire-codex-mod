@@ -2,7 +2,10 @@ using System;
 
 namespace SpireCodex.Ui;
 
-public sealed record Feature(string Name, string What, Func<bool> Get, Action<bool> Set);
+public sealed record Feature(string Name, string What, Func<bool> Get, Action<bool> Set)
+{
+    public bool On => Get() && !Core.Competitive.On;
+}
 
 public static class Features
 {
@@ -37,6 +40,7 @@ public static class Features
         MapRoute.Set(p == Preset.Full);
         DamageMeter.Set(p == Preset.Full);
         UpcomingEvents.Set(false);
+        BracketTag.Set(true);
         RunCard.Set(true);
         Save();
     }
@@ -48,7 +52,8 @@ public static class Features
                 && HoverTips.Get() == (p != Preset.Track)
                 && MapRoute.Get() == (p == Preset.Full)
                 && DamageMeter.Get() == (p == Preset.Full)
-                && !UpcomingEvents.Get())
+                && !UpcomingEvents.Get()
+                && BracketTag.Get())
                 return p;
         return Preset.Custom;
     }

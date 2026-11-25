@@ -16,6 +16,8 @@ public sealed class SpireCodexConfig : SimpleModConfig
 
     public static bool ShareLiveStatus { get; set; } = true;
 
+    public static bool CompetitiveMode { get; set; } = false;
+
     [ConfigSection("Overlay")]
     public static bool ShowDeckView { get; set; } = true;
     public static bool ShowCardRewardHints { get; set; } = true;

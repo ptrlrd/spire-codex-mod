@@ -56,7 +56,7 @@ public partial class CardRewardHints : Node
         _accum = 0;
         _diagAccum += 0.08;
 
-        if (!SpireCodexConfig.ShowCardRewardHints) { ClearBadges(); return; }
+        if (!Features.Plates.On) { ClearBadges(); return; }
 
         var container = CardScan.FindOverlayContainer(ref _game);
         if (container == null)
@@ -214,7 +214,7 @@ public partial class CardRewardHints : Node
         return best;
     }
 
-    private static readonly Color BestGold = new(1.00f, 0.827f, 0.302f);
+    private static readonly Color BestGold = new(0.910f, 0.722f, 0.188f);
 
     // Reserved badge key for the skip banner, which hangs off the card row rather than any
     // one node, so it has no instance id of its own.
@@ -365,7 +365,7 @@ public partial class CardRewardHints : Node
 
         // Tier letter (Elo-based when rated) + win%. The raw Elo number lives in the
         // hovertip only — on the plate it stretched the box.
-        var best = isBest ? $"[color=#ffd34d][b]{Loc.T("plate_best")}[/b][/color]  " : "";
+        var best = isBest ? $"[color=#e8b830][b]{Loc.T("plate_best")}[/b][/color]  " : "";
         badge.Text =
             $"[center]{best}[color={TierHex(tier)}][b]{tier}[/b][/color]" +
             $"  [color=#5b636c]·[/color]  [color=#eae5d8]{sc.WinRate:0}%[/color][/center]";
@@ -418,8 +418,8 @@ public partial class CardRewardHints : Node
     {
         var plate = new StyleBoxFlat
         {
-            BgColor = new Color(0.09f, 0.11f, 0.14f, 0.97f),
-            BorderColor = new Color(0.32f, 0.37f, 0.43f, 1f),
+            BgColor = new Color(0.075f, 0.125f, 0.157f, 0.97f),
+            BorderColor = new Color(0.165f, 0.271f, 0.333f, 1f),
         };
         plate.SetBorderWidthAll(2);
         plate.BorderWidthTop = 3;
@@ -432,7 +432,7 @@ public partial class CardRewardHints : Node
 
     private static Color TierColor(string tier) => tier switch
     {
-        "S" => new Color(1.00f, 0.827f, 0.302f),
+        "S" => new Color(0.910f, 0.722f, 0.188f),
         "A" => new Color(0.525f, 0.878f, 0.541f),
         "B" => new Color(0.420f, 0.827f, 0.780f),
         "C" => new Color(0.910f, 0.890f, 0.839f),
@@ -442,10 +442,10 @@ public partial class CardRewardHints : Node
 
     private static string TierHex(string tier) => tier switch
     {
-        "S" => "#ffd34d",
+        "S" => "#e8b830",
         "A" => "#86e08a",
         "B" => "#6bd3c7",
-        "C" => "#e8e3d6",
+        "C" => "#e0ddd8",
         "D" => "#e0b070",
         _ => "#e08a86",
     };

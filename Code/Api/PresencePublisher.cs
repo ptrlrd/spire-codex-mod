@@ -118,6 +118,12 @@ public static class PresencePublisher
             gold = s.Gold,
             ascension = s.Ascension,
             seed = s.Seed,
+            competitive = Core.Competitive.Current().State switch
+            {
+                Core.Competitive.State.Cleared => "cleared",
+                Core.Competitive.State.Flagged => "flagged",
+                _ => "off",
+            },
             run_time = s.RunTime,
             // Active run modifiers (daily/custom mutators); null on a standard run.
             modifiers = s.Modifiers.Count > 0 ? s.Modifiers.ToArray() : null,

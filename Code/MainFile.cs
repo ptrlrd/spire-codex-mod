@@ -80,6 +80,8 @@ public partial class MainFile : Node
         // Corner indicator for the active stat filter (All runs / Ascension 5+ / Ascension 10).
         Ui.StatFilterIndicator.Start();
 
+        Ui.CompetitiveBadge.Start();
+
         // Post-run shareable card (pops when a completed run uploads).
         Ui.RunCompleteCard.Start();
 

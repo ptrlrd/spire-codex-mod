@@ -44,35 +44,13 @@ internal static class ReplayUploader
         try
         {
             if (!SpireCodexConfig.UploadReplays || !Config.UploadRuns || !Consent.ReplaysGranted) return;
-
-            string[] files;
-            try { files = Directory.GetFiles(ReplayRecorder.Dir, "*.jsonl"); }
-            catch { return; }
+            if (_bfActive) return;
 
             var client = new SpireCodexClient();
             var sent = 0;
-            foreach (var path in files)
+            foreach (var run in Pending())
             {
-                if (AlreadySent(path)) continue;
-                if (ReplayRecorder.Active && path == ReplayRecorder.CurrentPath) continue; // still being written
-                if (!HasTerminalLine(path)) continue; // unfinished; the recorder still owns it
-
-                var run = RunFileFor(path);
-                if (run == null) continue; // its .run is gone, nothing to attach the replay to
-
-                string runJson;
-                try { runJson = await File.ReadAllTextAsync(run).ConfigureAwait(false); }
-                catch { continue; }
-
-                // Idempotent: an already-known run comes back as a duplicate WITH its hash.
-                var up = await client
-                    .UploadRunAsync(runJson, Config.SteamId, Config.Username, Core.Sts2Version.Current)
-                    .ConfigureAwait(false);
-                if (!up.Success) continue;
-                var hash = HashOf(up.Body);
-                if (hash == null) continue;
-
-                await TryUploadAsync(runJson, hash).ConfigureAwait(false);
+                if (await OfferAsync(client, run, force: false).ConfigureAwait(false) == null) continue;
                 if (++sent >= 25) break;          // one launch does a bounded chunk
                 await Task.Delay(500).ConfigureAwait(false); // stay well under the rate limit
             }
@@ -82,6 +60,93 @@ internal static class ReplayUploader
         {
             MainFile.Logger.Info($"replay sweep error: {e.Message}");
         }
+    }
+
+    public enum BackfillStart { Started, NeedUploads, NeedSignIn }
+
+    private static volatile bool _bfActive;
+    private static volatile bool _bfHasRun;
+    private static int _bfTotal;
+    private static int _bfDone;
+    private static int _bfSent;
+
+    public static bool BackfillActive => _bfActive;
+    public static bool BackfillHasRun => _bfHasRun;
+    public static int BackfillTotal => _bfTotal;
+    public static int BackfillDone => _bfDone;
+    public static int BackfillSent => _bfSent;
+
+    public static BackfillStart BackfillNow()
+    {
+        if (_bfActive) return BackfillStart.Started;
+        if (!Config.UploadRuns || !Consent.Granted) return BackfillStart.NeedUploads;
+        if (!SteamAuth.IsSignedIn) return BackfillStart.NeedSignIn;
+        _bfActive = true;
+        _bfHasRun = false;
+        _bfTotal = 0;
+        _bfDone = 0;
+        _bfSent = 0;
+        _ = BackfillAsync();
+        return BackfillStart.Started;
+    }
+
+    private static async Task BackfillAsync()
+    {
+        try
+        {
+            var pending = Pending();
+            _bfTotal = pending.Count;
+            var client = new SpireCodexClient();
+            foreach (var run in pending)
+            {
+                if (await OfferAsync(client, run, force: true).ConfigureAwait(false) == true) _bfSent++;
+                _bfDone++;
+                await Task.Delay(500).ConfigureAwait(false);
+            }
+            MainFile.Logger.Info($"replay backfill: {_bfSent}/{_bfTotal} journal(s) accepted");
+        }
+        catch (Exception e)
+        {
+            MainFile.Logger.Info($"replay backfill error: {e.Message}");
+        }
+        finally
+        {
+            _bfActive = false;
+            _bfHasRun = true;
+        }
+    }
+
+    private static List<string> Pending()
+    {
+        var runs = new List<string>();
+        string[] files;
+        try { files = Directory.GetFiles(ReplayRecorder.Dir, "*.jsonl"); }
+        catch { return runs; }
+
+        foreach (var path in files)
+        {
+            if (AlreadySent(path)) continue;
+            if (ReplayRecorder.Active && path == ReplayRecorder.CurrentPath) continue;
+            if (!HasTerminalLine(path)) continue;
+            if (RunFileFor(path) is { } run) runs.Add(run);
+        }
+        return runs;
+    }
+
+    private static async Task<bool?> OfferAsync(SpireCodexClient client, string run, bool force)
+    {
+        try
+        {
+            var runJson = await File.ReadAllTextAsync(run).ConfigureAwait(false);
+            var up = await client
+                .UploadRunAsync(runJson, Config.SteamId, Config.Username, Core.Sts2Version.Current)
+                .ConfigureAwait(false);
+            if (!up.Success) return null;
+            var hash = HashOf(up.Body);
+            if (hash == null) return null;
+            return await TryUploadAsync(runJson, hash, force).ConfigureAwait(false);
+        }
+        catch { return null; }
     }
 
     // A journal is finished when its last line is the terminal record. Read the tail only.
@@ -133,16 +198,17 @@ internal static class ReplayUploader
     }
 
     // Called after a .run upload succeeds. `runJson` identifies which journal belongs to it.
-    public static async Task TryUploadAsync(string runJson, string runHash)
+    public static async Task<bool> TryUploadAsync(string runJson, string runHash, bool force = false)
     {
         try
         {
-            if (!SpireCodexConfig.UploadReplays || !Config.UploadRuns || !Consent.ReplaysGranted) return;
-            if (string.IsNullOrEmpty(runHash)) return;
+            if (!Config.UploadRuns) return false;
+            if (!force && (!SpireCodexConfig.UploadReplays || !Consent.ReplaysGranted)) return false;
+            if (string.IsNullOrEmpty(runHash)) return false;
 
             var path = JournalFor(runJson);
-            if (path == null) return; // no journal for this run (recording was off, or an old run)
-            if (AlreadySent(path)) return;
+            if (path == null) return false; // no journal for this run (recording was off, or an old run)
+            if (AlreadySent(path)) return false;
 
             var raw = await File.ReadAllBytesAsync(path).ConfigureAwait(false);
             var gzip = Gzip(raw);
@@ -151,7 +217,7 @@ internal static class ReplayUploader
             if (!RoundTrips(gzip, raw.Length))
             {
                 MainFile.Logger.Info($"replay: gzip of {Path.GetFileName(path)} did not round-trip; not sending");
-                return;
+                return false;
             }
 
             var result = await new SpireCodexClient().UploadReplayAsync(runHash, gzip).ConfigureAwait(false);
@@ -164,7 +230,7 @@ internal static class ReplayUploader
                 MarkAccepted(path);
                 MainFile.Logger.Info($"replay upload {Path.GetFileName(path)}: ok ({result.StatusCode}) " +
                                      $"{raw.Length}B -> {gzip.Length}B");
-                return;
+                return true;
             }
 
             // Permanent ONLY when the server names a reason this exact file can never satisfy.
@@ -186,10 +252,12 @@ internal static class ReplayUploader
                 + (permanent ? " — permanent, not retrying" : " — will retry on a later launch"));
 
             if (permanent) MarkAbandoned(path);
+            return false;
         }
         catch (Exception e)
         {
             MainFile.Logger.Info($"replay upload error: {e.Message}");
+            return false;
         }
     }
 
