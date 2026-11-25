@@ -281,6 +281,8 @@ internal static class ReplayHooks
         attempted++; n += HookPatcher.PatchOn(harmony, cardModel, "SpendResources", me, nameof(CardSpending), 0);
         attempted++; n += HookPatcher.PatchOn(harmony, cardModel, "SpendEnergy", me, nameof(CardEnergyPaying), 1);
         attempted++; n += HookPatcher.PatchOn(harmony, cardModel, "SpendEnergy", me, nameof(CardEnergyPaid), 1, postfix: true);
+        _costModifiers = HookPatcher.FindType("MegaCrit.Sts2.Core.Entities.Cards.CostModifiers");
+        attempted++; n += HookPatcher.PatchOn(harmony, pcs, "RecalculateCardValues", me, nameof(HandCostsSampled), 0, postfix: true);
         attempted++; n += HookPatcher.PatchOn(harmony,
             HookPatcher.FindType("MegaCrit.Sts2.Core.Combat.History.CombatHistory"),
             "StarsModified", me, nameof(StarsModified), 3);
@@ -884,6 +886,7 @@ internal static class ReplayHooks
             _combatWon = false;
             _extraTurnPending = null;
             _doomed.Clear();
+            CardCosts.Reset();
 
             var line = ReplayRecorder.Line("combat_start");
             if (line == null) return;
@@ -1233,6 +1236,36 @@ internal static class ReplayHooks
             }
             catch (Exception e) { ReplayRecorder.Fault(e); }
             line.Emit();
+        }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
+    }
+
+    private static Type? _costModifiers;
+
+    private static void HandCostsSampled(object __instance)
+    {
+        try
+        {
+            if (_costModifiers == null || !ReplayRecorder.Active) return;
+            if (Reflect.GetMember(Reflect.GetMember(__instance, "Hand"), "Cards") is not IEnumerable hand) return;
+            var all = Enum.ToObject(_costModifiers, -1);
+            var none = Enum.ToObject(_costModifiers, 0);
+            foreach (var card in hand)
+            {
+                var energy = Reflect.GetMember(card, "EnergyCost");
+                if (energy == null || Reflect.GetBool(energy, "CostsX")) continue;
+                if (Reflect.CallWith(energy, "GetWithModifiers", all) is not int cost) continue;
+                if (Reflect.CallWith(energy, "GetWithModifiers", none) is not int baseCost) continue;
+                if (baseCost < 0) continue;
+                var instance = CardInstances.Of(card);
+                if (!CardCosts.Changed(instance, baseCost, cost)) continue;
+                ReplayRecorder.Line("cost")
+                    ?.Set("c", instance)
+                    .Set("id", Ids.Bare(Reflect.GetString(card, "Id")))
+                    .Set("cost", cost)
+                    .Set("base", baseCost)
+                    .Emit();
+            }
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
