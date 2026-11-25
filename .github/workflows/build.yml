@@ -106,7 +106,7 @@ jobs:
         id: notes
         shell: bash
         run: |
-          note=$(jq -r '.changeNote // ""' workshop/workshop.json)
+          note=$(jq -r '.nexusNote // .changeNote // ""' workshop/workshop.json)
           {
             echo "changelog<<__EOF__"
             echo "$note"
