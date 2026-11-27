@@ -300,7 +300,8 @@ public static class ReplayRecorder
                     .Set("player_slot", slot)
                     .SetFlag("mine", mine)
                     .Set("character", Core.Ids.Bare(Reflect.GetString(p, "Character")))
-                    .Set("hp", Reflect.GetMember(creature, "CurrentHp") as int?)
+                    .Set("hp", (at == PlayersAt.End ? ReplayHooks.HpAtWin(p) : null)
+                               ?? Reflect.GetMember(creature, "CurrentHp") as int?)
                     .Set("max_hp", Reflect.GetMember(creature, "MaxHp") as int?)
                     .Set("gold", Reflect.GetMember(p, "Gold") as int?);
                 switch (at)
@@ -922,10 +923,11 @@ public static class ReplayRecorder
             .Set("run_time", s.RunTime)
             .Set("floors", s.TotalFloor)
             .SetFlag("is_game_over", s.IsGameOver || ReplayHooks.PlayerDied)
-            .Set("hp", ReplayHooks.PlayerDied ? 0 : s.CurrentHp)
+            .Set("hp", ReplayHooks.PlayerDied ? 0 : LocalHpAtWin() ?? s.CurrentHp)
             .Set("max_hp", s.MaxHp)
             .Set("final_deck", (object?)_deckSnapshot ?? s.Deck.Select(d => d.Id).ToList())
             .Set("final_relics", s.Relics.Select(r => r.Id).ToList())
+            .SetFlag("victory", ReplayHooks.RunWon)
             // The last in-run snapshot, not LocalPlayer.IsCoop: after save and quit the live state
             // has already left the run (one player or none) when this row is written.
             .Set("final_players", s.PlayerCount > 1 || LocalPlayer.IsCoop ? PlayerRows(PlayersAt.End) : null);
@@ -935,6 +937,27 @@ public static class ReplayRecorder
             await journal.CloseAsync(terminal).ConfigureAwait(false);
             journal.Dispose();
         });
+    }
+
+    // The local player's hp when the run was won, before the game killed every player.
+    private static int? LocalHpAtWin()
+    {
+        if (!ReplayHooks.RunWon) return null;
+        try
+        {
+            if (Reflect.GetMember(Core.Sts2Access.LiveRunState, "Players") is not System.Collections.IEnumerable players)
+                return null;
+            var slot = 0;
+            foreach (var p in players)
+            {
+                var mine = LocalPlayer.NetId == null && _localSlot is { } known
+                    ? slot == known : LocalPlayer.IsLocalPlayer(p);
+                if (mine) return ReplayHooks.HpAtWin(p);
+                slot++;
+            }
+        }
+        catch { }
+        return null;
     }
 
     private static void RecoverAbandoned()

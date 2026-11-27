@@ -71,6 +71,18 @@ teammate's `c` values in later rows match the ones listed here.
   `gold`, `final_deck`, `final_relics` (relic ids). When the run is already gone as the row is
   written (the player left it), it holds only the teammate's last `peer_deck` as `final_deck`,
   with no hp, gold or relics.
+- `end` gets `victory: true` when the game won the run (`RunManager.OnEnded(isVictory: true)`,
+  from The Architect's Proceed). Absent otherwise. Single-player and co-op.
+
+### After a win
+
+Once a run is won, the game kills every player (`RunManager.GuaranteeKillAllPlayers`, one
+`CreatureCmd.Kill` per player, 0.25-0.5 s apart) before the game-over screen. So a won run
+ends with one `death` row per player. Those rows carry `cause: "run_won"`; they are not
+losses. The `end` row's `hp` and each `final_players` entry's `hp` are the hp at the win, not
+the 0 left after the kills. Before this, whether `end.hp` read 0 depended on whether the last
+poll landed before or after the kills. With three players it read 0 for everyone, and in solo
+it usually read the real hp.
 
 ## Rows that now carry `mine` + `player_slot`
 

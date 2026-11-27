@@ -34,6 +34,14 @@ internal static class ReplayHooks
 
     public static bool PlayerDied { get; private set; }
 
+    // v10: the game won the run (RunManager.OnEnded(isVictory: true)). A win then kills every
+    // player (RunManager.GuaranteeKillAllPlayers), so the hp each player had at the win is kept.
+    public static bool RunWon { get; private set; }
+    private static readonly Dictionary<object, int> _hpAtWin = new(ReferenceEqualityComparer.Instance);
+
+    public static int? HpAtWin(object? player)
+        => player != null && _hpAtWin.TryGetValue(player, out var hp) ? hp : null;
+
 
     public static void CloseOpenDecision() => DemoteDecision();
 
@@ -60,6 +68,8 @@ internal static class ReplayHooks
     public static void ResetRun()
     {
         PlayerDied = false;
+        RunWon = false;
+        _hpAtWin.Clear();
         _decisionOwner = null;
         _prevDecisionOwner = null;
         _pendingBuys.Clear();
@@ -212,6 +222,7 @@ internal static class ReplayHooks
         attempted++; n += HookPatcher.PatchOn(harmony, runManager, "EnterMapCoord", me, nameof(MapCoordChosen), 1);
         attempted++; n += HookPatcher.PatchOn(harmony, runManager, "ExitCurrentRoom", me, nameof(RoomExiting), 0);
         attempted++; n += HookPatcher.PatchOn(harmony, runManager, "ResumePreviousRoom", me, nameof(RoomResuming), 0);
+        attempted++; n += HookPatcher.PatchOn(harmony, runManager, "OnEnded", me, nameof(RunEnding), 1);
         attempted++; n += HookPatcher.PatchOn(harmony,
             HookPatcher.FindType("MegaCrit.Sts2.Core.Rooms.MapRoom"),
             "EnterInternal", me, nameof(MapRoomEntered), 2);
@@ -1111,7 +1122,8 @@ internal static class ReplayHooks
                 ?.Set("tgt", CreatureRef(__2))
                 .Set("tgt_cid", CreatureSlots.Maybe(__2))
                 .SetFlag("removal_prevented", __3 == true)
-                .Set("cause", _doomed.Contains(__2) ? "doom" : null)
+                .Set("cause", _doomed.Contains(__2) ? "doom"
+                    : RunWon && Reflect.GetMember(__2, "IsPlayer") is true ? "run_won" : null)
                 .Set("killed_by", KilledBy.TryGetValue(__2, out var by) ? by : null)
                 .WhoCreature("tgt", __2)
                 .Emit();
@@ -1120,6 +1132,19 @@ internal static class ReplayHooks
     }
 
     private static void CombatWonEvent(object room) => _combatWon = true;
+
+    private static void RunEnding(object __instance, bool __0)
+    {
+        try
+        {
+            if (!__0 || RunWon || Reflect.GetMember(__instance, "HasRunEnded") is true) return;
+            RunWon = true;
+            foreach (var p in Enumerate(Reflect.GetMember(Reflect.GetMember(__instance, "State"), "Players")))
+                if (Reflect.GetMember(Reflect.GetMember(p, "Creature"), "CurrentHp") is int hp)
+                    _hpAtWin[p] = hp;
+        }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
+    }
 
     private static void CombatEndedEvent(object room)
     {
