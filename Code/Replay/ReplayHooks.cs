@@ -456,7 +456,11 @@ internal static class ReplayHooks
                                  "FromDeckForRemoval", me, nameof(RemovalSelectLeft), 3, postfix: true);
         var treasureSync = HookPatcher.FindType("MegaCrit.Sts2.Core.Multiplayer.Game.TreasureRoomRelicSynchronizer");
         attempted++; n += HookPatcher.PatchOn(harmony, treasureSync, "BeginRelicPicking", me, nameof(TreasureOffered), 0, postfix: true);
-        attempted++; n += HookPatcher.PatchOn(harmony, treasureSync, "OnPicked", me, nameof(TreasurePicked), 2);
+        // v0.114 added a roundIndex: OnPicked(Player, int?, int).
+        attempted++;
+        var picked = treasureSync?.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Any(m => m.Name == "OnPicked" && m.GetParameters().Length == 3) == true ? 3 : 2;
+        n += HookPatcher.PatchOn(harmony, treasureSync, "OnPicked", me, nameof(TreasurePicked), picked);
         attempted++; n += HookPatcher.PatchOn(harmony, treasureSync, "CompleteWithNoRelics", me, nameof(TreasureEmpty), 0);
         var relicReward = HookPatcher.FindType("MegaCrit.Sts2.Core.Rewards.RelicReward");
         attempted++; n += HookPatcher.PatchOn(harmony, relicReward, "OnSelect", me, nameof(RelicRewardSelecting), 0);
