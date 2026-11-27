@@ -268,6 +268,8 @@ public static class ReplayRecorder
     //   header `players`: starting_deck, starting_relics, relics, potions
     //   resume `players`: deck, relics, potions (the state the run reloaded into)
     //   end `final_players`: final_deck, final_relics (ids), like the end row's own
+    private static int? _localSlot;
+
     private static List<ReplayLine>? PlayerRows(PlayersAt at)
     {
         try
@@ -288,7 +290,12 @@ public static class ReplayRecorder
                 var deck = LiveDeck(p, out _);
                 var relics = HeldRelics(p);
                 var relicIds = relics?.Select(r => r.Fields.TryGetValue("id", out var id) ? id : null).ToList();
-                var mine = LocalPlayer.IsLocalPlayer(p);
+                // After save and quit the game has already dropped the local net id, and IsLocalPlayer
+                // then reads every player as local; the slot seen at the header or resume decides.
+                var mine = LocalPlayer.NetId == null && at == PlayersAt.End && _localSlot is { } known
+                    ? slot == known
+                    : LocalPlayer.IsLocalPlayer(p);
+                if (mine && at != PlayersAt.End) _localSlot = slot;
                 var row = new ReplayLine("pl")
                     .Set("player_slot", slot)
                     .SetFlag("mine", mine)
