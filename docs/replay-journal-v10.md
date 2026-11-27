@@ -224,6 +224,16 @@ this client is at the merchant, whenever that inventory changes, so `slot` on th
   the first pick pushed it out and the second player's card read `source:"granted"`.
 - `end.final_players` after save and quit: written from the last in-run state; v10 first
   checked co-op after the game had already left the run and wrote none.
+- Card reward `skip` outcomes in co-op: leaving a room skips every reward set nobody opened, and
+  a teammate's skip runs on this machine too. Each wrote `outcome:"skip"` with `decision_id:0`
+  and no `decision_type`, and a teammate's skip closed the local player's open card reward. A
+  co-op skip is now written only for an open card reward of that same player.
+  Single-player is unchanged.
+- Treasure in co-op (not a fix, a reading note): every pick a player makes before the chest
+  resolves is its own `outcome` row, repeats and changes included, so the last row per
+  `player_slot` is that player's final pick. When two players pick the same relic the game
+  settles it and the other gets a different relic, so what each player got is their `relic` row
+  with the treasure's `decision_id`, not their last `outcome`.
 
 ## Not recorded for the teammate
 

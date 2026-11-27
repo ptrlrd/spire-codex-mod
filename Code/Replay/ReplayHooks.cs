@@ -2406,11 +2406,17 @@ internal static class ReplayHooks
     {
         try
         {
+            // Co-op skips every unopened reward set on leaving the room, and teammates' skips land
+            // here too: with no open card reward of that player's, there is no decision to close.
+            var player = Reflect.GetMember(__instance, "Player");
+            if (LocalPlayer.IsCoop
+                && (_decision == 0 || _decisionType != "card_reward" || !OwnsDecision(_decisionOwner, player)))
+                return;
             ReplayRecorder.Line("outcome")
                 ?.Set("decision_id", _decision)
                 .Set("decision_type", _decisionType)
                 .Set("outcome", "skip")
-                .Who(Reflect.GetMember(__instance, "Player"))
+                .Who(player)
                 .Emit();
             DemoteDecision();
         }
