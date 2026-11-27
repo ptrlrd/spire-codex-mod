@@ -71,6 +71,7 @@ public static class ReplayRecorder
                 {
                     _lastInRun = snapshot;
                     RefreshDeckIfChanged(snapshot);
+                    RefreshPeerDecks();
                     RecordShopIfChanged(snapshot);
                 }
                 return;
@@ -213,7 +214,7 @@ public static class ReplayRecorder
     private static void WriteHeader(Snapshot s, string seed, long startTime)
     {
         Line("header")
-            ?.Set("replay_version", 9)
+            ?.Set("replay_version", 10)
             .Set("run_schema_version", 9)
             .Set("seed", seed)
             .Set("build_id", Core.Sts2Version.Current.Split('+')[0])
@@ -243,7 +244,102 @@ public static class ReplayRecorder
             .Set("potions", PotionBelt())
             .Set("rng_state", RngState.Read())
             .Set("unlock_state", UnlockStateRow.Read(Core.Sts2Access.LivePlayer))
+            .Set("players", LocalPlayer.IsCoop ? PlayerRows() : null)
             .Emit();
+    }
+
+    // v10, co-op only: every player in slot order (RunState.Players), so a replay can set up
+    // the teammate as well as the local player. The top-level character, starting_deck,
+    // starting_relics, relics and potions stay the local player's, as before.
+    private static List<ReplayLine>? PlayerRows()
+    {
+        try
+        {
+            if (Reflect.GetMember(Core.Sts2Access.LiveRunState, "Players")
+                    is not System.Collections.IEnumerable players) return null;
+            var rows = new List<ReplayLine>();
+            _peerDeckSigs.Clear();
+            var slot = 0;
+            foreach (var p in players)
+            {
+                if (p == null) { slot++; continue; }
+                var creature = Reflect.GetMember(p, "Creature");
+                var deck = LiveDeck(p, out _);
+                var relics = HeldRelics(p);
+                var mine = LocalPlayer.IsLocalPlayer(p);
+                rows.Add(new ReplayLine("pl")
+                    .Set("player_slot", slot)
+                    .SetFlag("mine", mine)
+                    .Set("character", Core.Ids.Bare(Reflect.GetString(p, "Character")))
+                    .Set("hp", Reflect.GetMember(creature, "CurrentHp") as int?)
+                    .Set("max_hp", Reflect.GetMember(creature, "MaxHp") as int?)
+                    .Set("gold", Reflect.GetMember(p, "Gold") as int?)
+                    .Set("starting_deck", deck)
+                    .Set("starting_relics", relics?.Select(r => r.Fields.TryGetValue("id", out var id) ? id : null).ToList())
+                    .Set("relics", relics)
+                    .Set("potions", PotionBelt(p)));
+                if (!mine) _peerDeckSigs[slot] = PeerDeckSignature(p);
+                slot++;
+            }
+            return rows;
+        }
+        catch { return null; }
+    }
+
+    // v10, co-op only: a `peer_deck` row (player_slot, mine:false, cards as on `deck`) when a
+    // teammate's deck changes. Kept apart from `deck`, which stays the local player's deck
+    // (save-and-quit remapping reads the last `deck` row).
+    private static readonly Dictionary<int, int> _peerDeckSigs = new();
+
+    private static void RefreshPeerDecks()
+    {
+        if (_journal == null || !LocalPlayer.IsCoop) return;
+        try
+        {
+            if (Reflect.GetMember(Core.Sts2Access.LiveRunState, "Players")
+                    is not System.Collections.IEnumerable players) return;
+            var slot = 0;
+            foreach (var p in players)
+            {
+                var at = slot++;
+                if (p == null || LocalPlayer.IsLocalPlayer(p)) continue;
+                var sig = PeerDeckSignature(p);
+                if (_peerDeckSigs.TryGetValue(at, out var known) && known == sig) continue;
+                _peerDeckSigs[at] = sig;
+                Line("peer_deck")
+                    ?.Set("player_slot", at)
+                    .SetFlag("mine", false)
+                    .Set("cards", LiveDeck(p, out _))
+                    .Emit();
+            }
+        }
+        catch { }
+    }
+
+    private static int PeerDeckSignature(object player)
+    {
+        var sig = 17;
+        if (Reflect.GetMember(Reflect.GetMember(player, "Deck"), "Cards") is not System.Collections.IEnumerable cards)
+            return sig;
+        foreach (var card in cards)
+        {
+            if (card == null) continue;
+            var enchantment = Reflect.GetMember(card, "Enchantment");
+            sig = unchecked(sig * 31 + RuntimeHelpers.GetHashCode(card));
+            sig = unchecked(sig * 31 + Reflect.GetInt(card, "CurrentUpgradeLevel", 0));
+            sig = unchecked(sig * 31 + (enchantment == null ? 0 : RuntimeHelpers.GetHashCode(enchantment)));
+            sig = unchecked(sig * 31 + (enchantment == null ? 0 : Reflect.GetInt(enchantment, "Amount", 0)));
+        }
+        return sig;
+    }
+
+    // `deck` rows are the local player's deck; v10 says so in co-op (mine:true, player_slot).
+    private static ReplayLine? LocalDeckLine(List<ReplayLine> cards)
+    {
+        var line = Line("deck")?.Set("cards", cards);
+        if (line == null || !LocalPlayer.IsCoop) return line;
+        var me = Core.Sts2Access.LivePlayer;
+        return CoopRows.Owner(line, true, true, ReplayHooks.PlayerSlot(me));
     }
 
     private static List<ReplayLine>? LoadedMods()
@@ -406,7 +502,7 @@ public static class ReplayRecorder
         _deckSnapshot = LiveDeck(out var keys);
         _deckKeys = keys;
         _deckFirst = NewDeckReference();
-        Line("deck")?.Set("cards", _deckSnapshot).Emit();
+        LocalDeckLine(_deckSnapshot).Emit();
     }
 
     private static bool DeckWasRenumbered()
@@ -478,7 +574,7 @@ public static class ReplayRecorder
                 .Set("rng_state", RngState.Read())
                 .Emit();
         }
-        Line("deck")?.Set("cards", rows).Emit();
+        LocalDeckLine(rows).Emit();
     }
 
     public static void MarkDeckChanged() => _deckDirty = true;
@@ -500,12 +596,15 @@ public static class ReplayRecorder
     private static List<ReplayLine> LiveDeck() => LiveDeck(out _);
 
     private static List<ReplayLine> LiveDeck(out List<DeckRemap.Entry> entries)
+        => LiveDeck(Core.Sts2Access.LivePlayer, out entries);
+
+    private static List<ReplayLine> LiveDeck(object? player, out List<DeckRemap.Entry> entries)
     {
         var rows = new List<ReplayLine>();
         entries = new List<DeckRemap.Entry>();
         try
         {
-            var deck = Reflect.GetMember(Core.Sts2Access.LivePlayer, "Deck");
+            var deck = Reflect.GetMember(player, "Deck");
             if (Reflect.GetMember(deck, "Cards") is not System.Collections.IEnumerable cards)
                 return rows;
             foreach (var card in cards)
@@ -538,11 +637,13 @@ public static class ReplayRecorder
         return rows;
     }
 
-    private static List<ReplayLine>? HeldRelics()
+    private static List<ReplayLine>? HeldRelics() => HeldRelics(Core.Sts2Access.LivePlayer);
+
+    private static List<ReplayLine>? HeldRelics(object? player)
     {
         try
         {
-            if (Reflect.GetMember(Core.Sts2Access.LivePlayer, "Relics") is not System.Collections.IEnumerable relics)
+            if (Reflect.GetMember(player, "Relics") is not System.Collections.IEnumerable relics)
                 return null;
             var rows = new List<ReplayLine>();
             foreach (var relic in relics)
@@ -584,11 +685,13 @@ public static class ReplayRecorder
         _ => Core.Ids.Bare(Reflect.GetString(value, "Id")) ?? value.ToString(),
     };
 
-    private static List<ReplayLine>? PotionBelt()
+    private static List<ReplayLine>? PotionBelt() => PotionBelt(Core.Sts2Access.LivePlayer);
+
+    private static List<ReplayLine>? PotionBelt(object? player)
     {
         try
         {
-            if (Reflect.GetMember(Core.Sts2Access.LivePlayer, "PotionSlots") is not System.Collections.IEnumerable slots)
+            if (Reflect.GetMember(player, "PotionSlots") is not System.Collections.IEnumerable slots)
                 return null;
             var rows = new List<ReplayLine>();
             var slot = 0;

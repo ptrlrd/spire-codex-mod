@@ -35,7 +35,9 @@ namespace SpireCodex.Replay;
 // for the slot's last impale since it was last shot, as seen by this recorder's own impale row;
 // they are omitted when the slot has not been impaled since its last shot.
 //
-// Only the local player's slots are recorded. A status change to Away writes no row of its own:
+// Single-player: the player's slots. Co-op (v10): every player's slots, each row with
+// mine/player_slot for the slot's owner (the local player's start row first). A status change
+// to Away writes no row of its own:
 // the shot row fires right after it with nothing in between (ArrowCmd.cs:116-119).
 internal static class ArrowHooks
 {
@@ -81,16 +83,24 @@ internal static class ArrowHooks
                     if (p != null) players.Add(p);
             // Same choice as the draw_order row: the local player, or the only player.
             var me = players.Find(LocalPlayer.IsLocalPlayer) ?? (players.Count == 1 ? players[0] : null);
-            var pcs = Reflect.GetMember(me, "PlayerCombatState");
-            if (pcs == null) return;
-            Listen(pcs);
-            if (ArrowSlots.Slots(pcs) is not { Count: > 0 }) return;
-            var line = ReplayRecorder.Line("arrow");
-            if (line == null) return;
-            ArrowSlots.Describe(line, "start", null, null, pcs);
-            line.Emit();
+            Start(me);
+            if (!LocalPlayer.IsCoop) return;
+            foreach (var p in players)
+                if (!ReferenceEquals(p, me)) Start(p);
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
+    }
+
+    private static void Start(object? player)
+    {
+        var pcs = Reflect.GetMember(player, "PlayerCombatState");
+        if (pcs == null) return;
+        Listen(pcs);
+        if (ArrowSlots.Slots(pcs) is not { Count: > 0 }) return;
+        var line = ReplayRecorder.Line("arrow");
+        if (line == null) return;
+        ArrowSlots.Describe(line, "start", null, null, pcs);
+        Who(line, player).Emit();
     }
 
     private static void Shot(object __1, object? __2, object? __4)
@@ -108,7 +118,7 @@ internal static class ArrowHooks
             if (line == null) return;
             ArrowSlots.Describe(line, __2 == null ? "empty_shot" : "shot", __2, null,
                                 Reflect.GetMember(__1, "PlayerCombatState"));
-            line.Set("card", Card(__4)).Emit();
+            Who(line.Set("card", Card(__4)), __1).Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
@@ -137,7 +147,7 @@ internal static class ArrowHooks
             ArrowSlots.Describe(line, "impale", __2, __1);
             Target(line, target, __1).Set("card", Card(__4));
             if (Reflect.GetMember(target, "IsDead") is bool dead) line.SetFlag("tgt_dead", dead);
-            line.Emit();
+            Who(line, Reflect.GetMember(__2, "owner")).Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
@@ -151,7 +161,8 @@ internal static class ArrowHooks
             if (line == null) return;
             ArrowSlots.Describe(line, "dislodge", __2, __1);
             Holders.TryGetValue(__2, out var holder);
-            Target(line, holder?.Creature ?? Reflect.GetMember(__1, "Owner"), __1).Set("card", Card(__4)).Emit();
+            Target(line, holder?.Creature ?? Reflect.GetMember(__1, "Owner"), __1).Set("card", Card(__4));
+            Who(line, Reflect.GetMember(__2, "owner")).Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
@@ -172,7 +183,7 @@ internal static class ArrowHooks
             Holders.TryGetValue(slot, out var holder);
             ArrowSlots.Describe(line, ev, slot, holder?.Power);
             if (holder != null) Target(line, holder.Creature, holder.Power);
-            line.Emit();
+            Who(line, Reflect.GetMember(slot, "owner")).Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
@@ -188,7 +199,7 @@ internal static class ArrowHooks
             // so the new slot is the last one.
             var slots = ArrowSlots.Slots(pcs);
             ArrowSlots.Describe(line, "gain", slots is { Count: > 0 } ? slots[^1] : null, null, pcs);
-            line.Emit();
+            Who(line, Reflect.GetMember(pcs, "_player")).Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
@@ -226,8 +237,13 @@ internal static class ArrowHooks
         }
     }
 
-    private static bool Mine(object? player)
-        => player != null && (!LocalPlayer.IsCoop || LocalPlayer.IsLocalPlayer(player));
+    // Any player's slots (v10: the teammate's too, in co-op).
+    private static bool Mine(object? player) => player != null;
+
+    private static ReplayLine Who(ReplayLine line, object? player)
+        => CoopRows.Owner(line, LocalPlayer.IsCoop && player != null,
+                          player == null ? null : LocalPlayer.IsLocalPlayer(player),
+                          ReplayHooks.PlayerSlot(player));
 
     private static ReplayLine Target(ReplayLine line, object? creature, object? power)
     {
