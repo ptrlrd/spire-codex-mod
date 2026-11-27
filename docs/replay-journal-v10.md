@@ -217,6 +217,13 @@ this client is at the merchant, whenever that inventory changes, so `slot` on th
 - `selector` on `pick` rows: v0.114 replaced the static `CardSelectCmd.Selector` with one
   selector stack per player (`RunManager.Instance.CardSelectorStack.GetSelector(player)`).
   v10 reads the picking player's stack; `"human"` still means no automated selector.
+- `acquire` after a card reward was taken: the taken reward's offers stayed matchable, so a later
+  card with the same id (a shop buy floors later, an event card) was written as `source:"reward"`
+  with that old `decision_id`. A reward a card resolved is no longer matched again. In co-op the
+  other player's still-open card reward keeps its place, so their pick still links to it; before,
+  the first pick pushed it out and the second player's card read `source:"granted"`.
+- `end.final_players` after save and quit: written from the last in-run state; v10 first
+  checked co-op after the game had already left the run and wrote none.
 
 ## Not recorded for the teammate
 

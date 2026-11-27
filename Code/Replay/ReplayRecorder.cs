@@ -919,7 +919,9 @@ public static class ReplayRecorder
             .Set("max_hp", s.MaxHp)
             .Set("final_deck", (object?)_deckSnapshot ?? s.Deck.Select(d => d.Id).ToList())
             .Set("final_relics", s.Relics.Select(r => r.Id).ToList())
-            .Set("final_players", LocalPlayer.IsCoop ? PlayerRows(PlayersAt.End) : null);
+            // The last in-run snapshot, not LocalPlayer.IsCoop: after save and quit the live state
+            // has already left the run (one player or none) when this row is written.
+            .Set("final_players", s.PlayerCount > 1 || LocalPlayer.IsCoop ? PlayerRows(PlayersAt.End) : null);
 
         _ = Task.Run(async () =>
         {

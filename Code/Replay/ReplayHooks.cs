@@ -2761,7 +2761,22 @@ internal static class ReplayHooks
                 .Set("option_index", optionIndex)
                 .Who(CardOwner(__2))
                 .Emit();
-            if (offered && decisionForCard == _decision) DemoteDecision();
+            // A card reward the card resolved is not matched again: left in the previous slot,
+            // its offers would claim a later card of the same id (a shop buy floors later read as
+            // source "reward" with that decision). The decision before it keeps its place, so in
+            // co-op the other player's open card reward can still be matched.
+            if (offered && decisionForCard == _decision)
+            {
+                var (pd, po, pi) = (_prevDecision, _prevDecisionOwner, _prevOfferIndex);
+                DemoteDecision();
+                (_prevDecision, _prevDecisionOwner, _prevOfferIndex) = (pd, po, pi);
+            }
+            else if (offered)
+            {
+                _prevDecision = 0;
+                _prevDecisionOwner = null;
+                _prevOfferIndex = null;
+            }
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
