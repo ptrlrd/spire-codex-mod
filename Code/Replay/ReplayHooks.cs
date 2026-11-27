@@ -12,6 +12,11 @@ namespace SpireCodex.Replay;
 internal static class ReplayHooks
 {
     private static int _decision;
+
+    // v10, co-op: whose the open decision (and the one before it) is; null for a shared one
+    // (map, treasure) or outside co-op. See OwnsDecision.
+    private static object? _decisionOwner;
+    private static object? _prevDecisionOwner;
     private static string? _decisionType;
 
     private static PropertyInfo? _selectorProp;
@@ -52,6 +57,8 @@ internal static class ReplayHooks
     public static void ResetRun()
     {
         PlayerDied = false;
+        _decisionOwner = null;
+        _prevDecisionOwner = null;
         _pendingBuys.Clear();
         _combatId = null;
         _combatFloorKey = null;
@@ -139,10 +146,12 @@ internal static class ReplayHooks
         if (_decision > 0)
         {
             _prevDecision = _decision;
+            _prevDecisionOwner = _decisionOwner;
             _prevOfferIndex = _offerIndex;
         }
         _decision = 0;
         _decisionType = null;
+        _decisionOwner = null;
         _offerIndex = null;
         _ambiguousOffers = null;
     }
@@ -2320,6 +2329,7 @@ internal static class ReplayHooks
             {
                 DemoteDecision();
                 _decision = ReplayRecorder.NextDecisionId();
+                _decisionOwner = Reflect.GetMember(__instance, "Player");
             }
             _pendingReroll = 0;
             _decisionType = "card_reward";
@@ -2438,6 +2448,7 @@ internal static class ReplayHooks
         if (ReplayRecorder.Line("decision") is not { } line) return null;
         FlushSelectOutcome();
         _decision = ReplayRecorder.NextDecisionId();
+        _decisionOwner = player;
         _decisionType = source + "_" + kind;
 
         var selectableCount = 0;
@@ -2557,12 +2568,22 @@ internal static class ReplayHooks
 
     private static object? CardOwner(object? card) => Reflect.GetMember(card, "Owner");
 
+    // v10, co-op: a row whose player is known links only to a decision of that same player, or
+    // to a shared one. Before v10 a teammate's relic, upgrade or acquire could take the local
+    // player's open decision_id when both happened together. Single-player: always true.
+    private static bool OwnsDecision(object? decisionOwner, object? rowPlayer)
+        => CoopRows.OwnsDecision(LocalPlayer.IsCoop, decisionOwner, rowPlayer);
+
+    // The open decision id for a row of `rowPlayer`, or 0 when that decision is someone else's.
+    private static int Dec(object? rowPlayer)
+        => OwnsDecision(_decisionOwner, rowPlayer) ? _decision : 0;
+
     private static void CardRemoved(object __1)
     {
         try
         {
             ReplayRecorder.Line("remove")
-                ?.Set("decision_id", _decision > 0 ? _decision : (int?)null)
+                ?.Set("decision_id", Dec(CardOwner(__1)) > 0 ? _decision : (int?)null)
                 .Set("option_index", SelectIndexOf(__1))
                 .Set("c", CardInstances.Of(__1))
                 .Set("id", Ids.Bare(Reflect.GetString(__1, "Id")))
@@ -2584,7 +2605,7 @@ internal static class ReplayHooks
             {
                 var selects = ShopRows.OpensCardSelect(kind, Reflect.GetString(__2, "MerchantEntryType"))
                               && (kind == "removal_service" || _decisionType?.StartsWith("deck_select") == true);
-                line.Set("decision_id", selects && _decision > 0 ? _decision : (int?)null);
+                line.Set("decision_id", selects && Dec(__1) > 0 ? _decision : (int?)null);
                 EntryFields(line, __2, __1, kind, pending?.Id, pending?.StartSeq)
                     .Who(__1, legacy: true)
                     .Set("cost_current", __3)
@@ -2635,7 +2656,7 @@ internal static class ReplayHooks
             var line = ReplayRecorder.Line("resolve");
             if (line == null) return;
             line.Set("decision_id", kind == "RelicReward" ? RelicRewardDecision(__2, mint: false)
-                                    : _decision > 0 ? _decision : (int?)null)
+                                    : Dec(__1) > 0 ? _decision : (int?)null)
                 .Set("reward_kind", kind);
             switch (kind)
             {
@@ -2664,13 +2685,16 @@ internal static class ReplayHooks
             if (room == null) return;
 
             var acquiredId = Ids.Bare(Reflect.GetString(__2, "Id"));
+            var cardOwner = CardOwner(__2);
             int? optionIndex = null;
             var decisionForCard = 0;
             if (acquiredId != null && _ambiguousOffers?.Contains(acquiredId) != true)
             {
-                if (_offerIndex != null && _offerIndex.TryGetValue(acquiredId, out var oi))
+                if (_offerIndex != null && OwnsDecision(_decisionOwner, cardOwner)
+                    && _offerIndex.TryGetValue(acquiredId, out var oi))
                 { optionIndex = oi; decisionForCard = _decision; }
-                else if (_prevOfferIndex != null && _prevOfferIndex.TryGetValue(acquiredId, out var po))
+                else if (_prevOfferIndex != null && OwnsDecision(_prevDecisionOwner, cardOwner)
+                         && _prevOfferIndex.TryGetValue(acquiredId, out var po))
                 { optionIndex = po; decisionForCard = _prevDecision; }
             }
             var offered = optionIndex != null;
@@ -2685,7 +2709,7 @@ internal static class ReplayHooks
                         : source == "granted" || source == "shop" ? (int?)null
                         : _decisionType == "deck_select_remove"
                           || _decisionType == EnchantSelectType ? (int?)null
-                        : _decision > 0 ? _decision : (int?)null)
+                        : Dec(cardOwner) > 0 ? _decision : (int?)null)
                 .Set("source", source)
                 .Set("c", CardInstances.Of(__2))
                 .Set("id", acquiredId)
@@ -2728,7 +2752,7 @@ internal static class ReplayHooks
             ReplayRecorder.MarkDeckChanged();
             var offered = _decisionType == UpgradeSelectType;
             ReplayRecorder.Line("upgrade")
-                ?.Set("decision_id", _decision > 0 && (offered || _decisionType is "event" or "rest")
+                ?.Set("decision_id", Dec(CardOwner(__0)) > 0 && (offered || _decisionType is "event" or "rest")
                     ? _decision : (int?)null)
                 .Set("option_index", offered ? SelectIndexOf(__0) : null)
                 .Set("c", CardInstances.Of(__0))
@@ -2757,7 +2781,7 @@ internal static class ReplayHooks
             if (!LiveCards.Record(__0)) return;
             ReplayRecorder.MarkDeckChanged();
             ReplayRecorder.Line("downgrade")
-                ?.Set("decision_id", _decisionType == "event" && _decision > 0 ? _decision : (int?)null)
+                ?.Set("decision_id", _decisionType == "event" && Dec(CardOwner(__0)) > 0 ? _decision : (int?)null)
                 .Set("c", CardInstances.Of(__0))
                 .Set("id", Ids.Bare(Reflect.GetString(__0, "Id")))
                 .Set("from_up", before)
@@ -2845,7 +2869,7 @@ internal static class ReplayHooks
             if (!LiveCards.RecordTransform(__instance)) return;
             var offered = _decisionType == TransformSelectType;
             ReplayRecorder.Line("transform")
-                ?.Set("decision_id", _decision > 0 && (offered || _decisionType is "event" or "rest")
+                ?.Set("decision_id", Dec(CardOwner(__instance)) > 0 && (offered || _decisionType is "event" or "rest")
                     ? _decision : (int?)null)
                 .Set("option_index", offered ? SelectIndexOf(from) : null)
                 .Set("from_c", from == null ? (int?)null : CardInstances.Of(from))
@@ -2867,7 +2891,7 @@ internal static class ReplayHooks
                 || _decisionType == TreasureType && _treasureOfferIds?.Contains(Ids.Bare(Reflect.GetString(__0, "Id")) ?? "") == true;
             ReplayRecorder.Line("relic")
                 ?.Set("decision_id",
-                      !fromShelf && grantable && _decision > 0 ? _decision : (int?)null)
+                      !fromShelf && grantable && Dec(__1) > 0 ? _decision : (int?)null)
                 .Set("id", Ids.Bare(Reflect.GetString(__0, "Id")))
                 .Who(__1)
                 .Emit();
@@ -2888,7 +2912,7 @@ internal static class ReplayHooks
             if (Reflect.GetMember(__0, "HasBeenRemovedFromState") is not true) return;
             ReplayRecorder.Line("relic_lost")
                 ?.Set("decision_id",
-                      !replacing && _decisionType == "event" && _decision > 0
+                      !replacing && _decisionType == "event" && Dec(Reflect.GetMember(__0, "Owner")) > 0
                           ? _decision : (int?)null)
                 .Set("id", Ids.Bare(Reflect.GetString(__0, "Id")))
                 .Set("reason", replacing ? "replaced" : "removed")
@@ -3024,6 +3048,7 @@ internal static class ReplayHooks
             {
                 DemoteDecision();
                 _decision = decision;
+                _decisionOwner = __0;
                 _decisionType = "rest";
             }
             _restPending = new RestChoice(__0, Reflect.GetString(opt, "OptionId")?.ToLowerInvariant(),
@@ -3088,7 +3113,7 @@ internal static class ReplayHooks
             _relicCounters.AddOrUpdate(__instance, new StrongBox<int>(n));
             line.Set("id", Ids.Bare(Reflect.GetString(__instance, "Id")))
                 .Set("n", n)
-                .Set("decision_id", _decisionType is "event" or "rest" && _decision > 0
+                .Set("decision_id", _decisionType is "event" or "rest" && Dec(owner) > 0
                                         ? _decision : (int?)null)
                 .Who(owner, legacy: true)
                 .Emit();
@@ -3409,6 +3434,7 @@ internal static class ReplayHooks
             if (_eventDecision > 0)
             {
                 _decision = _eventDecision;
+                _decisionOwner = __0;
                 _decisionType = "event";
             }
 
@@ -3575,12 +3601,19 @@ internal static class ReplayHooks
         line.Set("floor", floor).Set("act", actIndex + 1);
     }
 
+    // v10, co-op only: a player's pet (Creature.PetOwner) says whose it is, as owner_mine and
+    // owner_slot, on combat_start enemies/allies and spawn rows.
     private static ReplayLine CreatureEntry(ReplayLine row, object c)
-        => row.Set("cid", CreatureSlots.Maybe(c))
+    {
+        row.Set("cid", CreatureSlots.Maybe(c))
             .Set("id", Ids.Bare(Reflect.GetString(c, "ModelId")))
             .Set("slot", Reflect.GetString(c, "SlotName"))
             .Set("hp", HpOf(c, "CurrentHp"))
             .Set("max_hp", HpOf(c, "MaxHp"));
+        if (LocalPlayer.IsCoop && Reflect.GetMember(c, "PetOwner") is { } owner)
+            row.Set("owner_mine", LocalPlayer.IsLocalPlayer(owner)).Set("owner_slot", PlayerSlot(owner));
+        return row;
+    }
 
     private static void CreatureAdded(object __instance, object __0)
     {

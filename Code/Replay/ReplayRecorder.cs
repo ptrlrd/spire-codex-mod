@@ -70,6 +70,10 @@ public static class ReplayRecorder
                 if (snapshot.InRun)
                 {
                     _lastInRun = snapshot;
+                    // Same run, possibly reloaded in process into a new RunState object.
+                    if (Core.Sts2Access.LiveRunState is { } live
+                        && (_runState == null || !_runState.TryGetTarget(out var known) || !ReferenceEquals(known, live)))
+                        _runState = new WeakReference<object>(live);
                     RefreshDeckIfChanged(snapshot);
                     RefreshPeerDecks();
                     RecordShopIfChanged(snapshot);
@@ -95,6 +99,9 @@ public static class ReplayRecorder
             _deckDirty = false;
             _deckKeys = null;
             _deckFirst = null;
+            _peerDecks.Clear();
+            _peerDeckSigs.Clear();
+            _peerShopSigs.Clear();
             if (string.IsNullOrEmpty(seed)) return;
             _lastInRun = snapshot;
 
@@ -109,6 +116,7 @@ public static class ReplayRecorder
             _deckDirty = false;
 
             var runState = Core.Sts2Access.LiveRunState;
+            _runState = runState == null ? null : new WeakReference<object>(runState);
             var runSeed = Reflect.GetString(Reflect.GetMember(runState, "Rng"), "StringSeed");
             var startTime = RunStartTime();
             if (runSeed == null || startTime == 0)
@@ -153,6 +161,7 @@ public static class ReplayRecorder
                     .Set("potions", PotionBelt())
                     .Set("rng_state", RngState.Read())
                     .Set("unlock_state", UnlockStateRow.Read(Core.Sts2Access.LivePlayer))
+                    .Set("players", LocalPlayer.IsCoop ? PlayerRows(PlayersAt.Resume) : null)
                     .Emit();
             if (journal.Resumed) EmitDeckRemap(journal);
             RefreshDeckIfChanged(snapshot);
@@ -244,21 +253,33 @@ public static class ReplayRecorder
             .Set("potions", PotionBelt())
             .Set("rng_state", RngState.Read())
             .Set("unlock_state", UnlockStateRow.Read(Core.Sts2Access.LivePlayer))
-            .Set("players", LocalPlayer.IsCoop ? PlayerRows() : null)
+            .Set("players", LocalPlayer.IsCoop ? PlayerRows(PlayersAt.Header) : null)
             .Emit();
     }
 
+    private enum PlayersAt { Header, Resume, End }
+
+    // The run state this journal was opened for, so the end row never reads the next run's players.
+    private static WeakReference<object>? _runState;
+
     // v10, co-op only: every player in slot order (RunState.Players), so a replay can set up
-    // the teammate as well as the local player. The top-level character, starting_deck,
-    // starting_relics, relics and potions stay the local player's, as before.
-    private static List<ReplayLine>? PlayerRows()
+    // the teammate as well as the local player. The top-level fields of the header, `resume`
+    // and `end` rows stay the local player's, as before.
+    //   header `players`: starting_deck, starting_relics, relics, potions
+    //   resume `players`: deck, relics, potions (the state the run reloaded into)
+    //   end `final_players`: final_deck, final_relics (ids), like the end row's own
+    private static List<ReplayLine>? PlayerRows(PlayersAt at)
     {
         try
         {
-            if (Reflect.GetMember(Core.Sts2Access.LiveRunState, "Players")
-                    is not System.Collections.IEnumerable players) return null;
+            var state = Core.Sts2Access.LiveRunState;
+            if (at == PlayersAt.End && (_runState == null || !_runState.TryGetTarget(out var started)
+                                         || !ReferenceEquals(started, state)))
+                return EndFallback(at);
+            if (Reflect.GetMember(state, "Players")
+                    is not System.Collections.IEnumerable players) return EndFallback(at);
             var rows = new List<ReplayLine>();
-            _peerDeckSigs.Clear();
+            if (at != PlayersAt.End) _peerDeckSigs.Clear();
             var slot = 0;
             foreach (var p in players)
             {
@@ -266,24 +287,54 @@ public static class ReplayRecorder
                 var creature = Reflect.GetMember(p, "Creature");
                 var deck = LiveDeck(p, out _);
                 var relics = HeldRelics(p);
+                var relicIds = relics?.Select(r => r.Fields.TryGetValue("id", out var id) ? id : null).ToList();
                 var mine = LocalPlayer.IsLocalPlayer(p);
-                rows.Add(new ReplayLine("pl")
+                var row = new ReplayLine("pl")
                     .Set("player_slot", slot)
                     .SetFlag("mine", mine)
                     .Set("character", Core.Ids.Bare(Reflect.GetString(p, "Character")))
                     .Set("hp", Reflect.GetMember(creature, "CurrentHp") as int?)
                     .Set("max_hp", Reflect.GetMember(creature, "MaxHp") as int?)
-                    .Set("gold", Reflect.GetMember(p, "Gold") as int?)
-                    .Set("starting_deck", deck)
-                    .Set("starting_relics", relics?.Select(r => r.Fields.TryGetValue("id", out var id) ? id : null).ToList())
-                    .Set("relics", relics)
-                    .Set("potions", PotionBelt(p)));
-                if (!mine) _peerDeckSigs[slot] = PeerDeckSignature(p);
+                    .Set("gold", Reflect.GetMember(p, "Gold") as int?);
+                switch (at)
+                {
+                    case PlayersAt.Header:
+                        row.Set("starting_deck", deck).Set("starting_relics", relicIds)
+                            .Set("relics", relics).Set("potions", PotionBelt(p));
+                        break;
+                    case PlayersAt.Resume:
+                        row.Set("deck", deck).Set("relics", relics).Set("potions", PotionBelt(p));
+                        break;
+                    default:
+                        row.Set("final_deck", deck).Set("final_relics", relicIds);
+                        break;
+                }
+                rows.Add(row);
+                if (!mine && at != PlayersAt.End)
+                {
+                    _peerDeckSigs[slot] = PeerDeckSignature(p);
+                    _peerDecks[slot] = deck;
+                }
                 slot++;
             }
-            return rows;
+            return rows.Count > 0 ? rows : EndFallback(at);
         }
-        catch { return null; }
+        catch { return EndFallback(at); }
+    }
+
+    // The run state can already be gone when the end row is written (the run was left), so
+    // the end row falls back to the teammate's last `peer_deck` (no hp, gold or relics then).
+    private static readonly Dictionary<int, List<ReplayLine>> _peerDecks = new();
+
+    private static List<ReplayLine>? EndFallback(PlayersAt at)
+    {
+        if (at != PlayersAt.End || _peerDecks.Count == 0) return null;
+        return _peerDecks.OrderBy(kv => kv.Key)
+            .Select(kv => new ReplayLine("pl")
+                .Set("player_slot", kv.Key)
+                .SetFlag("mine", false)
+                .Set("final_deck", kv.Value))
+            .ToList();
     }
 
     // v10, co-op only: a `peer_deck` row (player_slot, mine:false, cards as on `deck`) when a
@@ -306,10 +357,12 @@ public static class ReplayRecorder
                 var sig = PeerDeckSignature(p);
                 if (_peerDeckSigs.TryGetValue(at, out var known) && known == sig) continue;
                 _peerDeckSigs[at] = sig;
+                var cards = LiveDeck(p, out _);
+                _peerDecks[at] = cards;
                 Line("peer_deck")
                     ?.Set("player_slot", at)
                     .SetFlag("mine", false)
-                    .Set("cards", LiveDeck(p, out _))
+                    .Set("cards", cards)
                     .Emit();
             }
         }
@@ -409,18 +462,31 @@ public static class ReplayRecorder
         if (s.Shop is not { } shop)
         {
             _shopSig = null;
+            _peerShopSigs.Clear();
             return;
         }
 
-        var sig = string.Join(",",
-            shop.Cards.Select(c => $"c{c.Id}:{c.Cost}:{c.Stocked}:{c.OnSale}")
-                .Concat(shop.Relics.Select(r => $"r{r.Id}:{r.Cost}:{r.Stocked}"))
-                .Concat(shop.Potions.Select(p => $"p{p.Id}:{p.Cost}:{p.Stocked}")))
-            + $"|{shop.Removal?.Cost}:{shop.Removal?.Stocked}"
-            + $"|{string.Join(",", (shop.Blitz ?? new()).Select(b => $"{b.Class}:{b.ModelId}:{b.Amount}:{b.Status}"))}:{shop.BlitzChoicesLeft}";
+        RecordPeerShops(s);
+        var sig = ShopSignature(shop);
         if (sig == _shopSig) return;
         _shopSig = sig;
 
+        var line = ShopLine("shop", s, shop, s.Gold);
+        if (line != null && LocalPlayer.IsCoop)
+            CoopRows.Owner(line, true, true, ReplayHooks.PlayerSlot(Core.Sts2Access.LivePlayer));
+        line.Emit();
+    }
+
+    private static string ShopSignature(ShopInfo shop)
+        => string.Join(",",
+               shop.Cards.Select(c => $"c{c.Id}:{c.Cost}:{c.Stocked}:{c.OnSale}")
+                   .Concat(shop.Relics.Select(r => $"r{r.Id}:{r.Cost}:{r.Stocked}"))
+                   .Concat(shop.Potions.Select(p => $"p{p.Id}:{p.Cost}:{p.Stocked}")))
+           + $"|{shop.Removal?.Cost}:{shop.Removal?.Stocked}"
+           + $"|{string.Join(",", (shop.Blitz ?? new()).Select(b => $"{b.Class}:{b.ModelId}:{b.Amount}:{b.Status}"))}:{shop.BlitzChoicesLeft}";
+
+    private static ReplayLine? ShopLine(string kind, Snapshot s, ShopInfo shop, int gold)
+    {
         static List<ReplayLine> Items(List<ShopItemInfo> src) =>
             src.Select((it, i) => new ReplayLine("i")
                 .Set("slot", i)
@@ -431,10 +497,10 @@ public static class ReplayRecorder
                 .Set("pool", it.Slot))
             .ToList();
 
-        Line("shop")
+        return Line(kind)
             ?.Set("floor", s.TotalFloor)
             .Set("act", s.Act)
-            .Set("gold", s.Gold)
+            .Set("gold", gold)
             .Set("removal_cost", shop.Removal?.Cost)
             .Set("removal_stocked", shop.Removal?.Stocked)
             .Set("cards", Items(shop.Cards))
@@ -442,8 +508,37 @@ public static class ReplayRecorder
             .Set("potions", Items(shop.Potions))
             .Set("blitz", ShopRows.BlitzOffers(
                 (shop.Blitz ?? new()).Select(b => (b.Entry, b.Class, b.Status, b.ModelId, b.Amount)).ToList()))
-            .Set("blitz_choices_left", shop.BlitzChoicesLeft)
-            .Emit();
+            .Set("blitz_choices_left", shop.BlitzChoicesLeft);
+    }
+
+    // v10, co-op only: a `peer_shop` row, shaped like `shop` plus player_slot and mine:false,
+    // whenever a teammate's own merchant inventory changes while this client is at the merchant.
+    private static readonly Dictionary<int, string> _peerShopSigs = new();
+
+    private static void RecordPeerShops(Snapshot s)
+    {
+        if (!LocalPlayer.IsCoop) return;
+        try
+        {
+            var state = Core.Sts2Access.LiveRunState;
+            var room = Reflect.GetMember(state, "CurrentRoom");
+            if (Reflect.GetMember(state, "Players") is not System.Collections.IEnumerable players) return;
+            var slot = 0;
+            foreach (var p in players)
+            {
+                var at = slot++;
+                if (p == null || LocalPlayer.IsLocalPlayer(p)) continue;
+                if (Core.RoomExport.ReadShopFor(room, p) is not { } shop) continue;
+                var sig = ShopSignature(shop);
+                if (_peerShopSigs.TryGetValue(at, out var known) && known == sig) continue;
+                _peerShopSigs[at] = sig;
+                ShopLine("peer_shop", s, shop, Reflect.GetInt(p, "Gold", 0))
+                    ?.Set("player_slot", at)
+                    .SetFlag("mine", false)
+                    .Emit();
+            }
+        }
+        catch { }
     }
 
     private static long RunStartTime()
@@ -823,7 +918,8 @@ public static class ReplayRecorder
             .Set("hp", ReplayHooks.PlayerDied ? 0 : s.CurrentHp)
             .Set("max_hp", s.MaxHp)
             .Set("final_deck", (object?)_deckSnapshot ?? s.Deck.Select(d => d.Id).ToList())
-            .Set("final_relics", s.Relics.Select(r => r.Id).ToList());
+            .Set("final_relics", s.Relics.Select(r => r.Id).ToList())
+            .Set("final_players", LocalPlayer.IsCoop ? PlayerRows(PlayersAt.End) : null);
 
         _ = Task.Run(async () =>
         {

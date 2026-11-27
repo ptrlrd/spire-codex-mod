@@ -60,6 +60,19 @@ public sealed class CoopRowsTests
     }
 
     [Fact]
+    public void ATeammatesRowDoesNotTakeTheLocalPlayersDecision()
+    {
+        var me = new FakePlayer { NetId = 1 };
+        var mate = new FakePlayer { NetId = 2 };
+
+        Assert.False(CoopRows.OwnsDecision(true, me, mate));
+        Assert.True(CoopRows.OwnsDecision(true, me, me));
+        Assert.True(CoopRows.OwnsDecision(true, null, mate));   // shared: map, treasure
+        Assert.True(CoopRows.OwnsDecision(true, me, null));     // row's player unreadable
+        Assert.True(CoopRows.OwnsDecision(false, me, mate));    // single-player unchanged
+    }
+
+    [Fact]
     public void AMonsterGetsNoCreatureOwnership()
     {
         var hit = CoopRows.Side(new ReplayLine("hit"), "dst", true, null, null, null, null);

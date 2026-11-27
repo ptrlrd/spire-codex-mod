@@ -12,7 +12,9 @@ for both players. v10 says whose each row is and stops dropping the teammate's r
 
 ## Compatibility
 
-- Only fields and row kinds are **added**. No existing field changes name or meaning.
+- Only fields and row kinds are **added**. No existing field changes name or meaning, with one
+  co-op-only correction: a row's `decision_id` no longer points at the other player's
+  decision (see "Decision links in co-op").
 - Every addition is written in co-op only (`player_count` > 1). A single-player journal is
   what v9 wrote, apart from `"replay_version":10` and the treasure `outcome` rows restored
   under "Also fixed in v10" (a row kind v9 meant to write but could not on v0.114).
@@ -59,6 +61,17 @@ header's top-level `character`, `starting_deck`, `starting_relics`, `relics`, `p
 local player's. Card `c` ids are shared across players (one counter per journal), so a
 teammate's `c` values in later rows match the ones listed here.
 
+## `resume` and `end`
+
+- `resume` gets `players` (co-op only): one entry per player with `player_slot`, `mine`,
+  `character`, `hp`, `max_hp`, `gold`, `deck` (shape of a `deck` row's `cards`), `relics` and
+  `potions`: the state the run reloaded into, so a replay can resync the teammate after a
+  save-and-quit. The row's own top-level fields stay the local player's.
+- `end` gets `final_players` (co-op only): `player_slot`, `mine`, `character`, `hp`, `max_hp`,
+  `gold`, `final_deck`, `final_relics` (relic ids). When the run is already gone as the row is
+  written (the player left it), it holds only the teammate's last `peer_deck` as `final_deck`,
+  with no hp, gold or relics.
+
 ## Rows that now carry `mine` + `player_slot`
 
 | Row | Player |
@@ -74,7 +87,7 @@ teammate's `c` values in later rows match the ones listed here.
 | `rest` (heal/smith rows outside the rest-site funnel) | the player. |
 | `decision` | card reward, deck selection, relic reward and event pages: the player deciding. Rest-site decisions: the local player. Map and treasure decisions are shared and carry none. |
 | `outcome` | card reward skip and reroll, deck selection, relic reward skip, event choice: the deciding player. |
-| `deck` | always the local player (`mine:true`). |
+| `deck`, `shop` | always the local player (`mine:true`). The teammate's are `peer_deck` and `peer_shop`. |
 | `arrow` | the slot's owner (see below). |
 | `afflict`, `unafflict`, `play_blocked`, `shuffle`, `flush`, `energy`, `stars`, `forge`, `orb_*`, `gold`, `hp`, `max_hp`, `pick`, `buy_start`, `buy`, `relic_lost`, `relic_counter`, `console`, treasure `outcome` | had `mine` in v9; `player_slot` is added. |
 
@@ -90,6 +103,18 @@ teammate's `c` values in later rows match the ones listed here.
 | `power_lost` | `tgt_*` |
 | `attack` | `src_*` |
 | `death` | `tgt_*` |
+
+A pet on `combat_start` (`enemies`, `allies`) and on `spawn` rows gets `owner_mine` and
+`owner_slot`, so its owner is known from the start, before any `hit` or `power` row names it.
+
+## Decision links in co-op
+
+`decision_id` on `remove`, `buy`, `resolve`, `acquire` (and its `option_index`), `upgrade`,
+`downgrade`, `transform`, `relic`, `relic_lost` and `relic_counter` links a row to the
+decision open when it happened. In v9 co-op a teammate's row could take the local player's
+open decision (a teammate's smith upgrade linked to your rest decision). From v10 a row links
+only to a decision of the same player or to a shared one (map, treasure); otherwise
+`decision_id` is absent. Single-player journals are unaffected.
 
 ## The teammate's events and Crystal Sphere
 
@@ -168,7 +193,15 @@ A teammate's purchase now reads as `peer_msg` (`MerchantEntryPurchasedMessage`, 
 followed by `buy_start` and `buy` with `mine:false`, the teammate's `player_slot`, and (as in
 v9) `kind`, `slot` (the entry's index in the teammate's own inventory), `id`, `entry_id`,
 `entry_class`, `cost_current` and `gold_on_hand`. Match on `entry_id` (or `kind` + `slot` +
-`id`), not on price. The `shop` row still lists the local player's inventory only.
+`id`), not on price. The teammate's stock is the `peer_shop` row below.
+
+## `peer_shop` (new row)
+
+The teammate's own merchant inventory (`MerchantSynchronizer.GetInventoryFor`), shaped like
+`shop` (`gold` is the teammate's, then `removal_cost`, `removal_stocked`, `cards`, `relics`,
+`potions`, `blitz`, `blitz_choices_left`) plus `player_slot` and `mine:false`. Written while
+this client is at the merchant, whenever that inventory changes, so `slot` on the teammate's
+`buy` rows indexes into it. Like `shop`, it does not list `entry_id`s.
 
 ## Also fixed in v10
 
@@ -176,11 +209,9 @@ v9) `kind`, `slot` (the entry's index in the teammate's own inventory), `id`, `e
   `TreasureRoomRelicSynchronizer.OnPicked`, so the v9 patch never matched and no treasure pick
   was written. v10 patches the three-argument form.
 
-## Not recorded for the teammate (yet)
+## Not recorded for the teammate
 
-- `shop` (the teammate's shop inventory), `resume` and the `end` row's `final_deck` /
-  `final_relics` are still the local player's only.
-- `combat_start` `allies` does not say whose pet each ally is (`hit`/`power` rows do).
-- Rows that link to the local open decision by `decision_id` (`upgrade`, `relic`, `transform`,
-  `acquire`...) can still pick up the local player's decision id on a teammate's row if both
-  happen at once; `mine`/`player_slot` tell them apart.
+- The combat action messages listed under `peer_msg`: the combat rows already record what
+  they do, for both players.
+- Whether this client sees the cards a teammate was offered as a card reward, or only the one
+  they took (`RewardObtainedMessage`), is still to be checked in game.

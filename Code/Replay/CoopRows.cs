@@ -17,6 +17,7 @@ namespace SpireCodex.Replay;
 // - `<x>_mine` / `<x>_player_slot` (new): for a row field `<x>` (src, dst, tgt, target) naming
 //   a creature that is a player. `<x>_owner_mine` / `<x>_owner_slot` when it is a player's pet.
 // - `peer_msg` rows (new): a teammate's out-of-combat decision as this client received it.
+// - `peer_deck` / `peer_shop` rows (new): the teammate's deck and merchant stock on change.
 //
 // Plain values in and out, so the shapes are testable without the game; ReplayHooks reads
 // the game objects and calls these.
@@ -50,6 +51,11 @@ internal static class CoopRows
         }
         return null;
     }
+
+    // A row of `rowPlayer` may link to the open decision only when it is that player's, or a
+    // shared one (no owner), or either side is unknown. Outside co-op every link stands.
+    public static bool OwnsDecision(bool coop, object? decisionOwner, object? rowPlayer)
+        => !coop || decisionOwner == null || rowPlayer == null || ReferenceEquals(decisionOwner, rowPlayer);
 
     public static ReplayLine Owner(ReplayLine line, bool coop, bool? mine, int? slot)
     {
