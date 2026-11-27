@@ -20,6 +20,9 @@ internal static class ReplayHooks
     private static string? _decisionType;
 
     private static PropertyInfo? _selectorProp;
+    private static PropertyInfo? _runManagerProp;
+    private static PropertyInfo? _selectorStackProp;
+    private static MethodInfo? _getSelector;
 
     private static bool _keywordsResolved;
 
@@ -483,10 +486,20 @@ internal static class ReplayHooks
         attempted++;
         try
         {
-            var damageFunnel = creatureCmd?.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .FirstOrDefault(m => m.Name == "Damage" && m.GetParameters() is { Length: 7 } ps
-                                     && ps[1].ParameterType.Name == "IEnumerable`1"
-                                     && ps[2].ParameterType == typeof(decimal));
+            // The funnel every Damage overload ends in. v0.114 added a trailing
+            // ModifyDamageHookType and moved the work to an IEnumerable<DamageTargetData>
+            // overload (the IEnumerable<Creature> one now forwards to it); before that it was
+            // the 7-parameter IEnumerable<Creature> one. Patch only the innermost, so a hit is
+            // seen once.
+            var damageFunnels = creatureCmd?.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .Where(m => m.Name == "Damage" && m.GetParameters() is { Length: 7 or 8 } ps
+                            && ps[1].ParameterType.Name == "IEnumerable`1"
+                            && ps[2].ParameterType == typeof(decimal))
+                .ToList();
+            var damageFunnel = damageFunnels?.FirstOrDefault(m =>
+                                   m.GetParameters()[1].ParameterType.GetGenericArguments()
+                                       .FirstOrDefault()?.Name == "DamageTargetData")
+                               ?? damageFunnels?.FirstOrDefault();
             if (damageFunnel != null)
             {
                 harmony.Patch(damageFunnel, prefix: new HarmonyMethod(typeof(ReplayHooks).GetMethod(
@@ -521,8 +534,20 @@ internal static class ReplayHooks
         _selectorProp = Reflect.StaticProperty(
             HookPatcher.FindType("MegaCrit.Sts2.Core.Commands.CardSelectCmd"), "Selector");
         if (_selectorProp == null)
-            MainFile.Logger.Info("replay-hooks: CardSelectCmd.Selector not found; "
-                                 + "pick rows will omit `selector`");
+        {
+            // v0.114: one selector stack per player, RunManager.Instance.CardSelectorStack
+            // .GetSelector(player), null when a human chooses (same meaning as Selector was).
+            var runManagerType = HookPatcher.FindType("MegaCrit.Sts2.Core.Runs.RunManager");
+            _selectorStackProp = runManagerType?.GetProperty("CardSelectorStack",
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            _runManagerProp = Reflect.StaticProperty(runManagerType, "Instance");
+            _getSelector = HookPatcher.FindType("MegaCrit.Sts2.Core.CardSelection.CardSelectorStack")
+                ?.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .FirstOrDefault(m => m.Name == "GetSelector" && m.GetParameters().Length == 1);
+            if (_selectorStackProp == null || _runManagerProp == null || _getSelector == null)
+                MainFile.Logger.Info("replay-hooks: CardSelectCmd.Selector and CardSelectorStack.GetSelector "
+                                     + "not found; pick rows will omit `selector`");
+        }
         _keywordsResolved = HookPatcher.FindType("MegaCrit.Sts2.Core.Models.CardModel")
             ?.GetProperty("Keywords", BindingFlags.Instance | BindingFlags.Public) != null;
         if (!_keywordsResolved)
@@ -1046,8 +1071,11 @@ internal static class ReplayHooks
         {
             if (__4 != null || __5 != null) return;
             if (CallerId() is not { } by) return;
-            foreach (var t in Enumerate(__1))
+            foreach (var item in Enumerate(__1))
             {
+                // v0.114 passes DamageTargetData { target, ... }; earlier, the creature itself.
+                var t = item.GetType().Name == "DamageTargetData" ? Reflect.GetMember(item, "target") : item;
+                if (t == null) continue;
                 DamagedBy.Remove(t);
                 DamagedBy.Add(t, by);
             }
@@ -1069,14 +1097,20 @@ internal static class ReplayHooks
         return sb.ToString();
     }
 
-    private static void CreatureDied(object __2, bool __3)
+    // Hook.AfterDeath(runState, combatState, creature, [source,] wasRemovalPrevented, animLength):
+    // v0.114 inserted the CardModel? source, so the bool is read from the arguments rather than
+    // bound by position (binding `bool __3` to a CardModel made Harmony emit an invalid program).
+    private static void CreatureDied(object __2, object[] __args)
     {
+        bool? __3 = null;
+        for (var i = 3; i < __args.Length; i++)
+            if (__args[i] is bool b) { __3 = b; break; }
         try
         {
             ReplayRecorder.Line("death")
                 ?.Set("tgt", CreatureRef(__2))
                 .Set("tgt_cid", CreatureSlots.Maybe(__2))
-                .SetFlag("removal_prevented", __3)
+                .SetFlag("removal_prevented", __3 == true)
                 .Set("cause", _doomed.Contains(__2) ? "doom" : null)
                 .Set("killed_by", KilledBy.TryGetValue(__2, out var by) ? by : null)
                 .WhoCreature("tgt", __2)
@@ -2516,7 +2550,7 @@ internal static class ReplayHooks
                 ?.Set("decision_id", joined ? _selectDecision : (int?)null)
                 .Set("decision_type", joined ? _selectDecisionType : null)
                 .Set("n_picked", picked.Count)
-                .Set("selector", SelectorName())
+                .Set("selector", SelectorName(__0))
                 .Who(__0, legacy: true)
                 .Set("cards", picked)
                 .Emit();
@@ -2524,10 +2558,21 @@ internal static class ReplayHooks
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
-    private static string? SelectorName()
+    private static string? SelectorName(object? player)
     {
-        if (_selectorProp == null) return null;
-        var selector = Reflect.Read(_selectorProp);
+        object? selector;
+        if (_selectorProp != null) selector = Reflect.Read(_selectorProp);
+        else if (_getSelector != null && _selectorStackProp != null && player != null)
+        {
+            try
+            {
+                var stack = _selectorStackProp.GetValue(Reflect.Read(_runManagerProp));
+                if (stack == null) return null;
+                selector = _getSelector.Invoke(stack, new[] { player });
+            }
+            catch { return null; }
+        }
+        else return null;
         return selector == null ? "human" : selector.GetType().Name;
     }
 

@@ -16,8 +16,8 @@ for both players. v10 says whose each row is and stops dropping the teammate's r
   co-op-only correction: a row's `decision_id` no longer points at the other player's
   decision (see "Decision links in co-op").
 - Every addition is written in co-op only (`player_count` > 1). A single-player journal is
-  what v9 wrote, apart from `"replay_version":10` and the treasure `outcome` rows restored
-  under "Also fixed in v10" (a row kind v9 meant to write but could not on v0.114).
+  what v9 wrote, apart from `"replay_version":10` and the rows restored
+  under "Also fixed in v10" (rows v9 meant to write but could not on v0.114).
 - spire-codex.com rejects a `replay_version` it does not know (400 `bad_header`); the client
   keeps the journal and retries, so the server needs 10 on its allowlist.
 - No Steam id or net id is written anywhere. Players are named by slot.
@@ -208,6 +208,15 @@ this client is at the merchant, whenever that inventory changes, so `slot` on th
 - Treasure `outcome` rows: v0.114 added a third parameter to
   `TreasureRoomRelicSynchronizer.OnPicked`, so the v9 patch never matched and no treasure pick
   was written. v10 patches the three-argument form.
+- `death` rows: v0.114 inserted a `CardModel? source` argument into `Hook.AfterDeath`, before
+  `wasRemovalPrevented`, and the v9 patch failed to apply ("invalid program"), so no `death`
+  row was written. v10 reads `removal_prevented` from the arguments by type.
+- `effect` on `hit` rows (the power or relic behind a hit with no card and no dealer): v0.114
+  moved the `CreatureCmd.Damage` funnel to an 8-parameter `IEnumerable<DamageTargetData>`
+  overload, so the v9 patch found nothing. v10 patches that overload.
+- `selector` on `pick` rows: v0.114 replaced the static `CardSelectCmd.Selector` with one
+  selector stack per player (`RunManager.Instance.CardSelectorStack.GetSelector(player)`).
+  v10 reads the picking player's stack; `"human"` still means no automated selector.
 
 ## Not recorded for the teammate
 
