@@ -12,9 +12,17 @@ namespace SpireCodex.Replay;
 internal static class ReplayHooks
 {
     private static int _decision;
+
+    // v10, co-op: whose the open decision (and the one before it) is; null for a shared one
+    // (map, treasure) or outside co-op. See OwnsDecision.
+    private static object? _decisionOwner;
+    private static object? _prevDecisionOwner;
     private static string? _decisionType;
 
     private static PropertyInfo? _selectorProp;
+    private static PropertyInfo? _runManagerProp;
+    private static PropertyInfo? _selectorStackProp;
+    private static MethodInfo? _getSelector;
 
     private static bool _keywordsResolved;
 
@@ -25,6 +33,14 @@ internal static class ReplayHooks
     private static int _pendingReroll;
 
     public static bool PlayerDied { get; private set; }
+
+    // v10: the game won the run (RunManager.OnEnded(isVictory: true)). A win then kills every
+    // player (RunManager.GuaranteeKillAllPlayers), so the hp each player had at the win is kept.
+    public static bool RunWon { get; private set; }
+    private static readonly Dictionary<object, int> _hpAtWin = new(ReferenceEqualityComparer.Instance);
+
+    public static int? HpAtWin(object? player)
+        => player != null && _hpAtWin.TryGetValue(player, out var hp) ? hp : null;
 
 
     public static void CloseOpenDecision() => DemoteDecision();
@@ -52,6 +68,10 @@ internal static class ReplayHooks
     public static void ResetRun()
     {
         PlayerDied = false;
+        RunWon = false;
+        _hpAtWin.Clear();
+        _decisionOwner = null;
+        _prevDecisionOwner = null;
         _pendingBuys.Clear();
         _combatId = null;
         _combatFloorKey = null;
@@ -63,6 +83,7 @@ internal static class ReplayHooks
         _selected = null;
         _selectDecision = 0;
         _selectDecisionType = null;
+        _selectPlayer = null;
         _eventDecision = 0;
         _eventPageIndex = -1;
         _eventId = null;
@@ -93,7 +114,7 @@ internal static class ReplayHooks
             var line = ReplayRecorder.Line("buy_start");
             if (line == null) return;
             EntryFields(line, entry, player, kind, id, null)
-                .Set("mine", Mine(player))
+                .Who(player, legacy: true)
                 .Set("price", Reflect.GetInt(entry, "Cost", 0))
                 .Set("cost_resource", "gold")
                 .Set("gold_before", Reflect.GetInt(player, "Gold", 0))
@@ -138,10 +159,12 @@ internal static class ReplayHooks
         if (_decision > 0)
         {
             _prevDecision = _decision;
+            _prevDecisionOwner = _decisionOwner;
             _prevOfferIndex = _offerIndex;
         }
         _decision = 0;
         _decisionType = null;
+        _decisionOwner = null;
         _offerIndex = null;
         _ambiguousOffers = null;
     }
@@ -151,16 +174,19 @@ internal static class ReplayHooks
         var picked = _selected;
         var owner = _selectDecision;
         var ownerType = _selectDecisionType;
+        var ownerPlayer = _selectPlayer;
         _selected = null;
         _selectByInstance = null;
         _selectDecision = 0;
         _selectDecisionType = null;
+        _selectPlayer = null;
         if (picked == null || owner <= 0) return;
         ReplayRecorder.Line("outcome")
             ?.Set("decision_id", owner)
             .Set("decision_type", ownerType)
             .Set("outcome", picked.Count > 0 ? "select" : "decline")
             .Set("selected_option_indices", picked)
+            .Who(ownerPlayer)
             .Set("n_selected", picked.Count)
             .Emit();
     }
@@ -196,6 +222,7 @@ internal static class ReplayHooks
         attempted++; n += HookPatcher.PatchOn(harmony, runManager, "EnterMapCoord", me, nameof(MapCoordChosen), 1);
         attempted++; n += HookPatcher.PatchOn(harmony, runManager, "ExitCurrentRoom", me, nameof(RoomExiting), 0);
         attempted++; n += HookPatcher.PatchOn(harmony, runManager, "ResumePreviousRoom", me, nameof(RoomResuming), 0);
+        attempted++; n += HookPatcher.PatchOn(harmony, runManager, "OnEnded", me, nameof(RunEnding), 1);
         attempted++; n += HookPatcher.PatchOn(harmony,
             HookPatcher.FindType("MegaCrit.Sts2.Core.Rooms.MapRoom"),
             "EnterInternal", me, nameof(MapRoomEntered), 2);
@@ -452,7 +479,11 @@ internal static class ReplayHooks
                                  "FromDeckForRemoval", me, nameof(RemovalSelectLeft), 3, postfix: true);
         var treasureSync = HookPatcher.FindType("MegaCrit.Sts2.Core.Multiplayer.Game.TreasureRoomRelicSynchronizer");
         attempted++; n += HookPatcher.PatchOn(harmony, treasureSync, "BeginRelicPicking", me, nameof(TreasureOffered), 0, postfix: true);
-        attempted++; n += HookPatcher.PatchOn(harmony, treasureSync, "OnPicked", me, nameof(TreasurePicked), 2);
+        // v0.114 added a roundIndex: OnPicked(Player, int?, int).
+        attempted++;
+        var picked = treasureSync?.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Any(m => m.Name == "OnPicked" && m.GetParameters().Length == 3) == true ? 3 : 2;
+        n += HookPatcher.PatchOn(harmony, treasureSync, "OnPicked", me, nameof(TreasurePicked), picked);
         attempted++; n += HookPatcher.PatchOn(harmony, treasureSync, "CompleteWithNoRelics", me, nameof(TreasureEmpty), 0);
         var relicReward = HookPatcher.FindType("MegaCrit.Sts2.Core.Rewards.RelicReward");
         attempted++; n += HookPatcher.PatchOn(harmony, relicReward, "OnSelect", me, nameof(RelicRewardSelecting), 0);
@@ -466,10 +497,20 @@ internal static class ReplayHooks
         attempted++;
         try
         {
-            var damageFunnel = creatureCmd?.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .FirstOrDefault(m => m.Name == "Damage" && m.GetParameters() is { Length: 7 } ps
-                                     && ps[1].ParameterType.Name == "IEnumerable`1"
-                                     && ps[2].ParameterType == typeof(decimal));
+            // The funnel every Damage overload ends in. v0.114 added a trailing
+            // ModifyDamageHookType and moved the work to an IEnumerable<DamageTargetData>
+            // overload (the IEnumerable<Creature> one now forwards to it); before that it was
+            // the 7-parameter IEnumerable<Creature> one. Patch only the innermost, so a hit is
+            // seen once.
+            var damageFunnels = creatureCmd?.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .Where(m => m.Name == "Damage" && m.GetParameters() is { Length: 7 or 8 } ps
+                            && ps[1].ParameterType.Name == "IEnumerable`1"
+                            && ps[2].ParameterType == typeof(decimal))
+                .ToList();
+            var damageFunnel = damageFunnels?.FirstOrDefault(m =>
+                                   m.GetParameters()[1].ParameterType.GetGenericArguments()
+                                       .FirstOrDefault()?.Name == "DamageTargetData")
+                               ?? damageFunnels?.FirstOrDefault();
             if (damageFunnel != null)
             {
                 harmony.Patch(damageFunnel, prefix: new HarmonyMethod(typeof(ReplayHooks).GetMethod(
@@ -504,13 +545,33 @@ internal static class ReplayHooks
         _selectorProp = Reflect.StaticProperty(
             HookPatcher.FindType("MegaCrit.Sts2.Core.Commands.CardSelectCmd"), "Selector");
         if (_selectorProp == null)
-            MainFile.Logger.Info("replay-hooks: CardSelectCmd.Selector not found; "
-                                 + "pick rows will omit `selector`");
+        {
+            // v0.114: one selector stack per player, RunManager.Instance.CardSelectorStack
+            // .GetSelector(player), null when a human chooses (same meaning as Selector was).
+            var runManagerType = HookPatcher.FindType("MegaCrit.Sts2.Core.Runs.RunManager");
+            _selectorStackProp = runManagerType?.GetProperty("CardSelectorStack",
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            _runManagerProp = Reflect.StaticProperty(runManagerType, "Instance");
+            _getSelector = HookPatcher.FindType("MegaCrit.Sts2.Core.CardSelection.CardSelectorStack")
+                ?.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .FirstOrDefault(m => m.Name == "GetSelector" && m.GetParameters().Length == 1);
+            if (_selectorStackProp == null || _runManagerProp == null || _getSelector == null)
+                MainFile.Logger.Info("replay-hooks: CardSelectCmd.Selector and CardSelectorStack.GetSelector "
+                                     + "not found; pick rows will omit `selector`");
+        }
         _keywordsResolved = HookPatcher.FindType("MegaCrit.Sts2.Core.Models.CardModel")
             ?.GetProperty("Keywords", BindingFlags.Instance | BindingFlags.Public) != null;
         if (!_keywordsResolved)
             MainFile.Logger.Info("replay-hooks: CardModel.Keywords not found; "
                                  + "play rows will omit `keywords`");
+
+        // Every teammate decision that targets a run location (rewards, shop buys, event and
+        // rest options, shared-event votes, gold loss, card removal, chests, Crystal Sphere
+        // rewards) is handed to its handlers here, with the sender's net id, when this client
+        // applies it. See PeerMessageArrived.
+        attempted++; n += HookPatcher.PatchOn(harmony,
+            HookPatcher.FindType("MegaCrit.Sts2.Core.Multiplayer.Game.RunLocationTargetedMessageBuffer"),
+            "CallHandlersOfType", me, nameof(PeerMessageArrived), 3, firstParamType: "Type");
 
         ArrowHooks.Apply(harmony, hook, ref n, ref attempted);
         BindLiveCards(runManager);
@@ -862,6 +923,7 @@ internal static class ReplayHooks
 
     private static int _selectDecision;
     private static string? _selectDecisionType;
+    private static object? _selectPlayer;
 
     private static void RestoreLostPatches()
     {
@@ -944,6 +1006,7 @@ internal static class ReplayHooks
                 .Set("round", RoundOf(__0))
                 .Set("extra", extra ? (bool?)true : null)
                 .Set("side", "player")
+                .Who(__2)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -1019,8 +1082,11 @@ internal static class ReplayHooks
         {
             if (__4 != null || __5 != null) return;
             if (CallerId() is not { } by) return;
-            foreach (var t in Enumerate(__1))
+            foreach (var item in Enumerate(__1))
             {
+                // v0.114 passes DamageTargetData { target, ... }; earlier, the creature itself.
+                var t = item.GetType().Name == "DamageTargetData" ? Reflect.GetMember(item, "target") : item;
+                if (t == null) continue;
                 DamagedBy.Remove(t);
                 DamagedBy.Add(t, by);
             }
@@ -1042,22 +1108,43 @@ internal static class ReplayHooks
         return sb.ToString();
     }
 
-    private static void CreatureDied(object __2, bool __3)
+    // Hook.AfterDeath(runState, combatState, creature, [source,] wasRemovalPrevented, animLength):
+    // v0.114 inserted the CardModel? source, so the bool is read from the arguments rather than
+    // bound by position (binding `bool __3` to a CardModel made Harmony emit an invalid program).
+    private static void CreatureDied(object __2, object[] __args)
     {
+        bool? __3 = null;
+        for (var i = 3; i < __args.Length; i++)
+            if (__args[i] is bool b) { __3 = b; break; }
         try
         {
             ReplayRecorder.Line("death")
                 ?.Set("tgt", CreatureRef(__2))
                 .Set("tgt_cid", CreatureSlots.Maybe(__2))
-                .SetFlag("removal_prevented", __3)
-                .Set("cause", _doomed.Contains(__2) ? "doom" : null)
+                .SetFlag("removal_prevented", __3 == true)
+                .Set("cause", _doomed.Contains(__2) ? "doom"
+                    : RunWon && Reflect.GetMember(__2, "IsPlayer") is true ? "run_won" : null)
                 .Set("killed_by", KilledBy.TryGetValue(__2, out var by) ? by : null)
+                .WhoCreature("tgt", __2)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
     private static void CombatWonEvent(object room) => _combatWon = true;
+
+    private static void RunEnding(object __instance, bool __0)
+    {
+        try
+        {
+            if (!__0 || RunWon || Reflect.GetMember(__instance, "HasRunEnded") is true) return;
+            RunWon = true;
+            foreach (var p in Enumerate(Reflect.GetMember(Reflect.GetMember(__instance, "State"), "Players")))
+                if (Reflect.GetMember(Reflect.GetMember(p, "Creature"), "CurrentHp") is int hp)
+                    _hpAtWin[p] = hp;
+        }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
+    }
 
     private static void CombatEndedEvent(object room)
     {
@@ -1185,7 +1272,8 @@ internal static class ReplayHooks
             {
                 var origin = CardInstances.DeckIdOf(card);
                 play.Set("deck_c", origin > 0 ? origin : (int?)null)
-                    .Set("target_cid", CreatureSlots.Maybe(target));
+                    .Set("target_cid", CreatureSlots.Maybe(target))
+                    .WhoCreature("target", target);
             }
             catch (Exception e) { ReplayRecorder.Fault(e); }
             try
@@ -1209,7 +1297,7 @@ internal static class ReplayHooks
                     .Set("keywords", keywords is { Count: > 0 } ? keywords : null);
             }
             catch (Exception e) { ReplayRecorder.Fault(e); }
-            play.Emit();
+            play.Who(CardOwner(card)).Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
@@ -1235,7 +1323,7 @@ internal static class ReplayHooks
                 line.Set("deck_c", origin > 0 ? origin : (int?)null);
             }
             catch (Exception e) { ReplayRecorder.Fault(e); }
-            line.Emit();
+            line.Who(CardOwner(card)).Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
@@ -1284,6 +1372,7 @@ internal static class ReplayHooks
                 ?.Set("c", CardInstances.Of(__1))
                 .Set("deck_c", origin > 0 ? origin : (int?)null)
                 .Set("id", Ids.Bare(Reflect.GetString(__1, "Id")))
+                .Who(CardOwner(__1))
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -1297,7 +1386,7 @@ internal static class ReplayHooks
                 Reflect.GetMember(Reflect.GetMember(__2, "PlayerCombatState"), "DrawPile"),
                 "Cards");
             ReplayRecorder.Line("shuffle")
-                ?.Set("mine", Mine(__2))
+                ?.Who(__2, legacy: true)
                 .Set("n_draw", cards == null ? (int?)null : Enumerate(cards).Count())
                 .Set("order_c", PileOrder(cards))
                 .Emit();
@@ -1315,7 +1404,7 @@ internal static class ReplayHooks
         try
         {
             ReplayRecorder.Line("flush")
-                ?.Set("mine", Mine(__1))
+                ?.Who(__1, legacy: true)
                 .Set("flushed_c", PileOrder(__3))
                 .Set("retained_c", PileOrder(__4))
                 .Emit();
@@ -1331,17 +1420,27 @@ internal static class ReplayHooks
             var me = players.FirstOrDefault(p => LocalPlayer.IsLocalPlayer(p))
                      ?? (players.Count == 1 ? players[0] : null);
             if (me == null) return;
-            var cards = Reflect.GetMember(
-                Reflect.GetMember(Reflect.GetMember(me, "PlayerCombatState"), "DrawPile"), "Cards");
-            var order = PileOrder(cards);
-            if (order == null) return;
-            var deck = Enumerate(cards).Select(CardInstances.DeckIdOf).ToList();
-            ReplayRecorder.Line("draw_order")
-                ?.Set("order_c", order)
-                .Set("order_deck_c", deck.Contains(0) ? null : deck)
-                .Emit();
+            EmitDrawOrder(me);
+            // v10: in co-op the teammate's opening order too, after the local one.
+            if (!LocalPlayer.IsCoop) return;
+            foreach (var p in players)
+                if (!ReferenceEquals(p, me)) EmitDrawOrder(p);
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
+    }
+
+    private static void EmitDrawOrder(object player)
+    {
+        var cards = Reflect.GetMember(
+            Reflect.GetMember(Reflect.GetMember(player, "PlayerCombatState"), "DrawPile"), "Cards");
+        var order = PileOrder(cards);
+        if (order == null) return;
+        var deck = Enumerate(cards).Select(CardInstances.DeckIdOf).ToList();
+        ReplayRecorder.Line("draw_order")
+            ?.Set("order_c", order)
+            .Set("order_deck_c", deck.Contains(0) ? null : deck)
+            .Who(player)
+            .Emit();
     }
 
     private static void CardAfflicted(object __1, decimal __2, object? __result)
@@ -1360,7 +1459,7 @@ internal static class ReplayHooks
                 .Set("affliction", Ids.Bare(Reflect.GetString(applied, "Id")))
                 .Set("amount", (int)__2)
                 .Set("amount_total", Reflect.GetMember(applied, "Amount") as int?)
-                .Set("mine", Mine(Reflect.GetMember(__1, "Owner")))
+                .Who(Reflect.GetMember(__1, "Owner"), legacy: true)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -1380,7 +1479,7 @@ internal static class ReplayHooks
                 .Set("id", Ids.Bare(Reflect.GetString(__0, "Id")))
                 .Set("affliction", Ids.Bare(Reflect.GetString(affliction, "Id")))
                 .Set("amount", Reflect.GetMember(affliction, "Amount") as int?)
-                .Set("mine", Mine(Reflect.GetMember(__0, "Owner")))
+                .Who(Reflect.GetMember(__0, "Owner"), legacy: true)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -1419,7 +1518,7 @@ internal static class ReplayHooks
                 .Set("reason", reason)
                 .Set("preventer", blocked ? Ids.Bare(Reflect.GetString(_vetoPreventer, "Id")) : null)
                 .Set("auto_type", kind?.ToLowerInvariant())
-                .Set("mine", Mine(Reflect.GetMember(__1, "Owner")))
+                .Who(Reflect.GetMember(__1, "Owner"), legacy: true)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -1458,7 +1557,9 @@ internal static class ReplayHooks
                     .Set("effect", __2 == null && __6 == null && DamagedBy.TryGetValue(__5, out var by) ? by : null)
                     .Set("atk", AttackIdFor(__1, __2, __6, __4))
                     .Set("mods", why?.Mods)
-                    .Set("hp_mods", why?.HpMods);
+                    .Set("hp_mods", why?.HpMods)
+                    .WhoCreature("src", __2)
+                    .WhoCreature("dst", __5);
             }
             catch (Exception e) { ReplayRecorder.Fault(e); }
             hit.Emit();
@@ -1477,6 +1578,7 @@ internal static class ReplayHooks
                 .Set("blocked", Reflect.GetInt(__4, "BlockedDamage", 0))
                 .Set("overkill", IntOf(__4, "OverkillDamage") is int over && over > 0 ? over : (int?)null)
                 .Set("dmg_type", DamageProps(__5))
+                .WhoCreature("dst", __3)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -1499,7 +1601,9 @@ internal static class ReplayHooks
                 .Set("n_intended", IntendedAmount(__2, src) is { } asked && asked != landed
                         ? asked : (int?)null)
                 .Set("tgt", Ids.Bare(Reflect.GetString(owner, "ModelId")))
-                .Set("tgt_cid", CreatureSlots.Maybe(owner));
+                .Set("tgt_cid", CreatureSlots.Maybe(owner))
+                .WhoCreature("src", __4)
+                .WhoCreature("tgt", owner);
             StampInstance(line, __2);
             line.Emit();
         }
@@ -1518,6 +1622,7 @@ internal static class ReplayHooks
                 Src = CreatureRef(__4),
                 SrcCid = CreatureSlots.Maybe(__4),
                 Card = __5 == null ? null : Ids.Bare(Reflect.GetString(__5, "Id")),
+                SrcCreature = __4,
             });
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -1555,7 +1660,9 @@ internal static class ReplayHooks
             .Set("n_intended", intent?.Amount)
             .Set("card", intent?.Card)
             .Set("tgt", Ids.Bare(Reflect.GetString(target, "ModelId")))
-            .Set("tgt_cid", CreatureSlots.Maybe(target));
+            .Set("tgt_cid", CreatureSlots.Maybe(target))
+            .WhoCreature("src", intent?.SrcCreature ?? applier)
+            .WhoCreature("tgt", target);
         if (onBoard)
         {
             line.Set("amount", AmountOf(power));
@@ -1579,7 +1686,8 @@ internal static class ReplayHooks
                 .Set("tgt", Ids.Bare(Reflect.GetString(owner, "ModelId")))
                 .Set("tgt_cid", CreatureSlots.Maybe(owner))
                 .Set("dead", Reflect.GetMember(owner, "IsAlive") is false ? (object)true : null)
-                .Set("post_combat", PostCombat());
+                .Set("post_combat", PostCombat())
+                .WhoCreature("tgt", owner);
             StampInstance(line, __instance);
             line.Emit();
         }
@@ -1603,6 +1711,7 @@ internal static class ReplayHooks
         public string Src = "effect";
         public int? SrcCid;
         public string? Card;
+        public object? SrcCreature;
     }
 
     private static readonly ConditionalWeakTable<object, Intent> Intents = new();
@@ -1652,7 +1761,7 @@ internal static class ReplayHooks
                 .Set("hp", newHp)
                 .Set("src", "heal")
                 .Set("overheal", wasted > 0 ? wasted : (int?)null)
-                .Set("mine", MineCreature(__0))
+                .Set("mine", MineCreature(__0)).WhoCreature("dst", __0)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -1777,6 +1886,7 @@ internal static class ReplayHooks
                 .Set("hits", hits)
                 .Set("hits_planned", shortOfPlan ? f.Planned : null)
                 .Set("random", random ? true : (bool?)null)
+                .WhoCreature("src", f.Attacker)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -1937,7 +2047,8 @@ internal static class ReplayHooks
             .Set("src_cid", CreatureSlots.Maybe(creature))
             .Set("n", n)
             .Set("left", left ?? IntOf(creature, "Block"))
-            .Set("reason", reason);
+            .Set("reason", reason)
+            .WhoCreature("src", creature);
 
     private static void HpChanged(object __1, object __2, decimal __3)
     {
@@ -1952,7 +2063,7 @@ internal static class ReplayHooks
                 .Set("d", d)
                 .Set("hp", HpOf(__2, "CurrentHp"))
                 .Set("src", "loss")
-                .Set("mine", MineCreature(__2))
+                .Set("mine", MineCreature(__2)).WhoCreature("dst", __2)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -1971,7 +2082,7 @@ internal static class ReplayHooks
                 .Set("d", newMax - oldMax)
                 .Set("max_hp", newMax);
             if (HpOf(__0, "CurrentHp") is int cur) line.Set("hp", Math.Min(cur, newMax));
-            line.Set("mine", MineCreature(__0)).Emit();
+            line.Set("mine", MineCreature(__0)).WhoCreature("dst", __0).Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
@@ -1990,7 +2101,7 @@ internal static class ReplayHooks
                 .Set("d", newHp - oldHp)
                 .Set("hp", newHp)
                 .Set("src", "set")
-                .Set("mine", MineCreature(__0))
+                .Set("mine", MineCreature(__0)).WhoCreature("dst", __0)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -2002,7 +2113,7 @@ internal static class ReplayHooks
         {
             ReplayRecorder.Line("gold")
                 ?.Set("gold", Reflect.GetInt(__1, "Gold", 0))
-                .Set("mine", Mine(__1))
+                .Who(__1, legacy: true)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -2037,7 +2148,7 @@ internal static class ReplayHooks
                 ?.Set("gold", after)
                 .Set("d", after - before)
                 .Set("src", __2?.ToString()?.ToLowerInvariant())
-                .Set("mine", Mine(__1))
+                .Who(__1, legacy: true)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -2118,7 +2229,7 @@ internal static class ReplayHooks
             ReplayRecorder.Line("energy")
                 ?.Set("d", __0 - old)
                 .Set("energy", __0)
-                .Set("mine", Mine(Reflect.GetMember(__instance, "_player")))
+                .Who(Reflect.GetMember(__instance, "_player"), legacy: true)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -2141,7 +2252,7 @@ internal static class ReplayHooks
                 .Set("energy", energy)
                 .Set("max", IntOf(state, "MaxEnergy"))
                 .Set("carry", carry)
-                .Set("mine", Mine(__1))
+                .Who(__1, legacy: true)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -2156,7 +2267,7 @@ internal static class ReplayHooks
             ReplayRecorder.Line("stars")
                 ?.Set("d", __1)
                 .Set("stars", stars)
-                .Set("mine", Mine(__2))
+                .Who(__2, legacy: true)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -2184,7 +2295,7 @@ internal static class ReplayHooks
                 }
                 line.Set("blades", blades);
             }
-            line.Set("mine", Mine(__2)).Emit();
+            line.Who(__2, legacy: true).Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
@@ -2244,7 +2355,7 @@ internal static class ReplayHooks
             return ReplayRecorder.Line(kind)
                 ?.Set("id", Ids.Bare(Reflect.GetString(orb, "Id")))
                 .Set("oid", orb == null ? null : OrbId(orb))
-                .Set("mine", Mine(Reflect.GetMember(orb, "Owner")));
+                .Who(Reflect.GetMember(orb, "Owner"), legacy: true);
         }
         catch { return null; }
     }
@@ -2277,6 +2388,7 @@ internal static class ReplayHooks
             {
                 DemoteDecision();
                 _decision = ReplayRecorder.NextDecisionId();
+                _decisionOwner = Reflect.GetMember(__instance, "Player");
             }
             _pendingReroll = 0;
             _decisionType = "card_reward";
@@ -2309,26 +2421,34 @@ internal static class ReplayHooks
                 .SetFlag("decline_available", Reflect.GetBool(__instance, "CanSkip", true))
                 .SetFlag("can_reroll", Reflect.GetBool(__instance, "CanReroll"))
                 .Set("options", options)
+                .Who(Reflect.GetMember(__instance, "Player"))
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
-    private static void CardRewardSkipped()
+    private static void CardRewardSkipped(object __instance)
     {
         try
         {
+            // Co-op skips every unopened reward set on leaving the room, and teammates' skips land
+            // here too: with no open card reward of that player's, there is no decision to close.
+            var player = Reflect.GetMember(__instance, "Player");
+            if (LocalPlayer.IsCoop
+                && (_decision == 0 || _decisionType != "card_reward" || !OwnsDecision(_decisionOwner, player)))
+                return;
             ReplayRecorder.Line("outcome")
                 ?.Set("decision_id", _decision)
                 .Set("decision_type", _decisionType)
                 .Set("outcome", "skip")
+                .Who(player)
                 .Emit();
             DemoteDecision();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
-    private static void CardRewardRerolled()
+    private static void CardRewardRerolled(object __instance)
     {
         try
         {
@@ -2338,6 +2458,7 @@ internal static class ReplayHooks
                 .Set("decision_type", _decisionType)
                 .Set("outcome", "reroll")
                 .Set("offer_generation", _pendingReroll - 1)
+                .Who(Reflect.GetMember(__instance, "Player"))
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -2392,6 +2513,7 @@ internal static class ReplayHooks
         if (ReplayRecorder.Line("decision") is not { } line) return null;
         FlushSelectOutcome();
         _decision = ReplayRecorder.NextDecisionId();
+        _decisionOwner = player;
         _decisionType = source + "_" + kind;
 
         var selectableCount = 0;
@@ -2399,6 +2521,7 @@ internal static class ReplayHooks
         _selected = new List<int>();
         _selectDecision = _decision;
         _selectDecisionType = _decisionType;
+        _selectPlayer = player;
 
         var options = new List<ReplayLine>();
         var i = 0;
@@ -2433,7 +2556,8 @@ internal static class ReplayHooks
             .Set("n_presented", options.Count)
             .Set("n_selectable", selectableCount)
             .Set("gold_on_hand", Reflect.GetInt(player, "Gold", 0))
-            .Set("options", options);
+            .Set("options", options)
+            .Who(player);
     }
 
     private static void SelectionReturned(object __0, object __1)
@@ -2457,33 +2581,89 @@ internal static class ReplayHooks
                 ?.Set("decision_id", joined ? _selectDecision : (int?)null)
                 .Set("decision_type", joined ? _selectDecisionType : null)
                 .Set("n_picked", picked.Count)
-                .Set("selector", SelectorName())
-                .Set("mine", Mine(__0))
+                .Set("selector", SelectorName(__0))
+                .Who(__0, legacy: true)
                 .Set("cards", picked)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
-    private static string? SelectorName()
+    private static string? SelectorName(object? player)
     {
-        if (_selectorProp == null) return null;
-        var selector = Reflect.Read(_selectorProp);
+        object? selector;
+        if (_selectorProp != null) selector = Reflect.Read(_selectorProp);
+        else if (_getSelector != null && _selectorStackProp != null && player != null)
+        {
+            try
+            {
+                var stack = _selectorStackProp.GetValue(Reflect.Read(_runManagerProp));
+                if (stack == null) return null;
+                selector = _getSelector.Invoke(stack, new[] { player });
+            }
+            catch { return null; }
+        }
+        else return null;
         return selector == null ? "human" : selector.GetType().Name;
     }
 
     private static bool? Mine(object? player)
         => LocalPlayer.IsCoop ? LocalPlayer.IsLocalPlayer(player) : (bool?)null;
 
+    // RunState.Players, reached from the player itself so a stale LiveRunState can't misplace it.
+    private static IEnumerable? PlayersOf(object? player)
+        => Reflect.GetMember(Reflect.GetMember(player, "RunState"), "Players") as IEnumerable
+           ?? Reflect.GetMember(Core.Sts2Access.LiveRunState, "Players") as IEnumerable;
+
+    internal static int? PlayerSlot(object? player)
+        => player == null ? null : CoopRows.SlotIn(PlayersOf(player), player);
+
+    // Co-op only: `mine` and `player_slot` for the row's player (see CoopRows). `legacy` keeps a
+    // row that wrote `mine` before v10 writing mine:false when its player can't be read, as
+    // Mine(null) always did; a row new in v10 writes nothing then.
+    private static ReplayLine Who(this ReplayLine line, object? player, bool legacy = false)
+    {
+        if (!LocalPlayer.IsCoop) return line;
+        if (player == null) return legacy ? line.Set("mine", false) : line;
+        return CoopRows.Owner(line, true, LocalPlayer.IsLocalPlayer(player), PlayerSlot(player));
+    }
+
+    // Co-op only: <prefix>_mine / <prefix>_player_slot when `creature` is a player,
+    // <prefix>_owner_mine / <prefix>_owner_slot when it is a player's pet.
+    private static ReplayLine WhoCreature(this ReplayLine line, string prefix, object? creature)
+    {
+        if (!LocalPlayer.IsCoop || creature == null) return line;
+        if (Reflect.GetMember(creature, "Player") is { } player)
+            return CoopRows.Side(line, prefix, true, LocalPlayer.IsLocalPlayer(player), PlayerSlot(player),
+                                 null, null);
+        if (Reflect.GetMember(creature, "PetOwner") is { } owner)
+            return CoopRows.Side(line, prefix, true, null, null,
+                                 LocalPlayer.IsLocalPlayer(owner), PlayerSlot(owner));
+        return line;
+    }
+
+    private static object? CardOwner(object? card) => Reflect.GetMember(card, "Owner");
+
+    // v10, co-op: a row whose player is known links only to a decision of that same player, or
+    // to a shared one. Before v10 a teammate's relic, upgrade or acquire could take the local
+    // player's open decision_id when both happened together. Single-player: always true.
+    private static bool OwnsDecision(object? decisionOwner, object? rowPlayer)
+        => CoopRows.OwnsDecision(LocalPlayer.IsCoop, decisionOwner, rowPlayer);
+
+    // The open decision id for a row of `rowPlayer`, or 0 when that decision is someone else's.
+    private static int Dec(object? rowPlayer)
+        => OwnsDecision(_decisionOwner, rowPlayer) ? _decision : 0;
+
     private static void CardRemoved(object __1)
     {
         try
         {
             ReplayRecorder.Line("remove")
-                ?.Set("decision_id", _decision > 0 ? _decision : (int?)null)
+                ?.Set("decision_id", Dec(CardOwner(__1)) > 0 ? _decision : (int?)null)
                 .Set("option_index", SelectIndexOf(__1))
                 .Set("c", CardInstances.Of(__1))
                 .Set("id", Ids.Bare(Reflect.GetString(__1, "Id")))
+                .Who(CardOwner(__1))
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -2501,9 +2681,9 @@ internal static class ReplayHooks
             {
                 var selects = ShopRows.OpensCardSelect(kind, Reflect.GetString(__2, "MerchantEntryType"))
                               && (kind == "removal_service" || _decisionType?.StartsWith("deck_select") == true);
-                line.Set("decision_id", selects && _decision > 0 ? _decision : (int?)null);
+                line.Set("decision_id", selects && Dec(__1) > 0 ? _decision : (int?)null);
                 EntryFields(line, __2, __1, kind, pending?.Id, pending?.StartSeq)
-                    .Set("mine", Mine(__1))
+                    .Who(__1, legacy: true)
                     .Set("cost_current", __3)
                     .Set("cost_resource", "gold")
                     .Set("gold_on_hand", Reflect.GetInt(__1, "Gold", 0))
@@ -2544,7 +2724,7 @@ internal static class ReplayHooks
         return null;
     }
 
-    private static void RewardTaken(object __2)
+    private static void RewardTaken(object __1, object __2)
     {
         try
         {
@@ -2552,7 +2732,7 @@ internal static class ReplayHooks
             var line = ReplayRecorder.Line("resolve");
             if (line == null) return;
             line.Set("decision_id", kind == "RelicReward" ? RelicRewardDecision(__2, mint: false)
-                                    : _decision > 0 ? _decision : (int?)null)
+                                    : Dec(__1) > 0 ? _decision : (int?)null)
                 .Set("reward_kind", kind);
             switch (kind)
             {
@@ -2566,7 +2746,7 @@ internal static class ReplayHooks
                     line.Set("id", Ids.Bare(Reflect.GetString(Reflect.GetMember(__2, "Relic"), "Id")));
                     break;
             }
-            line.Emit();
+            line.Who(__1).Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
@@ -2581,13 +2761,16 @@ internal static class ReplayHooks
             if (room == null) return;
 
             var acquiredId = Ids.Bare(Reflect.GetString(__2, "Id"));
+            var cardOwner = CardOwner(__2);
             int? optionIndex = null;
             var decisionForCard = 0;
             if (acquiredId != null && _ambiguousOffers?.Contains(acquiredId) != true)
             {
-                if (_offerIndex != null && _offerIndex.TryGetValue(acquiredId, out var oi))
+                if (_offerIndex != null && OwnsDecision(_decisionOwner, cardOwner)
+                    && _offerIndex.TryGetValue(acquiredId, out var oi))
                 { optionIndex = oi; decisionForCard = _decision; }
-                else if (_prevOfferIndex != null && _prevOfferIndex.TryGetValue(acquiredId, out var po))
+                else if (_prevOfferIndex != null && OwnsDecision(_prevDecisionOwner, cardOwner)
+                         && _prevOfferIndex.TryGetValue(acquiredId, out var po))
                 { optionIndex = po; decisionForCard = _prevDecision; }
             }
             var offered = optionIndex != null;
@@ -2602,13 +2785,29 @@ internal static class ReplayHooks
                         : source == "granted" || source == "shop" ? (int?)null
                         : _decisionType == "deck_select_remove"
                           || _decisionType == EnchantSelectType ? (int?)null
-                        : _decision > 0 ? _decision : (int?)null)
+                        : Dec(cardOwner) > 0 ? _decision : (int?)null)
                 .Set("source", source)
                 .Set("c", CardInstances.Of(__2))
                 .Set("id", acquiredId)
                 .Set("option_index", optionIndex)
+                .Who(CardOwner(__2))
                 .Emit();
-            if (offered && decisionForCard == _decision) DemoteDecision();
+            // A card reward the card resolved is not matched again: left in the previous slot,
+            // its offers would claim a later card of the same id (a shop buy floors later read as
+            // source "reward" with that decision). The decision before it keeps its place, so in
+            // co-op the other player's open card reward can still be matched.
+            if (offered && decisionForCard == _decision)
+            {
+                var (pd, po, pi) = (_prevDecision, _prevDecisionOwner, _prevOfferIndex);
+                DemoteDecision();
+                (_prevDecision, _prevDecisionOwner, _prevOfferIndex) = (pd, po, pi);
+            }
+            else if (offered)
+            {
+                _prevDecision = 0;
+                _prevDecisionOwner = null;
+                _prevOfferIndex = null;
+            }
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
@@ -2644,11 +2843,12 @@ internal static class ReplayHooks
             ReplayRecorder.MarkDeckChanged();
             var offered = _decisionType == UpgradeSelectType;
             ReplayRecorder.Line("upgrade")
-                ?.Set("decision_id", _decision > 0 && (offered || _decisionType is "event" or "rest")
+                ?.Set("decision_id", Dec(CardOwner(__0)) > 0 && (offered || _decisionType is "event" or "rest")
                     ? _decision : (int?)null)
                 .Set("option_index", offered ? SelectIndexOf(__0) : null)
                 .Set("c", CardInstances.Of(__0))
                 .Set("id", Ids.Bare(Reflect.GetString(__0, "Id")))
+                .Who(CardOwner(__0))
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -2672,11 +2872,12 @@ internal static class ReplayHooks
             if (!LiveCards.Record(__0)) return;
             ReplayRecorder.MarkDeckChanged();
             ReplayRecorder.Line("downgrade")
-                ?.Set("decision_id", _decisionType == "event" && _decision > 0 ? _decision : (int?)null)
+                ?.Set("decision_id", _decisionType == "event" && Dec(CardOwner(__0)) > 0 ? _decision : (int?)null)
                 .Set("c", CardInstances.Of(__0))
                 .Set("id", Ids.Bare(Reflect.GetString(__0, "Id")))
                 .Set("from_up", before)
                 .Set("up", after)
+                .Who(CardOwner(__0))
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -2702,6 +2903,7 @@ internal static class ReplayHooks
                 .Set("amount", __2)
                 .Set("amount_total", Reflect.GetInt(__result, "Amount", 0))
                 .Set("pile", PileName(__1))
+                .Who(CardOwner(__1))
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -2758,19 +2960,20 @@ internal static class ReplayHooks
             if (!LiveCards.RecordTransform(__instance)) return;
             var offered = _decisionType == TransformSelectType;
             ReplayRecorder.Line("transform")
-                ?.Set("decision_id", _decision > 0 && (offered || _decisionType is "event" or "rest")
+                ?.Set("decision_id", Dec(CardOwner(__instance)) > 0 && (offered || _decisionType is "event" or "rest")
                     ? _decision : (int?)null)
                 .Set("option_index", offered ? SelectIndexOf(from) : null)
                 .Set("from_c", from == null ? (int?)null : CardInstances.Of(from))
                 .Set("from_id", Ids.Bare(Reflect.GetString(from, "Id")))
                 .Set("to_c", CardInstances.Of(__instance))
                 .Set("to_id", Ids.Bare(Reflect.GetString(__instance, "Id")))
+                .Who(CardOwner(__instance))
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
-    private static void RelicObtained(object __0)
+    private static void RelicObtained(object __0, object __1)
     {
         try
         {
@@ -2779,8 +2982,9 @@ internal static class ReplayHooks
                 || _decisionType == TreasureType && _treasureOfferIds?.Contains(Ids.Bare(Reflect.GetString(__0, "Id")) ?? "") == true;
             ReplayRecorder.Line("relic")
                 ?.Set("decision_id",
-                      !fromShelf && grantable && _decision > 0 ? _decision : (int?)null)
+                      !fromShelf && grantable && Dec(__1) > 0 ? _decision : (int?)null)
                 .Set("id", Ids.Bare(Reflect.GetString(__0, "Id")))
+                .Who(__1)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -2799,11 +3003,11 @@ internal static class ReplayHooks
             if (Reflect.GetMember(__0, "HasBeenRemovedFromState") is not true) return;
             ReplayRecorder.Line("relic_lost")
                 ?.Set("decision_id",
-                      !replacing && _decisionType == "event" && _decision > 0
+                      !replacing && _decisionType == "event" && Dec(Reflect.GetMember(__0, "Owner")) > 0
                           ? _decision : (int?)null)
                 .Set("id", Ids.Bare(Reflect.GetString(__0, "Id")))
                 .Set("reason", replacing ? "replaced" : "removed")
-                .Set("mine", Mine(Reflect.GetMember(__0, "Owner")))
+                .Who(Reflect.GetMember(__0, "Owner"), legacy: true)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -2819,7 +3023,7 @@ internal static class ReplayHooks
             ReplayRecorder.Line("console")
                 ?.Set("cmd", __1)
                 .Set("args", __2 is { Length: > 0 } ? __2.ToList() : null)
-                .Set("mine", Mine(__0))
+                .Who(__0, legacy: true)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -2836,12 +3040,14 @@ internal static class ReplayHooks
                 .Set("target",
                      target == null ? null : Ids.Bare(Reflect.GetString(target, "ModelId")))
                 .Set("target_cid", CreatureSlots.Maybe(target))
+                .Who(Reflect.GetMember(potion, "Owner"))
+                .WhoCreature("target", target)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
-    private static void RestHeal(bool __2)
+    private static void RestHeal(object __1, bool __2)
     {
         try
         {
@@ -2849,15 +3055,16 @@ internal static class ReplayHooks
             ReplayRecorder.Line("rest")
                 ?.Set("option", "heal")
                 .SetFlag("mimicked", __2)
+                .Who(__1)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
 
-    private static void RestSmith()
+    private static void RestSmith(object __1)
     {
         if (_restFunnel) return;
-        try { ReplayRecorder.Line("rest")?.Set("option", "smith").Emit(); } catch { }
+        try { ReplayRecorder.Line("rest")?.Set("option", "smith").Who(__1).Emit(); } catch { }
     }
 
     private static bool _restFunnel;
@@ -2914,6 +3121,7 @@ internal static class ReplayHooks
             .Set("n_presented", options.Count)
             .Set("n_selectable", enabledKnown ? selectable : (int?)null)
             .Set("options", options)
+            .Who(Core.Sts2Access.LivePlayer)
             .Emit();
     }
 
@@ -2931,6 +3139,7 @@ internal static class ReplayHooks
             {
                 DemoteDecision();
                 _decision = decision;
+                _decisionOwner = __0;
                 _decisionType = "rest";
             }
             _restPending = new RestChoice(__0, Reflect.GetString(opt, "OptionId")?.ToLowerInvariant(),
@@ -2966,7 +3175,7 @@ internal static class ReplayHooks
             line?.Set("option", choice.Id)
                 .Set("decision_id", choice.Decision > 0 ? choice.Decision : (int?)null)
                 .Set("option_index", choice.Decision > 0 ? choice.Index : (int?)null)
-                .Set("mine", Mine(choice.Player));
+                .Who(choice.Player, legacy: true);
             if (choice.Id == "heal") line?.SetFlag("mimicked", false);
             line?.Emit();
 
@@ -2995,9 +3204,9 @@ internal static class ReplayHooks
             _relicCounters.AddOrUpdate(__instance, new StrongBox<int>(n));
             line.Set("id", Ids.Bare(Reflect.GetString(__instance, "Id")))
                 .Set("n", n)
-                .Set("decision_id", _decisionType is "event" or "rest" && _decision > 0
+                .Set("decision_id", _decisionType is "event" or "rest" && Dec(owner) > 0
                                         ? _decision : (int?)null)
-                .Set("mine", Mine(owner))
+                .Who(owner, legacy: true)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -3090,7 +3299,7 @@ internal static class ReplayHooks
                 .Set("outcome", __1 == null ? "skip" : "select")
                 .Set("option_id", __1 is int i ? Ids.Bare(Reflect.GetString(relics[i], "Id")) : null)
                 .Set("selected_option_indices", __1 is int j ? new List<int> { j } : new List<int>())
-                .Set("mine", Mine(__0))
+                .Who(__0, legacy: true)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -3139,6 +3348,7 @@ internal static class ReplayHooks
                     .SetFlag("presented", true)
                     .SetFlag("selectable", true),
             })
+            .Who(Reflect.GetMember(reward, "Player"))
             .Emit();
         return decision;
     }
@@ -3159,6 +3369,7 @@ internal static class ReplayHooks
                 ?.Set("decision_id", decision)
                 .Set("decision_type", "relic_reward")
                 .Set("outcome", "skip")
+                .Who(Reflect.GetMember(__instance, "Player"))
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -3174,11 +3385,30 @@ internal static class ReplayHooks
     private static PropertyInfo? _optProceedProp;
     private static MethodInfo? _addVarsMethod;
 
+    // A teammate's event in co-op. Every player has their own EventModel (EventSynchronizer
+    // .BeginEvent makes one per player) and this client runs the teammate's too, so their pages
+    // and choices arrive here. They are written with the teammate's mine/player_slot but kept
+    // out of the local decision state (_decision, _event*), which other rows link to.
+    private sealed class PeerEvent
+    {
+        public int Page = -1;
+        public int Decision;
+    }
+
+    private static readonly ConditionalWeakTable<object, PeerEvent> PeerEvents = new();
+
+    private static bool IsPeer(object? player)
+        => LocalPlayer.IsCoop && player != null && !LocalPlayer.IsLocalPlayer(player);
+
     private static void EventBegun(object __0)
     {
         try
         {
-            if (LocalPlayer.IsCoop && !LocalPlayer.IsLocalPlayer(__0)) return;
+            if (IsPeer(__0))
+            {
+                PeerEvents.AddOrUpdate(__0, new PeerEvent());
+                return;
+            }
             _eventPageIndex = -1;
             _eventDecision = 0;
             _eventId = null;
@@ -3191,11 +3421,21 @@ internal static class ReplayHooks
         try
         {
             var owner = Reflect.GetMember(__instance, "Owner");
-            if (LocalPlayer.IsCoop && !LocalPlayer.IsLocalPlayer(owner)) return;
+            if (LocalPlayer.IsCoop && owner == null) return;
+            var peer = IsPeer(owner) ? PeerEvents.GetValue(owner!, _ => new PeerEvent()) : null;
 
-            _eventDecision = 0;
-            var pageIndex = ++_eventPageIndex;
-            _eventId = Ids.Bare(Reflect.GetString(__instance, "Id"));
+            int pageIndex;
+            if (peer != null)
+            {
+                peer.Decision = 0;
+                pageIndex = ++peer.Page;
+            }
+            else
+            {
+                _eventDecision = 0;
+                pageIndex = ++_eventPageIndex;
+                _eventId = Ids.Bare(Reflect.GetString(__instance, "Id"));
+            }
 
             var options = new List<ReplayLine>();
             var index = 0;
@@ -3238,16 +3478,19 @@ internal static class ReplayHooks
             if (real == 0) return;
 
             if (ReplayRecorder.Line("decision") is not { } line) return;
-            _eventDecision = ReplayRecorder.NextDecisionId();
-            line.Set("decision_id", _eventDecision)
+            var decision = ReplayRecorder.NextDecisionId();
+            if (peer != null) peer.Decision = decision;
+            else _eventDecision = decision;
+            line.Set("decision_id", decision)
                 .Set("decision_type", "event")
                 .Set("source", "event")
-                .Set("event_id", _eventId)
+                .Set("event_id", peer != null ? Ids.Bare(Reflect.GetString(__instance, "Id")) : _eventId)
                 .Set("page_index", pageIndex)
                 .Set("page_key", pageKeyAgrees ? pageKey : null)
                 .Set("n_presented", options.Count)
                 .Set("n_selectable", lockedKnown ? selectable : (int?)null)
-                .Set("options", options);
+                .Set("options", options)
+                .Who(owner);
             StampEventFloor(line, owner);
             line.Emit();
         }
@@ -3258,17 +3501,31 @@ internal static class ReplayHooks
     {
         try
         {
-            if (LocalPlayer.IsCoop && !LocalPlayer.IsLocalPlayer(__0)) return;
-
             var model = Reflect.CallWith(__instance, "GetEventForPlayer", __0);
             var opt = ElementAt(Reflect.GetMember(model, "CurrentOptions"), __1);
             var chosenKey = Reflect.GetString(opt, "TextKey");
             var label = OptionText(model, opt, "Title") ?? chosenKey;
 
+            if (IsPeer(__0))
+            {
+                var peerDecision = PeerEvents.TryGetValue(__0, out var peer) ? peer.Decision : 0;
+                ReplayRecorder.Line("outcome")
+                    ?.Set("decision_id", peerDecision > 0 ? peerDecision : (int?)null)
+                    .Set("decision_type", "event")
+                    .Set("outcome", "chosen")
+                    .Set("option_index", __1)
+                    .Set("option_id", chosenKey)
+                    .Set("label", label)
+                    .Who(__0)
+                    .Emit();
+                return;
+            }
+
             DemoteDecision();
             if (_eventDecision > 0)
             {
                 _decision = _eventDecision;
+                _decisionOwner = __0;
                 _decisionType = "event";
             }
 
@@ -3279,6 +3536,7 @@ internal static class ReplayHooks
                 .Set("option_index", __1)
                 .Set("option_id", chosenKey)
                 .Set("label", label)
+                .Who(__0)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -3303,12 +3561,15 @@ internal static class ReplayHooks
     // which the screen calls only for the local owner; rewards are paid from the items
     // OnItemRevealed appends, in that order. A member that cannot be read throws into Fault,
     // so a missing dig shows up as a hook_error rather than a row with a guessed value.
+    // v10: rows are no longer dropped for a teammate's minigame and carry mine/player_slot. The
+    // teammate's digs run on their own machine, so in practice their sphere arrives here only
+    // as the CrystalSphereRewardsMessage peer_msg row.
     private static void SphereDug(object __instance, object __0)
     {
         try
         {
             var owner = Reflect.GetMember(__instance, "Owner");
-            if (LocalPlayer.IsCoop && !LocalPlayer.IsLocalPlayer(owner)) return;
+            if (LocalPlayer.IsCoop && owner == null) return;
             if (ReplayRecorder.Line("sphere_dig") is not { } line) return;
             StampEventFloor(line, owner);
             SphereRows.Dig(line,
@@ -3316,6 +3577,7 @@ internal static class ReplayHooks
                     Reflect.GetString(__instance, "CrystalSphereTool")
                         ?? throw new InvalidOperationException("CrystalSphereTool unreadable"),
                     SphereInt(__instance, "DivinationCount"))
+                .Who(owner)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -3326,7 +3588,7 @@ internal static class ReplayHooks
         try
         {
             var owner = Reflect.GetMember(__instance, "Owner");
-            if (LocalPlayer.IsCoop && !LocalPlayer.IsLocalPlayer(owner)) return;
+            if (LocalPlayer.IsCoop && owner == null) return;
             if (ReplayRecorder.Line("sphere_reveal") is not { } line) return;
             StampEventFloor(line, owner);
             var ser = Reflect.Call(__0, "ToSerializable")
@@ -3338,6 +3600,7 @@ internal static class ReplayHooks
                     Reflect.GetString(ser, "cardRarity"),
                     Reflect.GetString(ser, "potionRarity"),
                     Reflect.GetMember(ser, "isBigGold") as bool?)
+                .Who(owner)
                 .Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
@@ -3348,14 +3611,36 @@ internal static class ReplayHooks
         try
         {
             var owner = Reflect.GetMember(__instance, "Owner");
-            if (LocalPlayer.IsCoop && !LocalPlayer.IsLocalPlayer(owner)) return;
+            if (LocalPlayer.IsCoop && owner == null) return;
             if (Reflect.GetMember(Reflect.GetMember(__instance, "_completionSource"), "Task")
                     is not System.Threading.Tasks.Task done)
                 throw new InvalidOperationException("_completionSource unreadable");
             if (done.IsCompleted) return;
             if (ReplayRecorder.Line("sphere_end") is not { } line) return;
             StampEventFloor(line, owner);
-            SphereRows.Forced(line, SphereInt(__instance, "DivinationCount")).Emit();
+            SphereRows.Forced(line, SphereInt(__instance, "DivinationCount")).Who(owner).Emit();
+        }
+        catch (Exception e) { ReplayRecorder.Fault(e); }
+    }
+
+    // RunLocationTargetedMessageBuffer.CallHandlersOfType(Type, INetMessage, ulong senderId), a
+    // prefix: the row lands before the rows the handler causes (a teammate's buy, relic, gold).
+    // It runs only for messages from other peers; the local player's own choices never come
+    // back through it. Written in co-op only. The sender is written as a player slot, never as
+    // its net id.
+    private static void PeerMessageArrived(object __1, ulong __2)
+    {
+        try
+        {
+            if (!LocalPlayer.IsCoop || __1 == null) return;
+            var type = __1.GetType().Name;
+            if (!CoopRows.Records(type)) return;
+            if (ReplayRecorder.Line("peer_msg") is not { } line) return;
+            var players = Reflect.GetMember(Core.Sts2Access.LiveRunState, "Players") as IEnumerable;
+            var local = LocalPlayer.NetId;
+            CoopRows.PeerMessage(line, type, CoopRows.SlotOfNetId(players, __2),
+                    local is { } me ? me == __2 : (bool?)null, __1)
+                ?.Emit();
         }
         catch (Exception e) { ReplayRecorder.Fault(e); }
     }
@@ -3407,12 +3692,19 @@ internal static class ReplayHooks
         line.Set("floor", floor).Set("act", actIndex + 1);
     }
 
+    // v10, co-op only: a player's pet (Creature.PetOwner) says whose it is, as owner_mine and
+    // owner_slot, on combat_start enemies/allies and spawn rows.
     private static ReplayLine CreatureEntry(ReplayLine row, object c)
-        => row.Set("cid", CreatureSlots.Maybe(c))
+    {
+        row.Set("cid", CreatureSlots.Maybe(c))
             .Set("id", Ids.Bare(Reflect.GetString(c, "ModelId")))
             .Set("slot", Reflect.GetString(c, "SlotName"))
             .Set("hp", HpOf(c, "CurrentHp"))
             .Set("max_hp", HpOf(c, "MaxHp"));
+        if (LocalPlayer.IsCoop && Reflect.GetMember(c, "PetOwner") is { } owner)
+            row.Set("owner_mine", LocalPlayer.IsLocalPlayer(owner)).Set("owner_slot", PlayerSlot(owner));
+        return row;
+    }
 
     private static void CreatureAdded(object __instance, object __0)
     {

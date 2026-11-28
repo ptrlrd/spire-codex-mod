@@ -29,5 +29,6 @@
     <Compile Include="../../Code/Replay/LiveCards.cs" Link="Replay/LiveCards.cs" />
     <Compile Include="../../Code/Replay/ShopRows.cs" Link="Replay/ShopRows.cs" />
     <Compile Include="../../Code/Replay/CardCosts.cs" Link="Replay/CardCosts.cs" />
+    <Compile Include="../../Code/Replay/CoopRows.cs" Link="Replay/CoopRows.cs" />
   </ItemGroup>
 </Project>

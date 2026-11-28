@@ -101,9 +101,23 @@ internal static class RoomExport
         return FirstInventory(room);
     }
 
-    private static ShopInfo? ReadShop(object room)
+    private static ShopInfo? ReadShop(object room) => ReadInventory(MerchantInventory(room));
+
+    // A given player's shop (MerchantSynchronizer.GetInventoryFor). The replay journal reads the
+    // co-op teammate's with this; it is null when that player has no inventory of their own
+    // (MerchantInventory would fall back to the local one, which is not theirs).
+    public static ShopInfo? ReadShopFor(object? room, object player)
     {
-        var inv = MerchantInventory(room);
+        if (room == null) return null;
+        var mgr = Reflect.GetStatic(
+            room.GetType().Assembly.GetType("MegaCrit.Sts2.Core.Runs.RunManager"), "Instance");
+        var inv = Reflect.CallWith(Reflect.GetMember(mgr, "MerchantSynchronizer"), "GetInventoryFor", player)
+                  ?? Reflect.CallWith(room, "GetInventoryFor", player);
+        return ReadInventory(inv);
+    }
+
+    private static ShopInfo? ReadInventory(object? inv)
+    {
         if (inv == null) return null;
 
         var cards = new List<ShopItemInfo>();
